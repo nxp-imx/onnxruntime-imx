@@ -49,7 +49,6 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(                                             \
         .TypeConstraint("T3", DataTypeImpl::GetTensorType<int32_t>()),     \
     MatMulInteger);
 
-
 Status MatMulInteger::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
                                      /*out*/ bool& is_packed,
                                      /*out*/ PrePackedWeights* prepacked_weights) {
@@ -127,13 +126,11 @@ Status MatMulInteger::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
   }
   catch (const std::bad_alloc &e) {
     // Do not delegate this instance if out of memory
-//#ifndef NDEBUG
-    printf("[MatMulInteger] Unable to alocate Neutron memory\n");
-//#endif
+    printf("[NeutronEP:MatMulInteger] W[%d, %d] will be executed on CPU\n", m_b_cols, m_b_rows);
     useCPU = true;
 
-    // Fast Neutron prepacking
-    //return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
+    // Fast CPU prepacking
+    return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
   }
   return Status::OK();
 }
@@ -233,7 +230,6 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
     printf("Neutron: Prepared matmul in %f us\n", time_diff(t1,t3));
     printf("Neutron: Computed matmul in %f us\n", time_diff(t3,t4));
     printf("Neutron: Copying result in %f us\n", time_diff(t4,t5));
-    printf("Neutron: Dequant of MatMulIntegerToFloat in %f us\n", time_diff(t5,t6));
 #endif
   }
 #ifdef NDEBUG
@@ -317,8 +313,8 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
     uint32_t neutron_b_rows = b ? b->Shape()[1] : m_b_rows;
     uint32_t neutron_b_cols = b ? b->Shape()[0] : m_b_cols;
 
-    printf("CPU MatMulIntegerToFloat [%d,%d]*[%d,%d]: matmul %f us\n",
-            neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t4));
+    printf("CPU MatMulInteger [%d,%d,%d]*[%d,%d]: matmul %f us\n",
+            (uint32_t) a->Shape()[0], neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t4));
 #endif
 
 #ifndef NDEBUG

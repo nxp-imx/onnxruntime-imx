@@ -6,20 +6,19 @@
 #include <stdint.h>
 #include <vector>
 
-#define NEUTRON_DDR_GB 1.5
+#define NEUTRON_DEFAULT_512MB_SLOTS 3
+#define NEUTRON_MAX_512MB_SLOTS 6
 
 namespace onnxruntime {
 
 constexpr size_t kDefaultTensorAlignment = 64;
-constexpr size_t kFullNeutronBufferSize =  NEUTRON_DDR_GB * 1024 * 1024 * 1024LL;
 constexpr size_t kBoundaryNeutronBufferSize = 512 * 1024 * 1024;
 constexpr size_t kReservedNeutronBufferSize = 128 * 1024 * 1024;
-constexpr size_t kNeutronNumHandles = NEUTRON_DDR_GB * 2;
+constexpr size_t kMaxNeutronNumHandles = NEUTRON_MAX_512MB_SLOTS;
 
 class NeutronStackAllocator {
 public:
-  // Constructor.
-  NeutronStackAllocator();
+  void Init();
 
   // The first operation. Picks the memory slot with most free space.
   size_t getMemoryHandle();
@@ -38,8 +37,9 @@ public:
 
 private:
   uint8_t* p_{NULL};
-  uint8_t* neutron_ptr_[kNeutronNumHandles];
-  size_t   neutron_size_[kNeutronNumHandles];
+  size_t neutronNumHandles{NEUTRON_DEFAULT_512MB_SLOTS};
+  uint8_t* neutron_ptr_[kMaxNeutronNumHandles];
+  size_t   neutron_size_[kMaxNeutronNumHandles];
   std::vector<uint8_t*> past_ptrs_;
   std::vector<size_t> past_sizes_;
 };

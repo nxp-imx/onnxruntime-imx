@@ -28,7 +28,7 @@ double time_diff(struct timespec start_time, struct timespec end_time)
 }
 #endif
 
-std::shared_ptr<NeutronStackAllocator> neutronAlloc(new NeutronStackAllocator());
+extern std::shared_ptr<NeutronStackAllocator> neutronAlloc;
 
 ONNX_OPERATOR_TYPED_KERNEL_EX(                                        \
     QLinearMatMul,                                                    \
@@ -156,13 +156,11 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
   }
   catch (const std::bad_alloc &e) {
     // Do not delegate this instance if out of memory
-//#ifndef NDEBUG
-    printf("NeutronEP: QLinearMatMul unable to alocate memory B[%d,%d]\n", m_b_cols, m_b_rows);
-//#endif
+    printf("[NeutronEP:QLinearMatMul} W{%d, %d} will be executed on CPU\n", m_b_cols, m_b_rows);
     useCPU = true;
 
-    //Fast Neutron pre-packing
-    //return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
+    //Fast CPU pre-packing
+    return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
   }
   return Status::OK();
   /*
