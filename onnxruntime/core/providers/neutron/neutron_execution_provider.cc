@@ -24,6 +24,8 @@ namespace onnxruntime {
 
 namespace neutron {
 
+std::shared_ptr<NeutronStackAllocator> neutronAlloc(new NeutronStackAllocator());
+
 class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 13, 18, uint8_t,
                                                       DequantizeLinear);
 class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 13, 18, int8_t,
@@ -109,6 +111,7 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
 NeutronExecutionProvider::NeutronExecutionProvider(uint32_t neutron_flags)
     : IExecutionProvider{onnxruntime::kNeutronExecutionProvider, true},
       neutron_flags_(neutron_flags) {
+   onnxruntime::neutron::neutronAlloc->Init();
 }
 
 NeutronExecutionProvider::~NeutronExecutionProvider() {}
