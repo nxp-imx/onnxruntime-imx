@@ -16,33 +16,56 @@ inline size_t getAlignedSize(size_t size) {
   return mod ? (size + kDefaultTensorAlignment - mod) : size;
 }
 
-NeutronStackAllocator::NeutronStackAllocator() {
-  _Bool user = true;
+NeutronStackAllocator::~NeutronStackAllocator() {
+  if (p_)
+    releaseBuffer(p_);
+}
 
-  printf("NeutronEP: start %s memory allocation %ld MB\n", user ? "userspace" : "kernel", (kFullNeutronBufferSize/1024/1024));
+void NeutronStackAllocator::Init() {
+  static bool init = false;
 
-  NeutronError ret = allocateBuffer(kFullNeutronBufferSize, (void **)&p_, true);
-  if (ret != ENONE) {
-    throw std::bad_alloc();
-    return;
-  }
+  if (!init) {
+    _Bool user = true;
+
+    // update number handles
+    char *strNumHandles = NULL;
+    strNumHandles = getenv("NEUTRON_CMA_512SLOTS");
+    if (strNumHandles) {
+        size_t num;
+        if (sscanf(strNumHandles, "%ld", &num) == 1) {
+            if (num >= 1 && num <= NEUTRON_MAX_512MB_SLOTS)
+                neutronNumHandles = num;
+        }
+    }
+
+    size_t fullNeutronBufferSize = neutronNumHandles * kBoundaryNeutronBufferSize;
+
+
+    printf("[NeutronEP:Allocator] CMA %s memory %ld MB\n", user ? "userspace" : "kernel", (fullNeutronBufferSize/1024/1024));
+
+    NeutronError ret = allocateBuffer(fullNeutronBufferSize, (void **)&p_, user);
+    if (ret != ENONE)
+      return;
 
 #ifndef NDEBUG
-  printf("NeutronEP: allocated memory %p %ld MB\n", p_ , (kFullNeutronBufferSize/1024/1024));
+    printf("NeutronEP: allocated memory %p %ld MB\n", p_ , (fullNeutronBufferSize/1024/1024));
 #endif
 
-  for (size_t i = 0; i < kNeutronNumHandles; i++) {
+    for (size_t i = 0; i < neutronNumHandles; i++) {
       neutron_ptr_[i] = p_ + i * kBoundaryNeutronBufferSize;
-      size_t rest = kFullNeutronBufferSize - i * kBoundaryNeutronBufferSize;
+      size_t rest = fullNeutronBufferSize - i * kBoundaryNeutronBufferSize;
       neutron_size_[i] =  rest >=  kBoundaryNeutronBufferSize ? kBoundaryNeutronBufferSize : (uint32_t) rest;
 
-      printf("NeutronEP: allocated handle[%ld] %p %ld MB\n", i, neutron_ptr_[i], (long)(neutron_size_[i]/1024/1024));
+      printf("[NeutronEP:Allocator] %ld %p %ld MB\n", i, neutron_ptr_[i], (long)(neutron_size_[i]/1024/1024));
+    }
+
+    init = true;
   }
 }
 
 size_t NeutronStackAllocator::getMemoryHandle() {
   size_t largest_pos = 0;
-  for (size_t i = 1; i < kNeutronNumHandles; i++)
+  for (size_t i = 1; i < neutronNumHandles; i++)
     if (neutron_size_[i] > neutron_size_[largest_pos])
       largest_pos = i;
   return largest_pos;
@@ -114,10 +137,5 @@ void NeutronStackAllocator::popMemoryState(size_t handle) {
       handle, neutron_ptr_[handle], (long)0, neutron_size_[handle]);
 #endif
 }
-
-NeutronStackAllocator::~NeutronStackAllocator() {
-  releaseBuffer(p_);
-}
-
 
 }  // namespace onnxruntime

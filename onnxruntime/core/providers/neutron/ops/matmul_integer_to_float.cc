@@ -282,13 +282,11 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
   }
   catch (const std::bad_alloc &e) {
     // Do not delegate this instance if out of memory
-//#ifndef NDEBUG
-    printf("[MatMulIntegerToFloat] Unable to alocate Neutron memory\n");
-//#endif
+    printf("[NeutronEP:MatMulIntegerToFloat] W[%d, %d] will be executed on CPU\n", m_b_cols, m_b_rows);
     useCPU = true;
 
-    //Fast Neutron prepaking
-    //return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
+    //Fast CPU prepaking
+    return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
   }
   return Status::OK();
 }
