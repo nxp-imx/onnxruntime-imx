@@ -162,6 +162,8 @@ Use the individual flags to only run the specified stages.
     parser.add_argument("--use_dml", action='store_true', help="Build with DirectML.")
     parser.add_argument("--use_telemetry", action='store_true', help="Only official builds can set this flag to enable telemetry.")
     parser.add_argument("--use_acl", nargs="?", const="ACL_1905",choices=["ACL_1902", "ACL_1905", "ACL_1908"],help="Build with ACL for ARM architectures.")
+    parser.add_argument("--use_armnn", action='store_true',help="Enable ArmNN Execution Provider.")
+    parser.add_argument("--armnn_relu", action='store_true',help="Use the Relu operator implementation from the ArmNN EP.")
     return parser.parse_args()
 
 def resolve_executable_path(command_or_path):
@@ -286,7 +288,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
     cmake_args = [cmake_path, cmake_dir,
                  "-Donnxruntime_RUN_ONNX_TESTS=" + ("ON" if args.enable_onnx_tests else "OFF"),
                  "-Donnxruntime_GENERATE_TEST_REPORTS=ON",
-                 "-Donnxruntime_DEV_MODE=" + ("OFF" if args.android or args.use_acl else "ON"),
+                 "-Donnxruntime_DEV_MODE=" + ("OFF" if args.android or args.use_acl or args.use_armnn else "ON"),
                  "-DPYTHON_EXECUTABLE=" + sys.executable,
                  "-Donnxruntime_USE_CUDA=" + ("ON" if args.use_cuda else "OFF"),
                  "-Donnxruntime_USE_NSYNC=" + ("OFF" if is_windows() or not args.use_nsync else "ON"),
@@ -338,6 +340,8 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
                  "-Donnxruntime_USE_ACL_1902=" + ("ON" if args.use_acl == "ACL_1902" else "OFF"),
                  "-Donnxruntime_USE_ACL_1905=" + ("ON" if args.use_acl == "ACL_1905" else "OFF"),
                  "-Donnxruntime_USE_ACL_1908=" + ("ON" if args.use_acl == "ACL_1908" else "OFF"),
+                 "-Donnxruntime_USE_ARMNN=" + ("ON" if args.use_armnn else "OFF"),
+                 "-Donnxruntime_ARMNN_RELU_USECPU=" + ("OFF" if args.armnn_relu else "ON"),
                  ]
     if args.use_brainslice:
         bs_pkg_name = args.brain_slice_package_name.split('.', 1)
@@ -954,7 +958,7 @@ def main():
             if (args.arm or args.arm64):
                 raise BuildError("Only Windows ARM(64) cross-compiled builds supported currently through this script")
             install_ubuntu_deps(args)
-            if not is_docker():
+            if not is_docker() and not args.use_armnn:
                 install_python_deps()
         if (args.enable_pybind and is_windows()):
             install_python_deps(args.numpy_version)

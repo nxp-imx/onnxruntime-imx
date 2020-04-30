@@ -66,6 +66,7 @@ target_link_libraries(onnxruntime PRIVATE
     ${PROVIDERS_NUPHAR}
     ${PROVIDERS_DML}
     ${PROVIDERS_ACL}
+    ${PROVIDERS_ARMNN}
     onnxruntime_optimizer
     onnxruntime_providers
     onnxruntime_util

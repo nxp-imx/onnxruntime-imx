@@ -576,7 +576,9 @@ void OpTester::Run(SessionOptions so,  // Take the SessionOptions by value (i.e.
         kTensorrtExecutionProvider,
         kOpenVINOExecutionProvider,
         kDmlExecutionProvider,
-        kAclExecutionProvider,};
+        kAclExecutionProvider,
+        kArmNNExecutionProvider,
+    };
 
     bool has_run = false;
 
@@ -638,6 +640,8 @@ void OpTester::Run(SessionOptions so,  // Take the SessionOptions by value (i.e.
           execution_provider = DefaultNnapiExecutionProvider();
         else if (provider_type == onnxruntime::kAclExecutionProvider)
           execution_provider = DefaultAclExecutionProvider();
+        else if (provider_type == onnxruntime::kArmNNExecutionProvider)
+          execution_provider = DefaultArmNNExecutionProvider();
         // skip if execution provider is disabled
         if (execution_provider == nullptr)
           continue;
