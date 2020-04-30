@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2019, NXP Semiconductor, Inc. All rights reserved.
+// Copyright (c) 2019-2020, NXP Semiconductor, Inc. All rights reserved.
 // Licensed under the MIT License.
 
 #pragma once
@@ -30,13 +30,13 @@ typedef struct
   std::shared_ptr<arm_compute::Tensor> k;
   std::shared_ptr<arm_compute::Tensor> b;
   std::shared_ptr<arm_compute::Tensor> out;
-  bool isDeptwise;
+  bool isDepthwiseCPU;
 } ACLNEConv;
 
 typedef std::map<OpKernel*, ACLNEConv>::iterator ConvLayersIterator;
 
 template <typename T>
-class Conv final : public onnxruntime::Conv<T> {
+class Conv : public onnxruntime::Conv<T> {
  public:
   explicit Conv(const OpKernelInfo& info) : onnxruntime::Conv<T>(info), conv_attrs_(info) {
     provider_ = (const_cast<ACLExecutionProvider*>(
@@ -49,12 +49,13 @@ class Conv final : public onnxruntime::Conv<T> {
 
   Status Compute(OpKernelContext* context) const override;
 
- private:
+ protected:
   static thread_local std::map<OpKernel*, ACLNEConv> convLayers;
   ConvAttributes conv_attrs_;
   ACLExecutionProvider* provider_;
+  std::string activation_type;
 
-  arm_compute::TensorShape ACLReshapeWeightsDepthwise(arm_compute::Tensor* kernel);
+  arm_compute::TensorShape ACLReshapeWeightsDepthwise(arm_compute::Tensor* kernel) const;
 };
 }  // namespace mkl_dnn
 }  // namespace onnxruntime
