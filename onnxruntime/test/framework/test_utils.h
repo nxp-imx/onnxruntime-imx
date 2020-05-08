@@ -24,6 +24,9 @@
 #ifdef USE_NNAPI
 #include "core/providers/nnapi/nnapi_execution_provider.h"
 #endif
+#ifdef USE_ACL
+#include "core/providers/acl/acl_execution_provider.h"
+#endif
 
 namespace onnxruntime {
 class Graph;
@@ -48,6 +51,10 @@ IExecutionProvider* TestOpenVINOExecutionProvider();
 
 #ifdef USE_NNAPI
 IExecutionProvider* TestNnapiExecutionProvider();
+#endif
+
+#ifdef USE_ACL
+IExecutionProvider* TestACLExecutionProvider();
 #endif
 
 template <typename T>

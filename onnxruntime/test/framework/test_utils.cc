@@ -43,6 +43,14 @@ IExecutionProvider* TestNnapiExecutionProvider() {
 }
 #endif
 
+#ifdef USE_ACL
+IExecutionProvider* TestACLExecutionProvider() {
+  static ACLExecutionProviderInfo info;
+  static ACLExecutionProvider acl_provider(info);
+  return &acl_provider;
+}
+#endif
+
 static void CountOpsInGraphImpl(const Graph& graph, std::map<std::string, int>& ops) {
   for (auto& node : graph.Nodes()) {
     auto pos = ops.find(node.OpType());
