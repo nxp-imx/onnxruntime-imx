@@ -12,16 +12,18 @@
 #include "core/providers/acl/acl_common.h"
 #include "core/providers/acl/acl_fwd.h"
 #include "core/providers/acl/acl_execution_provider.h"
+#include "contrib_ops/cpu/fused_activation.h"
 
 namespace onnxruntime {
 namespace acl{
 
-template <typename T>
-class FusedConv final : public acl::Conv<T> {
- public:
-  explicit FusedConv(const OpKernelInfo& info) : acl::Conv<T>(info) {
+class FusedConv final : public acl::Conv<float> {
+public:
+  explicit FusedConv(const OpKernelInfo& info) : acl::Conv<float>(info) {
     ORT_ENFORCE(info.GetAttr<std::string>("activation", &(this->activation_type)).IsOK());
-    // printf("fused\n");
+    ORT_ENFORCE(GetFusedActivationAttr(info, activation_).IsOK());
+    
+     //printf("fused\n");
   }
   // Status Compute(OpKernelContext* context) const override;
 };
@@ -33,7 +35,7 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
     float,
     kAclExecutionProvider,
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
-    FusedConv<float>);
+    FusedConv);
 
 }  // namespace acl
 }  // namespace onnxruntime

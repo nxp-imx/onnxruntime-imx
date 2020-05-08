@@ -312,10 +312,19 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
 }
 #endif
 
-ONNX_OPERATOR_KERNEL_EX(
+ONNX_OPERATOR_VERSIONED_KERNEL_EX(
     Conv,
     kOnnxDomain,
     1,
+    10,
+    kAclExecutionProvider,
+    KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
+    Conv<float>);
+
+ONNX_OPERATOR_KERNEL_EX(
+    Conv,
+    kOnnxDomain,
+    11,
     kAclExecutionProvider,
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
     Conv<float>);
