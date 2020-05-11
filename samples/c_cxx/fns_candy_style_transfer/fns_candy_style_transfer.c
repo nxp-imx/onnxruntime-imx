@@ -1,12 +1,20 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 #include "onnxruntime_c_api.h"
+#include <memory>
 #include "providers.h"
 #include <stdio.h>
 #include <assert.h>
 #include <png.h>
 #ifdef _WIN32
 #include <objbase.h>
+#endif
+
+#ifdef USE_ACL
+#include <onnxruntime/core/providers/acl/acl_provider_factory.h>
+#endif
+#ifdef USE_ARMNN
+#include <onnxruntime/core/providers/armnn/armnn_provider_factory.h>
 #endif
 
 #ifdef _WIN32
@@ -138,7 +146,7 @@ static int write_tensor_to_png_file(OrtValue* tensor, const char* output_file) {
   return ret;
 }
 
-static void usage() { printf("usage: <model_path> <input_file> <output_file> [cpu|cuda|dml] \n"); }
+static void usage() { printf("usage: <model_path> <input_file> <output_file> [cpu|cuda|dml|acl|armnn] \n"); }
 
 #ifdef _WIN32
 static char* convert_string(const wchar_t* input) {
@@ -166,8 +174,8 @@ int run_inference(OrtSession* session, const ORTCHAR_T* input_file, const ORTCHA
   char* output_file_p = convert_string(output_file);
   char* input_file_p = convert_string(input_file);
 #else
-  char* output_file_p = output_file;
-  char* input_file_p = input_file;
+  const char* output_file_p = output_file;
+  const char* input_file_p = input_file;
 #endif
   if (read_png_file(input_file_p, &input_height, &input_width, &model_input, &model_input_ele_count) != 0) {
     return -1;
@@ -234,6 +242,19 @@ void enable_dml(OrtSessionOptions* session_options) {
 }
 #endif
 
+#ifdef USE_ACL
+void enable_acl(OrtSessionOptions* session_options) {
+  ORT_ABORT_ON_ERROR(OrtSessionOptionsAppendExecutionProvider_ACL(session_options, 0));
+}
+#endif
+
+#ifdef USE_ARMNN
+void enable_armnn(OrtSessionOptions* session_options) {
+  ORT_ABORT_ON_ERROR(OrtSessionOptionsAppendExecutionProvider_ArmNN(session_options, 0));
+}
+#endif
+
+
 #ifdef _WIN32
 int wmain(int argc, wchar_t* argv[]) {
 #else
@@ -275,6 +296,20 @@ int main(int argc, char* argv[]) {
       enable_dml(session_options);
     #else
       puts("DirectML is not enabled in this build.");
+      return -1;
+    #endif
+    } else if (tcscmp(execution_provider, ORT_TSTR("acl")) == 0) {
+    #ifdef USE_ACL
+      enable_acl(session_options);
+    #else
+      puts("ACL is not enabled in this build.");
+      return -1;
+    #endif
+    } else if (tcscmp(execution_provider, ORT_TSTR("armnn")) == 0) {
+    #ifdef USE_ARMNN
+      enable_armnn(session_options);
+    #else
+      puts("ArmNN is not enabled in this build.");
       return -1;
     #endif
     } else {
