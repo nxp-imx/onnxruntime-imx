@@ -100,7 +100,8 @@ std::unique_ptr<RuleBasedGraphTransformer> GenerateRuleBasedGraphTransformer(Tra
 
 std::vector<std::unique_ptr<GraphTransformer>> GenerateTransformers(TransformerLevel level,
                                                                     gsl::span<const FreeDimensionOverride> free_dimension_overrides,
-                                                                    const std::vector<std::string>& transformers_and_rules_to_enable) {
+                                                                    const std::vector<std::string>& transformers_and_rules_to_enable,
+                                                                    __attribute__ ((unused)) const std::vector<std::string>& registered_execution_providers) {
   std::vector<std::unique_ptr<GraphTransformer>> transformers;
   std::unique_ptr<RuleBasedGraphTransformer> rule_transformer = nullptr;
   switch (level) {
@@ -149,7 +150,7 @@ std::vector<std::unique_ptr<GraphTransformer>> GenerateTransformers(TransformerL
         transformers.emplace_back(onnxruntime::make_unique<NchwcTransformer>());
       } else {
 #if defined(USE_ACL) || defined(USE_ARMNN)
-	transformers.emplace_back(onnxruntime::make_unique<NhwcTransformer>());
+	transformers.emplace_back(onnxruntime::make_unique<NhwcTransformer>(registered_execution_providers));
 #endif
       }
 #endif
