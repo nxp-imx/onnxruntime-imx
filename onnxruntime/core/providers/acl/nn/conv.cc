@@ -170,8 +170,8 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
       }
     } else {
       aclPads[0] = pads[1];
-      aclPads[1] = pads[0];
-      aclPads[2] = pads[3];
+      aclPads[1] = pads[3];
+      aclPads[2] = pads[0];
       aclPads[3] = pads[2];
     }
 
@@ -235,7 +235,9 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
       }
 #endif //DEPTHWISE_CPU
     } else {
-      if(tconv.k->info()->tensor_shape()[0] == 1 && tconv.k->info()->tensor_shape()[1] == 1) {
+      if((tconv.k->info()->tensor_shape()[0] == 1 && tconv.k->info()->tensor_shape()[1] == 1) ||
+         (tconv.k->info()->tensor_shape()[0] == 9 && tconv.k->info()->tensor_shape()[1] == 9)){
+
         //pointwise convolution
         Status s = onnxruntime::Conv<T>::Compute(context);
         return s;

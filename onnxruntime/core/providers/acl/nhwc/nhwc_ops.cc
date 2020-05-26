@@ -277,8 +277,8 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
       }
     } else {
       aclPads[0] = pads[1];
-      aclPads[1] = pads[0];
-      aclPads[2] = pads[3];
+      aclPads[1] = pads[3];
+      aclPads[2] = pads[0];
       aclPads[3] = pads[2];
     }
 
@@ -448,8 +448,8 @@ Status NhwcPoolBase<T>::NhwcPool(OpKernelContext* context, MLAS_POOLING_KIND kin
         }
       } else {
         aclPads[0] = pads[1];
-        aclPads[1] = pads[0];
-        aclPads[2] = pads[3];
+        aclPads[1] = pads[3];
+        aclPads[2] = pads[0];
         aclPads[3] = pads[2];
       }
 
@@ -462,7 +462,9 @@ Status NhwcPoolBase<T>::NhwcPool(OpKernelContext* context, MLAS_POOLING_KIND kin
 
       arm_compute::Size2D aclSize(aclKernelShape[0], aclKernelShape[1]);
 
-      arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, aclPadStride);
+      bool excludePadding = (pool_type == arm_compute::PoolingType::AVG && PoolBase::pool_attrs_.count_include_pad) ? false : true;
+
+      arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, aclPadStride, excludePadding);
       layer->configure(tpool.in.get(), tpool.out.get(), pool_info);
     }
 
