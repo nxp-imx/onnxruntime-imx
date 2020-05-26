@@ -31,7 +31,7 @@ enum DataLayout {
 class NhwcTransformerImpl {
  public:
   NhwcTransformerImpl(Graph& graph, std::string provider) noexcept :
-    graph_(graph), provider_(provider), debug(false) {};
+    graph_(graph), provider_(provider), debug(true) {};
   void Transform(Node& node);
   void Finalize(bool& modified);
 
@@ -171,7 +171,7 @@ void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv
 
   // Require that the weights tensor be static.
   const ONNX_NAMESPACE::TensorProto* conv_W_tensor_proto = nullptr;
-  if (!graph_utils::NodeArgIsConstant(graph_, *input_def) ||
+  if (/*!graph_utils::NodeArgIsConstant(graph_, *input_def) ||*/
       !graph_.GetInitializedTensor(input_def->Name(), conv_W_tensor_proto) ||
       (conv_W_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
       (conv_W_tensor_proto->dims_size() != 4) ||
@@ -248,8 +248,7 @@ DataLayout NhwcTransformerImpl::RequiredLayout(const Node& node) {
   if (SuportsReplacementNHWC(node)) {
      layout = NhwcLayout;
   } else if (node.OpType() == "Add" ||
-             node.OpType() == "Sum" ||
-             node.OpType() == "Concat") {
+             node.OpType() == "Sum") {
      for (auto it = node.InputNodesBegin(), end = node.InputNodesEnd(); it != end && layout == NchwLayout; ++it) {
        auto itLayout = nodes_layout.find(it->Index());
        if (itLayout != nodes_layout.end())
