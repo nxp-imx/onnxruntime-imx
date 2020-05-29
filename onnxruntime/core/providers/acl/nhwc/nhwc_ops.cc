@@ -18,6 +18,28 @@
 
 #define PREF_DIM 4
 
+template <typename T>
+void importDataFromTensor(arm_compute::Tensor* tensor, T* data){
+
+  arm_compute::Window aclInpuWindow;
+  aclInpuWindow.use_tensor_dimensions(tensor->info()->tensor_shape());
+
+  arm_compute::Iterator aclInputIt(tensor, aclInpuWindow);
+  //const unsigned int aclWidth = tensor->info()->dimension(0);
+  //const unsigned int aclHeight = tensor->info()->dimension(1);
+  int index = 0;
+
+  // copy input tensor into the larger buffer
+  arm_compute::execute_window_loop(
+      aclInpuWindow,
+      [&](const arm_compute::Coordinates& co) {
+        //data[co.z() * (aclWidth * aclHeight) + co.y() * aclWidth + co.x()] = *reinterpret_cast<float*>(aclInputIt.ptr());
+        data[index] = *reinterpret_cast<float*>(aclInputIt.ptr());
+        index++;
+      },
+      aclInputIt);
+}
+
 namespace onnxruntime {
 namespace acl {
 
@@ -26,6 +48,9 @@ thread_local std::map<OpKernel*, ACLNEConv> NhwcConv<T>::convLayers;
 
 template <typename T>
 thread_local std::map<OpKernel*, ACLNEPool> NhwcPoolBase<T>::poolLayers;
+
+template <typename T>
+thread_local std::map<OpKernel*, ACLNEBatchNorm> NhwcBatchNorm<T>::batchNormLayers;
 
 arm_compute::TensorShape ACL_NCHW2NHWC(arm_compute::TensorShape shape) {
 
@@ -514,6 +539,210 @@ Status NhwcAveragePool<T>::Compute(OpKernelContext* context) const {
                                                                          : MlasAveragePoolingExcludePad);
 }
 
+template <typename T>
+Status NhwcBatchNorm<T>::Compute(OpKernelContext* context) const {
+
+  const Tensor* X = context->Input<Tensor>(0);
+  const Tensor* S = context->Input<Tensor>(1);//scale
+  const Tensor* B = context->Input<Tensor>(2);
+  const Tensor* M = context->Input<Tensor>(3);//mean
+  const Tensor* V = context->Input<Tensor>(4);//var
+
+  ORT_RETURN_IF_ERROR(BatchNormHelper::ValidateInputs(X, S, B, M, V));
+
+  const T* x_data = X->template Data<T>();
+
+  Tensor* Y = context->Output(0, X->Shape());
+
+  T* y_data = Y->template MutableData<T>();
+
+  ACLNEBatchNorm* pBatchNorm;
+  BatchNormLayersIterator it = NhwcBatchNorm::batchNormLayers.find((OpKernel*)this);
+  if (it == NhwcBatchNorm::batchNormLayers.end()) {
+
+    ACLNEBatchNorm tbatch_norm;
+    tbatch_norm.in = std::make_shared<arm_compute::Tensor>();
+    tbatch_norm.mean = std::make_shared<arm_compute::Tensor>();
+    tbatch_norm.var = std::make_shared<arm_compute::Tensor>();
+    tbatch_norm.b = std::make_shared<arm_compute::Tensor>();
+    tbatch_norm.scale = std::make_shared<arm_compute::Tensor>();
+    tbatch_norm.out = std::make_shared<arm_compute::Tensor>();
+
+    auto layer = std::make_shared<arm_compute::NEBatchNormalizationLayer>();
+
+    tbatch_norm.in->allocator()->init(arm_compute::TensorInfo(ACL_NCHW2NHWC(ACLTensorShape(X->Shape())), arm_compute::Format::F32));
+    tbatch_norm.out->allocator()->init(arm_compute::TensorInfo(tbatch_norm.in->info()->tensor_shape(), arm_compute::Format::F32));
+
+    tbatch_norm.scale->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(S->Shape()), arm_compute::Format::F32));
+    tbatch_norm.b->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(B->Shape()), arm_compute::Format::F32));
+    tbatch_norm.mean->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(M->Shape()), arm_compute::Format::F32));
+    tbatch_norm.var->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(V->Shape()), arm_compute::Format::F32));
+
+    tbatch_norm.in.get()->info()->set_data_layout(arm_compute::DataLayout::NHWC);
+    tbatch_norm.out.get()->info()->set_data_layout(arm_compute::DataLayout::NHWC);
+
+    layer->configure(tbatch_norm.in.get(), tbatch_norm.out.get(),
+      tbatch_norm.mean.get(), tbatch_norm.var.get(), B != nullptr ? tbatch_norm.b.get() : nullptr, S != nullptr ? tbatch_norm.scale.get() : nullptr,
+      epsilon_);//no activation in onnx
+
+    const T* scale_data = S->template Data<T>();
+    const T* b_data = B->template Data<T>();
+    const T* mean_data = M->template Data<T>();
+    const T* var_data = V->template Data<T>();
+
+    ACLImportMemory(tbatch_norm.mean->allocator(), (void*)mean_data, M->Shape().Size() * 4);
+    ACLImportMemory(tbatch_norm.var->allocator(), (void*)var_data, V->Shape().Size() * 4);
+    ACLImportMemory(tbatch_norm.b->allocator(), (void*)b_data, B->Shape().Size() * 4);
+    ACLImportMemory(tbatch_norm.scale->allocator(), (void*)scale_data, S->Shape().Size() * 4);
+
+    // allocate space for input tensor to accomodate paddings and strides
+    tbatch_norm.in->allocator()->allocate();
+
+    tbatch_norm.layer = std::move(layer);
+
+    std::pair<BatchNormLayersIterator, bool> ret;
+    ret = NhwcBatchNorm::batchNormLayers.insert(std::pair<OpKernel*, ACLNEBatchNorm>((OpKernel*)this, tbatch_norm));
+    pBatchNorm = &tbatch_norm;
+
+  } else {
+  pBatchNorm = &it->second;
+  }
+
+
+  if(X->Shape().Size() != 0 && pBatchNorm->in->info()->has_padding() ){
+    arm_compute::Window aclInpuWindow;
+    aclInpuWindow.use_tensor_dimensions(pBatchNorm->in->info()->tensor_shape());
+
+    arm_compute::Iterator aclInputIt(pBatchNorm->in.get(), aclInpuWindow);
+    int index = 0;
+
+    // copy input tensor into the larger buffer
+    arm_compute::execute_window_loop(
+      aclInpuWindow,
+      [&](const arm_compute::Coordinates& co) {
+        *reinterpret_cast<float*>(aclInputIt.ptr()) = x_data[index];
+        index++;
+      },
+      aclInputIt);
+  }else{
+    ACLImportMemory(pBatchNorm->in->allocator(), (void*)x_data, X->Shape().Size() * 4);
+  }
+
+
+  if(Y->Shape().Size() != 0 && pBatchNorm->out->info()->has_padding() ){
+    pBatchNorm->out->allocator()->allocate();
+  } else {
+    ACLImportMemory(pBatchNorm->out->allocator(), (void*)y_data, Y->Shape().Size() * 4);
+  }
+
+  pBatchNorm->layer->run();
+
+  if(Y->Shape().Size() != 0 && pBatchNorm->out->info()->has_padding() ){
+      importDataFromTensor<T>(pBatchNorm->out.get(), y_data);
+  }
+
+  return Status::OK();
+}
+
+template <typename T>
+Status NhwcConcat<T>::Compute(OpKernelContext* ctx) const {
+  // Number of input tensors to concatenate
+  auto input_count = Node().InputArgCount().front();
+
+  // Hold pointers to the input tensors to be used in the PrepareForCompute() step
+  std::vector<const Tensor*> input_tensors;
+  input_tensors.reserve(input_count);
+  for (int i = 0; i < input_count; ++i) {
+    input_tensors.push_back(ctx->Input<Tensor>(i));
+  }
+
+  std::vector<int64_t> output_dims = input_tensors[0]->Shape().GetDims();
+  // 'Concat' mode
+  if (!is_stack_) {
+    // While concating, the rank of the output is the same as the input rank(s)
+
+    // Calculate the size of the concatenated axis
+    size_t concat_axis_size = 0;
+    for (int64_t index = 0; index < input_count; index++) {
+      concat_axis_size += input_tensors[index]->Shape()[static_cast<int>(axis_)];
+    }
+
+    output_dims[axis_] = concat_axis_size;
+  } else {  // 'Stack' mode
+    // While stacking, the rank of the output is one more than the input rank(s).
+    // Stacking may be thought of as adding an unit dimension (of value 1) in the input tensors,
+    // and concatenating them on thie new axis.
+    // The value in the corresponding axis of the output will be the number of inputs that are being stacked.
+    output_dims.insert(output_dims.begin() + axis_, static_cast<int64_t>(input_count));
+  }
+
+  TensorShape output_shape(output_dims);
+  Tensor* Y = ctx->Output(0, output_shape);
+
+  arm_compute::Tensor output;
+  std::vector<arm_compute::ITensor*> inputs_vector;
+  for(int i = 0; i < input_count; i++) {
+    arm_compute::Tensor* input = new arm_compute::Tensor();
+    auto X = input_tensors[i];
+    input->allocator()->init(arm_compute::TensorInfo(ACL_NCHW2NHWC(ACLTensorShape(X->Shape())), arm_compute::Format::F32));
+    
+    inputs_vector.push_back(input);
+  }
+
+  arm_compute::NEConcatenateLayer layer;
+  int axis = axis_;
+  if(axis_ == 1) // channel
+    axis = 3;
+  if(axis_ == 2) // height
+    axis = 1;
+  if(axis_ == 3) // width
+    axis = 2;
+  layer.configure(inputs_vector, &output, 3 - axis);
+
+
+  for(int i = 0; i < input_count; i++) {
+    auto X = input_tensors[i];
+    const T* x_data = X->template Data<T>();
+    arm_compute::Tensor* in = static_cast<arm_compute::Tensor*>(inputs_vector[i]);
+
+    if(X->Shape().Size() != 0 && in->info()->has_padding() ){
+      in->allocator()->allocate();
+      arm_compute::Window aclInpuWindow;
+      aclInpuWindow.use_tensor_dimensions(in->info()->tensor_shape());
+
+      arm_compute::Iterator aclInputIt(in, aclInpuWindow);
+      const unsigned int aclWidth = in->info()->dimension(0);
+      const unsigned int aclHeight = in->info()->dimension(1);
+
+      // copy input tensor into the larger buffer
+      arm_compute::execute_window_loop(
+        aclInpuWindow,
+        [&](const arm_compute::Coordinates& co) {
+          *reinterpret_cast<float*>(aclInputIt.ptr()) = x_data[co.z() * (aclWidth * aclHeight) + co.y() * aclHeight + co.x()];
+        },
+        aclInputIt);
+    }else{
+      ACLImportMemory(in->allocator(), (void*)x_data, X->Shape().Size() * 4);
+    }
+  }
+
+  T* y_data = Y->template MutableData<T>();
+
+  if(Y->Shape().Size() != 0 && output.info()->has_padding() ){
+    output.allocator()->allocate();
+  } else {
+    ACLImportMemory(output.allocator(), (void*)y_data, Y->Shape().Size() * 4);
+  }
+
+  layer.run();
+
+  if(Y->Shape().Size() != 0 && output.info()->has_padding() ){
+    importDataFromTensor<T>(&output, y_data);
+  }
+
+  return Status::OK();
+}
+
 ONNX_OPERATOR_TYPED_KERNEL_EX(
     ReorderInput,
     kMSNhwcDomain,
@@ -582,6 +811,30 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
     KernelDefBuilder()
         .TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
     NhwcAveragePool<float>);
+
+ONNX_OPERATOR_TYPED_KERNEL_EX(
+    BatchNormalization,
+    kMSNhwcDomain,
+    1,
+    float,
+    kAclExecutionProvider,
+    KernelDefBuilder()
+      .TypeConstraint("X", DataTypeImpl::GetTensorType<float>())
+      .TypeConstraint("scale", DataTypeImpl::GetTensorType<float>())
+      .TypeConstraint("B", DataTypeImpl::GetTensorType<float>())
+      .TypeConstraint("mean", DataTypeImpl::GetTensorType<float>())
+      .TypeConstraint("var", DataTypeImpl::GetTensorType<float>()),
+    NhwcBatchNorm<float>);
+
+ONNX_OPERATOR_TYPED_KERNEL_EX(
+    Concat,
+    kMSNhwcDomain,
+    1,
+    float,
+    kAclExecutionProvider,
+    KernelDefBuilder()
+        .TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
+    NhwcConcat<float>);
 
 }  // namespace acl
 }  // namespace onnxruntime

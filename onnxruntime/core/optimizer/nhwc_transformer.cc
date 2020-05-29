@@ -238,7 +238,10 @@ bool NhwcTransformerImpl::SuportsReplacementNHWC(const Node& node) {
             node.OpType() == "MaxPool" ||
             node.OpType() == "AveragePool" ||
             node.OpType() == "GlobalMaxPool" ||
-            node.OpType() == "GlobalAveragePool"));
+            node.OpType() == "GlobalAveragePool" ||
+            node.OpType() == "BatchNormalization" ||
+            node.OpType() == "Concat"
+            ));
 }
 
 DataLayout NhwcTransformerImpl::RequiredLayout(const Node& node) {

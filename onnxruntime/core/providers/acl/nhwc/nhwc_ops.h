@@ -8,6 +8,9 @@
 #include "core/providers/cpu/nn/conv.h"
 #include "core/providers/cpu/nn/pool.h"
 #include "contrib_ops/cpu/fused_activation.h"
+#include "core/providers/cpu/nn/batch_norm.h"
+#include "core/providers/cpu/nn/batch_norm_helper.h"
+#include "core/providers/cpu/tensor/concat.h"
 
 #include "core/framework/op_kernel.h"
 #include "core/providers/acl/acl_execution_provider.h"
@@ -24,9 +27,17 @@
 #include "arm_compute/runtime/NEON/functions/NEConvolutionLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEDepthwiseConvolutionLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEPoolingLayer.h"
+#include "arm_compute/runtime/NEON/functions/NEBatchNormalizationLayer.h"
+#include "arm_compute/runtime/NEON/functions/NEConcatenateLayer.h"
 
 namespace onnxruntime {
 namespace acl {
+
+typedef struct {
+  std::shared_ptr<arm_compute::NEBatchNormalizationLayer> layer;
+  std::shared_ptr<arm_compute::Tensor> in, out;
+  std::shared_ptr<arm_compute::Tensor> scale, b, mean, var;
+} ACLNEBatchNorm;
 
 typedef struct
 {
@@ -129,6 +140,50 @@ class NhwcAveragePool : public OpKernel, public NhwcPoolBase<T> {
   NhwcAveragePool(const OpKernelInfo& info) : OpKernel(info), NhwcPoolBase<T>(info) {}
 
   Status Compute(OpKernelContext* context) const override;
+};
+
+typedef std::map<OpKernel*, ACLNEBatchNorm>::iterator BatchNormLayersIterator;
+
+template <typename T>
+class NhwcBatchNorm final : public OpKernel {
+ public:
+  explicit NhwcBatchNorm(const OpKernelInfo& info) : OpKernel(info) {
+    auto st = info.GetAttr<float>("epsilon", &epsilon_);
+    ORT_ENFORCE(st.IsOK(), st.ErrorMessage());
+
+    provider_ = (const_cast<ACLExecutionProvider*>(
+        dynamic_cast<const ACLExecutionProvider*>(info.GetExecutionProvider())));
+  }
+
+  ~NhwcBatchNorm() {
+	batchNormLayers.erase(this);
+  }
+
+  Status Compute(OpKernelContext* context) const override;
+
+ protected:
+   float epsilon_;
+
+ private:
+  ACLExecutionProvider* provider_;
+  static thread_local std::map<OpKernel*, ACLNEBatchNorm> batchNormLayers;
+};
+
+template <typename T>
+class NhwcConcat final : public OpKernel, public ConcatBase {
+ public:
+  explicit NhwcConcat(const OpKernelInfo& info) : OpKernel(info), ConcatBase(info) {
+
+    provider_ = (const_cast<ACLExecutionProvider*>(
+        dynamic_cast<const ACLExecutionProvider*>(info.GetExecutionProvider())));
+  }
+
+  ~NhwcConcat() {}
+
+  Status Compute(OpKernelContext* context) const override;
+
+ private:
+  ACLExecutionProvider* provider_;
 };
 
 }  // namespace acl

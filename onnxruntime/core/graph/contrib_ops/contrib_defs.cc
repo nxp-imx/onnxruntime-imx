@@ -361,6 +361,53 @@ void RegisterNhwcSchemas() {
         ONNX_NAMESPACE::convPoolShapeInference(ctx, true, false, 0, 1);
       });
 
+  ONNX_CONTRIB_OPERATOR_SCHEMA(BatchNormalization)
+      .SetDomain(kMSNhwcDomain)
+      .SinceVersion(1)
+      .SetSupportLevel(OpSchema::SupportType::EXPERIMENTAL)
+      .SetDoc("BatchNormalization")
+      .Attr("epsilon", "The epsilon value to use to avoid division by zero.", AttributeProto::FLOAT, 1e-5f)
+      .AllowUncheckedAttributes()
+      .Input(0, "X", "Input data tensor from the previous layer.", "T")
+      .Input(1, "scale", "Scale tensor.", "T")
+      .Input(2, "B", "Bias tensor.", "T")
+      .Input(3, "mean", "Mean tensor.", "T")
+      .Input(4, "var", "Variance tensor.", "T")
+      .Output(0, "Y", "Output data tensor.", "T")
+      .TypeConstraint(
+          "T",
+          {"tensor(float)"},
+          "Constrain input and output types to float tensors.")
+      .TypeAndShapeInferenceFunction(ONNX_NAMESPACE::propagateShapeAndTypeFromFirstInput);
+
+  ONNX_CONTRIB_OPERATOR_SCHEMA(Concat)
+      .SetDomain(kMSNhwcDomain)
+      .SinceVersion(1)
+      .SetSupportLevel(OpSchema::SupportType::EXPERIMENTAL)
+      .SetDoc("Concat")
+      .Attr("axis","Axis", AttributeProto::INT, static_cast<int64_t>(1))
+      .Input(0, "data_0", "", "T", OpSchema::Variadic)
+      .Output(0, "Y", "", "T")
+      .TypeConstraint(
+          "T",
+          {"tensor(float)"},
+          "Constrain input and output types to float tensors.")
+      .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext& ctx) {
+        ONNX_NAMESPACE::propagateElemTypeFromInputToOutput(ctx, 0, 0);
+        ONNX_NAMESPACE::TensorShapeProto output_shape;
+        for (auto& dim : getInputShape(ctx, 0).dim()) {
+          *output_shape.add_dim() = dim;
+        }
+        int num_inputs = static_cast<int>(ctx.getNumInputs());
+        size_t concat_axis_size = 0;
+        for (int i = 0; i < num_inputs; ++i) {
+          concat_axis_size += getInputShape(ctx, i).dim(1).dim_value();
+        }
+        output_shape.mutable_dim(1)->set_dim_value(concat_axis_size);
+        updateOutputShape(ctx, 0, output_shape);
+      });
+
+
   ONNX_CONTRIB_OPERATOR_SCHEMA(MaxPool)
       .FillUsing(NhwcPoolOpSchemaGenerator)
       .Attr(
