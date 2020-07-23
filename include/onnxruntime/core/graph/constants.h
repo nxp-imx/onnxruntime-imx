@@ -35,4 +35,5 @@ constexpr const char* kNnapiExecutionProvider = "NnapiExecutionProvider";
 constexpr const char* kDmlExecutionProvider = "DmlExecutionProvider";
 constexpr const char* kAclExecutionProvider = "ACLExecutionProvider";
 constexpr const char* kArmNNExecutionProvider = "ArmNNExecutionProvider";
+constexpr const char* kVsiNpuExecutionProvider = "VsiNpuExecutionProvider";
 }  // namespace onnxruntime

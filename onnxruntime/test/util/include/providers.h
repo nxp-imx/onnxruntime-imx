@@ -25,6 +25,9 @@
 #ifdef USE_OPENVINO
 #include "core/providers/openvino/openvino_provider_factory.h"
 #endif
+#ifdef USE_VSI_NPU
+#include "core/providers/vsi_npu/vsi_npu_provider_factory.h"
+#endif
 #ifdef USE_NNAPI
 #include "core/providers/nnapi/nnapi_provider_factory.h"
 #endif

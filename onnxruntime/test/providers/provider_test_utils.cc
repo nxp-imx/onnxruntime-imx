@@ -568,6 +568,7 @@ void OpTester::Run(SessionOptions so,  // Take the SessionOptions by value (i.e.
     // Run the model
     static const std::string all_provider_types[] = {
         kCpuExecutionProvider,
+        kVsiNpuExecutionProvider,
         kCudaExecutionProvider,
         kDnnlExecutionProvider,
         kNGraphExecutionProvider,
@@ -622,6 +623,8 @@ void OpTester::Run(SessionOptions so,  // Take the SessionOptions by value (i.e.
         std::unique_ptr<IExecutionProvider> execution_provider;
         if (provider_type == onnxruntime::kCpuExecutionProvider)
           execution_provider = DefaultCpuExecutionProvider();
+        else if (provider_type == onnxruntime::kVsiNpuExecutionProvider)
+          execution_provider = DefaultVsiNpuExecutionProvider();
         else if (provider_type == onnxruntime::kCudaExecutionProvider)
           execution_provider = DefaultCudaExecutionProvider();
         else if (provider_type == onnxruntime::kDnnlExecutionProvider)
@@ -658,7 +661,8 @@ void OpTester::Run(SessionOptions so,  // Take the SessionOptions by value (i.e.
           if (provider_type == onnxruntime::kNGraphExecutionProvider ||
               provider_type == onnxruntime::kTensorrtExecutionProvider ||
               provider_type == onnxruntime::kOpenVINOExecutionProvider ||
-              provider_type == onnxruntime::kNupharExecutionProvider)
+              provider_type == onnxruntime::kNupharExecutionProvider ||
+              provider_type == onnxruntime::kVsiNpuExecutionProvider)
             continue;
           auto reg = execution_provider->GetKernelRegistry();
           const KernelCreateInfo* kci = reg->TryFindKernel(node, execution_provider->Type());

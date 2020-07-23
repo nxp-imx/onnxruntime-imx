@@ -63,6 +63,7 @@ target_link_libraries(onnxruntime PRIVATE
     ${PROVIDERS_NNAPI}
     ${PROVIDERS_TENSORRT}
     ${PROVIDERS_OPENVINO}
+    ${PROVIDERS_VSI_NPU}
     ${PROVIDERS_NUPHAR}
     ${PROVIDERS_DML}
     ${PROVIDERS_ACL}

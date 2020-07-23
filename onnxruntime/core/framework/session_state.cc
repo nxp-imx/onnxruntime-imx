@@ -227,7 +227,19 @@ common::Status SessionState::GetInputNodeInfo(const std::string& input_name,
                                               std::vector<NodeInfo>& node_info_vec) const {
   auto entry = input_names_to_nodeinfo_mapping_.find(input_name);
   if (entry == input_names_to_nodeinfo_mapping_.cend()) {
-    return Status(ONNXRUNTIME, FAIL, "Failed to find input name in the mapping: " + input_name);
+    std::string input_name1 = "";
+    for (auto kv : input_names_to_nodeinfo_mapping_)
+    {
+      if (kv.first.find(input_name) != std::string::npos)
+      {
+          input_name1 = kv.first;
+          break;
+      }
+    }
+    entry = input_names_to_nodeinfo_mapping_.find(input_name1);
+    if (entry == input_names_to_nodeinfo_mapping_.cend()) {
+      return Status(ONNXRUNTIME, FAIL, "Failed to find input name in the mapping: " + input_name);
+    }
   }
 
   node_info_vec = entry->second;

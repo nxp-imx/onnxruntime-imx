@@ -19,6 +19,7 @@ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Tensor
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_OpenVINO(const char* device_id);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ACL(int use_arena);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ArmNN(int use_arena);
+std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_VsiNpu(int device_id);
 
 namespace test {
 
@@ -29,6 +30,14 @@ std::unique_ptr<IExecutionProvider> DefaultCpuExecutionProvider(bool enable_aren
 std::unique_ptr<IExecutionProvider> DefaultTensorrtExecutionProvider() {
 #ifdef USE_TENSORRT
   return CreateExecutionProviderFactory_Tensorrt(0)->CreateProvider();
+#else
+  return nullptr;
+#endif
+}
+
+std::unique_ptr<IExecutionProvider> DefaultVsiNpuExecutionProvider() {
+#ifdef USE_VSI_NPU
+  return CreateExecutionProviderFactory_VsiNpu(0)->CreateProvider();
 #else
   return nullptr;
 #endif

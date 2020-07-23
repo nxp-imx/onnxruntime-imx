@@ -37,7 +37,7 @@ void usage() {
       "\t-v: verbose\n"
       "\t-n [test_case_name]: Specifies a single test case to run.\n"
       "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', 'ngraph', "
-      "'openvino', 'nuphar', 'acl' or 'armnn'. "
+      "'openvino', 'nuphar', 'vsi_npu', 'acl' or 'armnn'. "
       "Default: 'cpu'.\n"
       "\t-x: Use parallel executor, default (without -x): sequential executor.\n"
       "\t-d [device_id]: Specifies the device id for multi-device (e.g. GPU). The value should > 0\n"
@@ -98,6 +98,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_tensorrt = false;
   bool enable_mem_pattern = true;
   bool enable_openvino = false;
+  bool enable_vsi_npu = false;
   bool enable_nnapi = false;
   bool enable_dml = false;
   bool enable_acl = false;
@@ -162,6 +163,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             enable_tensorrt = true;
           } else if (!CompareCString(optarg, ORT_TSTR("openvino"))) {
             enable_openvino = true;
+          } else if (!CompareCString(optarg, ORT_TSTR("vsi_npu"))) {
+            enable_vsi_npu = true;
           } else if (!CompareCString(optarg, ORT_TSTR("nnapi"))) {
             enable_nnapi = true;
           } else if (!CompareCString(optarg, ORT_TSTR("dml"))) {
@@ -288,6 +291,14 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
       Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_OpenVINO(sf, "CPU"));
 #else
       fprintf(stderr, "OpenVINO is not supported in this build");
+      return -1;
+#endif
+    }
+    if (enable_vsi_npu) {
+#ifdef USE_VSI_NPU
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(sf, device_id));
+#else
+      fprintf(stderr, "VsiNpu is not supported in this build");
       return -1;
 #endif
     }

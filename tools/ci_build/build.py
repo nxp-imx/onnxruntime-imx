@@ -140,6 +140,7 @@ Use the individual flags to only run the specified stages.
     parser.add_argument("--eigen_path", help="Path to pre-installed eigen.")
     parser.add_argument("--use_tvm", action="store_true", help="Build with tvm")
     parser.add_argument("--use_openmp", action='store_true', help="Build with OpenMP.")
+    parser.add_argument("--use_vsi_npu", action='store_true', help="Build with VSI NPU.")
     parser.add_argument("--use_llvm", action="store_true", help="Build tvm with llvm")
     parser.add_argument("--use_eigenthreadpool", action="store_true", help="Build with eigenthreadpool")
     parser.add_argument("--enable_msinternal", action="store_true", help="Enable for Microsoft internal builds only.")
@@ -164,6 +165,8 @@ Use the individual flags to only run the specified stages.
     parser.add_argument("--use_acl", nargs="?", const="ACL_1905",choices=["ACL_1902", "ACL_1905", "ACL_1908"],help="Build with ACL for ARM architectures.")
     parser.add_argument("--use_armnn", action='store_true',help="Enable ArmNN Execution Provider.")
     parser.add_argument("--armnn_relu", action='store_true',help="Use the Relu operator implementation from the ArmNN EP.")
+    parser.add_argument("--use_cross_compile", action='store_true', help="Use cross compile.")
+    parser.add_argument("--cmake_toolchain", help="Path to cmake tool chain.")
     return parser.parse_args()
 
 def resolve_executable_path(command_or_path):
@@ -315,6 +318,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
                  "-Donnxruntime_USE_OPENVINO_VAD_M=" + ("ON" if args.use_openvino == "VAD-M_FP16" else "OFF"),
                  "-Donnxruntime_USE_OPENVINO_VAD_F=" + ("ON" if args.use_openvino == "VAD-F_FP32" else "OFF"),
                  "-Donnxruntime_USE_NNAPI=" + ("ON" if args.use_dnnlibrary else "OFF"),
+                 "-Donnxruntime_USE_VSI_NPU=" + ("ON" if args.use_vsi_npu else "OFF"),
                  "-Donnxruntime_USE_OPENMP=" + ("ON" if args.use_openmp and not args.use_dnnlibrary and not args.use_mklml and not args.use_ngraph else "OFF"),
                  "-Donnxruntime_USE_TVM=" + ("ON" if args.use_tvm else "OFF"),
                  "-Donnxruntime_USE_LLVM=" + ("ON" if args.use_llvm else "OFF"),
@@ -357,6 +361,9 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
     if args.use_cuda and not is_windows():
         nvml_stub_path = cuda_home + "/lib64/stubs"
         cmake_args += ["-DCUDA_CUDA_LIBRARY=" + nvml_stub_path]
+
+    if args.use_cross_compile:
+        cmake_args += ["-DCMAKE_TOOLCHAIN_FILE=" + args.cmake_toolchain]
 
     if args.use_preinstalled_eigen:
         cmake_args += ["-Donnxruntime_USE_PREINSTALLED_EIGEN=ON",
@@ -798,8 +805,6 @@ def build_python_wheel(source_dir, build_dir, configs, use_cuda, use_ngraph, use
         run_subprocess(args, cwd=cwd)
 
 def build_protoc_for_host(cmake_path, source_dir, build_dir, args):
-    if (args.arm or args.arm64) and not is_windows():
-        raise BuildError('Currently only support building protoc for Windows host while cross-compiling for ARM/ARM64 arch')
 
     log.info("Building protoc for host to be used in cross-compiled build process")
     protoc_build_dir = os.path.join(os.getcwd(), build_dir, 'host_protoc')
@@ -956,7 +961,7 @@ def main():
             path_to_protoc_exe = build_protoc_for_host(cmake_path, source_dir, build_dir, args)
         if is_ubuntu_1604():
             if (args.arm or args.arm64):
-                raise BuildError("Only Windows ARM(64) cross-compiled builds supported currently through this script")
+				path_to_protoc_exe = build_protoc_for_host(cmake_path, source_dir, build_dir, args)
             install_ubuntu_deps(args)
             if not is_docker() and not args.use_armnn:
                 install_python_deps()

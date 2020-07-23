@@ -49,6 +49,7 @@ option(onnxruntime_ENABLE_STATIC_ANALYSIS "Enable static analysis" OFF)
 option(onnxruntime_ENABLE_PYTHON "Enable python buildings" OFF)
 option(onnxruntime_USE_CUDA "Build with CUDA support" OFF)
 option(onnxruntime_USE_OPENVINO "Build with OpenVINO support" OFF)
+option(onnxruntime_USE_VSI_NPU "Build with Vsi Npu support" OFF)
 option(onnxruntime_USE_NSYNC "Build with NSYNC support. This option only takes effect on Linux" OFF)
 option(onnxruntime_USE_EIGEN_FOR_BLAS "Use eign for blas" ON)
 option(onnxruntime_USE_NNAPI "Build with DNNLibrary for Android NNAPI support" OFF)
@@ -612,6 +613,9 @@ if(onnxruntime_USE_OPENVINO)
 
 endif()
 
+if(onnxruntime_USE_VSI_NPU)
+  add_definitions(-DUSE_VSI_NPU=1)
+endif()
 
 if (onnxruntime_USE_OPENBLAS)
   add_definitions(-DUSE_OPENBLAS=1)

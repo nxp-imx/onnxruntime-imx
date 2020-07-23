@@ -206,6 +206,10 @@ if(onnxruntime_USE_DNNL)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_dnnl)
 endif()
 
+if(onnxruntime_USE_VSI_NPU)
+  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_vsi_npu)
+endif()
+
 if(onnxruntime_USE_NGRAPH)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_ngraph)
 endif()
@@ -266,6 +270,7 @@ set(ONNXRUNTIME_TEST_LIBS
     ${PROVIDERS_CUDA}
     ${PROVIDERS_DNNL}
     ${PROVIDERS_TENSORRT}
+    ${PROVIDERS_VSI_NPU}
     ${PROVIDERS_NGRAPH}
     ${PROVIDERS_OPENVINO}
     ${PROVIDERS_NUPHAR}
@@ -336,6 +341,10 @@ if (onnxruntime_USE_FULL_PROTOBUF)
 endif()
 if (onnxruntime_USE_DNNL)
   target_compile_definitions(onnxruntime_test_utils PUBLIC USE_DNNL=1)
+endif()
+
+if (onnxruntime_USE_VSI_NPU)
+  target_compile_definitions(onnxruntime_test_utils PUBLIC USE_VSI_NPU=1)
 endif()
 add_dependencies(onnxruntime_test_utils ${onnxruntime_EXTERNAL_DEPENDENCIES})
 target_include_directories(onnxruntime_test_utils PUBLIC "${TEST_SRC_DIR}/util/include" PRIVATE ${eigen_INCLUDE_DIRS} ${ONNXRUNTIME_ROOT})

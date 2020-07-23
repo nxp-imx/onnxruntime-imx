@@ -573,6 +573,49 @@ static void DumpTensor(const Tensor& tensor, const TensorShape& shape) {
   std::cout << std::endl;
 }
 
+template <typename T>
+static void DumpTensor2(const Tensor& tensor, const TensorShape& shape,
+  const std::string& name) {
+  auto num_items = shape.Size();
+
+  if (num_items == 0) {
+    std::cout << "no data";
+    return;
+  }
+  std::ostringstream s;
+  size_t num_dims = shape.NumDimensions();
+  s << name << "_s_";
+  for (size_t i = 0; i < num_dims; i++) {
+    s << shape[i] << "_";
+  }
+  s << ".txt";
+
+  auto file_name = s.str();
+  auto n = file_name.find("_nchwc_");
+  if (n == std::string::npos || num_dims != 4)
+  {
+    std::ofstream ofout(file_name);
+    ofout.setf(std::ios::fixed);
+    ofout.precision(6);
+    auto data = tensor.DataAsSpan<T>();
+
+    for (int64_t i = 0; i < num_items; ++i) {
+      ofout << data[i] << "\n";
+    }
+  } else {
+    file_name.replace(n, 7, "_nchwc2nchw_");
+    std::ofstream ofout(file_name);
+    ofout.setf(std::ios::fixed);
+    ofout.precision(6);
+    std::unique_ptr<float[]> data(new float[num_items]);
+
+    MlasReorderOutput(shape.GetDims().data(), tensor.template Data<float>(), data.get());
+    for (int64_t i = 0; i < num_items; ++i) {
+      ofout << data[i] << "\n";
+    }
+  }
+}
+
 void DumpNodeInputs(const OpKernelContext& context, const Node& node) {
   std::cout << "-----------\n";
   std::cout << node.OpType() << " node: " << node.Name() << "\n";
@@ -591,6 +634,14 @@ void DumpNodeInputs(const OpKernelContext& context, const Node& node) {
           const auto& shape = tensor.Shape();
 
           std::cout << " Shape: " << shape << "\n";
+          if (DEBUG_NODE_INPUTS_OUTPUTS > 1) {
+            auto& tensor_location = tensor.Location();
+            const auto data_type = tensor.DataType();
+            if (tensor_location.device.Type() == OrtDevice::CPU || tensor_location.mem_type == OrtMemTypeCPUOutput) {
+              DispatchOnTensorType(data_type, DumpTensor2, tensor, shape,
+                node.Name()+ "_" + input_defs[i]->Name());
+            }
+          }
         } else {
           std::cout << " is non-tensor type.\n";
         }
@@ -625,7 +676,8 @@ void DumpNodeOutputs(OpKernelContext& context, const Node& node, const SessionSt
             auto& tensor_location = tensor.Location();
             const auto data_type = tensor.DataType();
             if (tensor_location.device.Type() == OrtDevice::CPU || tensor_location.mem_type == OrtMemTypeCPUOutput) {
-              DispatchOnTensorType(data_type, DumpTensor, tensor, shape);
+              DispatchOnTensorType(data_type, DumpTensor2, tensor, shape,
+                node.Name()+ "_" + output_defs[i]->Name());
             } else {
               std::cout << tensor_location << "\n";
 
@@ -639,7 +691,8 @@ void DumpNodeOutputs(OpKernelContext& context, const Node& node, const SessionSt
                 const auto& data_transfer_mgr = session_state.GetDataTransferMgr();
                 auto status = data_transfer_mgr.CopyTensor(tensor, *cpu_tensor.get(), 0);
                 if (status == common::Status::OK()) {
-                  DispatchOnTensorType(data_type, DumpTensor, *cpu_tensor.get(), shape);
+                  DispatchOnTensorType(data_type, DumpTensor2, *cpu_tensor.get(), shape,
+                    node.Name()+ "_" + output_defs[i]->Name());
                 } else {
                   std::cout << " failed to transfer data to cpu.\n";
                 }
