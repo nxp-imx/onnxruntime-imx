@@ -961,7 +961,7 @@ def main():
             path_to_protoc_exe = build_protoc_for_host(cmake_path, source_dir, build_dir, args)
         if is_ubuntu_1604():
             if (args.arm or args.arm64):
-				path_to_protoc_exe = build_protoc_for_host(cmake_path, source_dir, build_dir, args)
+                path_to_protoc_exe = build_protoc_for_host(cmake_path, source_dir, build_dir, args)
             install_ubuntu_deps(args)
             if not is_docker() and not args.use_armnn:
                 install_python_deps()
