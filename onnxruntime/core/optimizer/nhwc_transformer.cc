@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) 2020, NXP Semiconductor, Inc. All rights reserved.
 // Licensed under the MIT License.
 
 #if defined(USE_ACL) || defined(USE_ARMNN)
@@ -17,7 +18,6 @@
 // NEON
 #include "arm_compute/runtime/NEON/functions/NEPermute.h"
 
-
 using namespace ONNX_NAMESPACE;
 using namespace ::onnxruntime::common;
 namespace onnxruntime {
@@ -30,8 +30,8 @@ enum DataLayout {
 
 class NhwcTransformerImpl {
  public:
-  NhwcTransformerImpl(Graph& graph, std::string provider) noexcept :
-    graph_(graph), provider_(provider), debug(true) {};
+  NhwcTransformerImpl(Graph& graph, std::string provider, const logging::Logger& _logger) noexcept :
+    graph_(graph), provider_(provider), logger(_logger) {};
   void Transform(Node& node);
   void Finalize(bool& modified);
 
@@ -41,14 +41,15 @@ class NhwcTransformerImpl {
   NodeIndex ReplaceNode(Node& node);
   void PermuteWeights(NodeArg* src, NodeArg** dst, const std::string&);
 
-  DataLayout RequiredLayout(const Node& node);
-  bool SuportsReplacementNHWC(const Node& node);
-  bool RequiresWeightsPermutation(const Node& node);
+  DataLayout RequiredLayout(Node& node);
+  bool SuportsReplacementNHWC(Node& node);
+  bool RequiresWeightsPermutation(Node& node);
+  bool isNot9x9(Node& node);
 
   std::map<NodeIndex, bool> nodes_layout;
   Graph& graph_;
   std::string provider_;
-  bool debug;
+  const logging::Logger& logger;
 };
 
 NodeIndex NhwcTransformerImpl::InsertPermuteParentNode(Node& node, const Node::EdgeEnd* edge, bool bNHWC) {
@@ -61,13 +62,12 @@ NodeIndex NhwcTransformerImpl::InsertPermuteParentNode(Node& node, const Node::E
     dstIdx = edge->GetDstArgIndex();
   }
 
-  if (debug)
-    std::cout << this << " >> Insert: "
+  LOGS(logger, VERBOSE) << "NHWC Insert: "
       << (parent_node ? parent_node->OpType() : "*")
       << ":" << srcIdx
       << (bNHWC ? " [ReorderInput:0] " : " [ReorderOutput:0] ")
       << node.OpType()
-      << ":" << dstIdx << std::flush;
+      << ":" << dstIdx;
 
   auto& input_defs = node.MutableInputDefs();
   std::string new_input_def_name = graph_.GenerateNodeArgName("input");
@@ -75,7 +75,7 @@ NodeIndex NhwcTransformerImpl::InsertPermuteParentNode(Node& node, const Node::E
 
   Node& permute_node = graph_.AddNode(graph_.GenerateNodeName(bNHWC ? "PermuteNHWC" : "PermuteNCHW"),
                                      bNHWC ? "ReorderInput" : "ReorderOutput",
-                                     bNHWC ? "ReorderIntput" : "ReorderOutput",
+                                     bNHWC ? "ReorderInput" : "ReorderOutput",
                                      {input_defs[dstIdx]},
                                      {new_input_arg},
                                      nullptr,
@@ -92,25 +92,21 @@ NodeIndex NhwcTransformerImpl::InsertPermuteParentNode(Node& node, const Node::E
     graph_.AddEdge(parent_node->Index(), permute_node.Index(), srcIdx, 0);
   }
 
-  if (debug)
-    std::cout << " <<" << std::endl;
-
   return permute_node.Index();
 }
 
 NodeIndex NhwcTransformerImpl::InsertPermuteChildNode(Node& node, bool bNHWC) {
 
-  if (debug)
-    std::cout << this << " >> Insert: " << node.OpType()
-    << (bNHWC ? " [ReorderOutput] " : " [ReorderOutput] ") << "*:0" << std::flush;
+  LOGS(logger, VERBOSE) << "NHWC Insert: " << node.OpType()
+    << (bNHWC ? " [ReorderInput] " : " [ReorderOutput] ") << "*:0";
 
   auto& output_defs = node.MutableOutputDefs();
   std::string new_output_def_name = graph_.GenerateNodeArgName("output");
   auto* new_output_arg = &graph_.GetOrCreateNodeArg(new_output_def_name, output_defs[0]->TypeAsProto());
 
   Node& permute_node = graph_.AddNode(graph_.GenerateNodeName(bNHWC ? "PermuteNCHW" : "PermuteNHWC"),
-                                     bNHWC ? "ReorderIntput" : "ReorderOutput",
-                                     bNHWC ? "ReorderIntput" : "ReorderOutput",
+                                     bNHWC ? "ReorderInput" : "ReorderOutput",
+                                     bNHWC ? "ReorderInput" : "ReorderOutput",
                                      {new_output_arg},
                                      {output_defs[0]},
                                      nullptr,
@@ -119,13 +115,10 @@ NodeIndex NhwcTransformerImpl::InsertPermuteChildNode(Node& node, bool bNHWC) {
   output_defs[0] = new_output_arg;
   graph_.AddEdge(node.Index(), permute_node.Index(), 0, 0);
 
-  if (debug)
-    std::cout << " <<" << std::endl;
-
   return permute_node.Index();
 }
 
-bool NhwcTransformerImpl::RequiresWeightsPermutation(const Node& node) {
+bool NhwcTransformerImpl::RequiresWeightsPermutation(Node& node) {
    return ((node.GetExecutionProviderType() == kAclExecutionProvider ||
             node.GetExecutionProviderType() == kArmNNExecutionProvider) &&
            (node.OpType() == "Conv" ||
@@ -137,8 +130,7 @@ NodeIndex NhwcTransformerImpl::ReplaceNode(Node& node) {
   auto& input_defs = node.MutableInputDefs();
   auto& output_defs = node.MutableOutputDefs();
 
-  if (debug)
-    std::cout << this << " >> Replace " << node.OpType() << std::flush;
+  LOGS(logger, VERBOSE) << "NHWC >> Replace " << node.OpType();
 
   Node& newNode = graph_.AddNode(graph_.GenerateNodeName(node.Name()),
                                      node.OpType(),
@@ -158,27 +150,36 @@ NodeIndex NhwcTransformerImpl::ReplaceNode(Node& node) {
   graph_utils::FinalizeNodeFusion(graph_, replacedNode, newNode);
   nodes_layout.erase(oldIndex);
 
-  if (debug)
-    std::cout << " <<" << std::endl;
-
   return newNode.Index();
+}
+
+bool NhwcTransformerImpl::isNot9x9(Node& node) {
+  auto& input_defs = node.MutableInputDefs();
+  const ONNX_NAMESPACE::TensorProto* conv_W_tensor_proto = nullptr;
+  bool is9x9 = true;
+  if (!graph_.GetInitializedTensor(input_defs[1]->Name(), conv_W_tensor_proto) ||
+      (conv_W_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
+      (conv_W_tensor_proto->dims_size() != 4) ||
+      (conv_W_tensor_proto->dims(2) != 9 || conv_W_tensor_proto->dims(3) != 9)) {
+
+    is9x9 = false;
+  }
+  if(is9x9 == true) {
+    return false;
+  } else {
+    return true;
+  } 
+  
 }
 
 void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv_W_arg, __attribute__ ((unused)) const std::string& execution_provider) {
 
-  if (debug)
-    std::cout << " - PermuteWeights" << std::flush;
-
   // Require that the weights tensor be static.
   const ONNX_NAMESPACE::TensorProto* conv_W_tensor_proto = nullptr;
-  if (/*!graph_utils::NodeArgIsConstant(graph_, *input_def) ||*/
-      !graph_.GetInitializedTensor(input_def->Name(), conv_W_tensor_proto) ||
+  if (!graph_.GetInitializedTensor(input_def->Name(), conv_W_tensor_proto) ||
       (conv_W_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
       (conv_W_tensor_proto->dims_size() != 4) ||
       (execution_provider == kArmNNExecutionProvider && conv_W_tensor_proto->dims(1) == 1)) {
-
-      if (debug)
-        std::cout << " skip" << std::flush;
 
     return;
   }
@@ -192,14 +193,11 @@ void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv
 
   weights.allocator()->init(arm_compute::TensorInfo(initial_shape, arm_compute::Format::F32));
 
-  arm_compute::NEPermute permutationLayer;
-  // permutationLayer.configure(&weights, &new_weights, arm_compute::PermutationVector(2,0,1));//pentru armnn
-  permutationLayer.configure(&weights, &new_weights,
-    (conv_W_tensor_proto->dims(1) == 1) ? arm_compute::PermutationVector(3,2,0,1) : arm_compute::PermutationVector(2,0,1));// pentru acl
+  arm_compute::NEPermute permutationLayer;permutationLayer.configure(&weights, &new_weights,
+    (conv_W_tensor_proto->dims(1) == 1) ? arm_compute::PermutationVector(3,2,0,1) : arm_compute::PermutationVector(2,0,1));
 
-  // onnxruntime::acl::ACLImportMemory(weights.allocator(), conv_W->data<float>(), weights.info()->tensor_shape().total_size() * 4);// nu imi merge mie...
-  weights.allocator()->import_memory(conv_W->data<float>());// am pus asta pentru ca e varianta pentru 19.05
-
+  //onnxruntime::acl::ACLImportMemory(weights.allocator(), conv_W->data<float>(), weights.info()->tensor_shape().total_size() * 4);
+  weights.allocator()->import_memory(conv_W->data<float>());
 
   new_weights.allocator()->allocate();
 
@@ -224,27 +222,28 @@ void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv
   graph_.AddInitializedTensor(nhwc_conv_W_tensor_proto);
 
   *nhwc_conv_W_arg = &graph_.GetOrCreateNodeArg(nhwc_conv_W_tensor_proto.name(), nullptr);
-
-  if (debug)
-    std::cout << " -" << std::flush;
 }
 
+bool axisInRange(const Node& node) {
+ int64_t axa = static_cast<int64_t>((&(node.GetAttributes().find("axis")->second))->i());
+ return axa < 4;
+}
 
-bool NhwcTransformerImpl::SuportsReplacementNHWC(const Node& node) {
+bool NhwcTransformerImpl::SuportsReplacementNHWC(Node& node) {
    return ((node.GetExecutionProviderType() == kAclExecutionProvider ||
             node.GetExecutionProviderType() == kArmNNExecutionProvider) &&
-           (node.OpType() == "Conv" ||
-            node.OpType() == "FusedConv" ||
+           ((node.OpType() == "Conv" && isNot9x9(node)) ||
+            (node.OpType() == "FusedConv" && isNot9x9(node)) ||
             node.OpType() == "MaxPool" ||
             node.OpType() == "AveragePool" ||
             node.OpType() == "GlobalMaxPool" ||
             node.OpType() == "GlobalAveragePool" ||
             node.OpType() == "BatchNormalization" ||
-            node.OpType() == "Concat"
+            (node.OpType() == "Concat" && axisInRange(node))
             ));
 }
 
-DataLayout NhwcTransformerImpl::RequiredLayout(const Node& node) {
+DataLayout NhwcTransformerImpl::RequiredLayout(Node& node) {
   // Default to NCHW to cover all cases
   DataLayout layout = NchwLayout;
 
@@ -256,8 +255,6 @@ DataLayout NhwcTransformerImpl::RequiredLayout(const Node& node) {
        auto itLayout = nodes_layout.find(it->Index());
        if (itLayout != nodes_layout.end())
          layout = itLayout->second ? NhwcLayout : NchwLayout;
-       else if (debug)
-         std::cout << this << " !!! Node idx " << it->Index() << " not in map" << std::endl;
      }
   } else {
      if (node.OpType() == "Clip" ||
@@ -285,39 +282,25 @@ DataLayout NhwcTransformerImpl::RequiredLayout(const Node& node) {
 void NhwcTransformerImpl::Transform(Node& node) {
   long unsigned int node_idx = node.Index();
 
-  if (debug)
-    std::cout << this << " " << node.OpType() << " "  << node.GetExecutionProviderType() << std::endl;
+  LOGS(logger, VERBOSE) << "NHWC " << node.OpType() << " "  << node.GetExecutionProviderType();
 
   DataLayout required_layout = RequiredLayout(node);
   bool bRequiresNHWC = (required_layout == NhwcLayout);
   bool bNodeNHWC = false;
 
-  if (debug)
-    std::cout << this << " InputEdgesCount " << node.GetInputEdgesCount() << std::endl;
-
-  // create temporary container to allow inseration without alteration  
+  // create temporary container to allow inseration without alteration
   std::vector<const Node::EdgeEnd*> inputEdges;
   for (auto it = node.InputEdgesBegin(), end = node.InputEdgesEnd(); it != end; ++it)
     inputEdges.push_back(&(*it));
 
-  int i = 1;
   for (std::vector<const Node::EdgeEnd*>::iterator it = inputEdges.begin(), end = inputEdges.end(); it != end; ++it) {
     const Node::EdgeEnd* edge = *it;
-    if (debug) {
-      std::cout << this << " InputEdgesCount " << node.GetInputEdgesCount() << " InputEdge " <<  i << std::flush;
-      std::cout << ", SrcArgIndex " <<  edge->GetSrcArgIndex()  << ", SrcArgIndex " << edge->GetDstArgIndex() << std::flush;
-      std::cout << ", Node " << &edge->GetNode() << std::flush;
-      std::cout << " Idx " << edge->GetNode().Index() << std::endl;
-    }
-    
-    i++;
+
     bool bParentNHWC = true;
- 
+
     auto itParentLayout = nodes_layout.find(edge->GetNode().Index());
     if (itParentLayout != nodes_layout.end())
       bParentNHWC = itParentLayout->second;
-    else if (debug)
-      std::cout << this << " !!! Node idx " << edge->GetNode().Index() << " not in map" << std::endl;
 
     switch (required_layout) {
     case InheritLayout:
@@ -360,10 +343,9 @@ void NhwcTransformerImpl::Transform(Node& node) {
   }
 
   nodes_layout.insert(std::make_pair(node_idx, bNodeNHWC));
-  if (debug) 
-    std::cout << this << " GetNode " <<  node_idx  << std::endl;
+
   Node& latest_node = *graph_.GetNode(node_idx);
-  
+
   if (latest_node.OutputNodesBegin() == latest_node.OutputNodesEnd() &&
       bNodeNHWC) {
     NodeIndex perute_index = InsertPermuteChildNode(latest_node, false);
@@ -375,9 +357,7 @@ void NhwcTransformerImpl::Finalize(__attribute__ ((unused)) bool& modified) {
   modified = false;
 }
 
-Status NhwcTransformer::ApplyImpl(__attribute__ ((unused))Graph& graph, __attribute__ ((unused))bool& modified, __attribute__ ((unused))int graph_level, __attribute__ ((unused)) const logging::Logger& logger) const {
-
-  // std::cout << this << " NhwcTransformer 11.07 03:43" << std::endl;
+Status NhwcTransformer::ApplyImpl(Graph& graph, bool& modified, int graph_level, const logging::Logger& logger) const {
 
   std::string provider;
   modified = false;
@@ -390,7 +370,7 @@ Status NhwcTransformer::ApplyImpl(__attribute__ ((unused))Graph& graph, __attrib
   }
 
   if (!provider.empty()) {
-    NhwcTransformerImpl impl(graph, provider);
+    NhwcTransformerImpl impl(graph, provider, logger);
     GraphViewer graph_viewer(graph);
 
     for (auto index : graph_viewer.GetNodesInTopologicalOrder()) {

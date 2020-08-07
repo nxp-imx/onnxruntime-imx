@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) 2020, NXP Semiconductor, Inc. All rights reserved.
 // Licensed under the MIT License.
 
 #if defined(USE_ACL) || defined(USE_ARMNN)
