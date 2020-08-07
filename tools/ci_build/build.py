@@ -162,7 +162,7 @@ Use the individual flags to only run the specified stages.
     parser.add_argument("--enable_multi_device_test", action='store_true', help="Test with multi-device. Mostly used for multi-device GPU")
     parser.add_argument("--use_dml", action='store_true', help="Build with DirectML.")
     parser.add_argument("--use_telemetry", action='store_true', help="Only official builds can set this flag to enable telemetry.")
-    parser.add_argument("--use_acl", nargs="?", const="ACL_1905",choices=["ACL_1902", "ACL_1905", "ACL_1908"],help="Build with ACL for ARM architectures.")
+    parser.add_argument("--use_acl", nargs="?", const="ACL_1905",choices=["ACL_1902", "ACL_1905", "ACL_1908", "ACL_2002"],help="Build with ACL for ARM architectures.")
     parser.add_argument("--use_armnn", action='store_true',help="Enable ArmNN Execution Provider.")
     parser.add_argument("--armnn_relu", action='store_true',help="Use the Relu operator implementation from the ArmNN EP.")
     parser.add_argument("--use_cross_compile", action='store_true', help="Use cross compile.")
@@ -344,6 +344,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
                  "-Donnxruntime_USE_ACL_1902=" + ("ON" if args.use_acl == "ACL_1902" else "OFF"),
                  "-Donnxruntime_USE_ACL_1905=" + ("ON" if args.use_acl == "ACL_1905" else "OFF"),
                  "-Donnxruntime_USE_ACL_1908=" + ("ON" if args.use_acl == "ACL_1908" else "OFF"),
+                 "-Donnxruntime_USE_ACL_2002=" + ("ON" if args.use_acl == "ACL_2002" else "OFF"),
                  "-Donnxruntime_USE_ARMNN=" + ("ON" if args.use_armnn else "OFF"),
                  "-Donnxruntime_ARMNN_RELU_USECPU=" + ("OFF" if args.armnn_relu else "ON"),
                  ]
