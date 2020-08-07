@@ -315,11 +315,8 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
       tconv.k->info()->set_tensor_shape(ACLReshapeWeightsDepthwise(tconv.k.get()));
 
       //depthwise convolution
-      bool optimizable = true;
-#ifdef ACL_2002
-      optimizable = false;
-#endif
-      if(optimizable && (W->Shape().GetDims()[2] != 3 || W->Shape().GetDims()[3] != 3)){
+
+      if((W->Shape().GetDims()[2] != 3 || W->Shape().GetDims()[3] != 3)){
 	auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer>();
 #ifdef ACL_1902
         layer->configure(tconv.in.get(), tconv.k.get(), (B != nullptr) ? tconv.b.get() : nullptr, tconv.out.get(),
@@ -333,7 +330,11 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
 #endif
         tconv.layer = std::move(layer);
       } else {
-        auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer3x3>();
+#ifdef ACL_2002
+      auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer>();
+#else
+      auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer3x3>();
+#endif
 #ifdef ACL_1902
         layer->configure(tconv.in.get(), tconv.k.get(), (B != nullptr) ? tconv.b.get() : nullptr, tconv.out.get(),
                        aclPadStride, 1,
