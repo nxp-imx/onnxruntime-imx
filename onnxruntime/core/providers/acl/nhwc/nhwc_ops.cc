@@ -267,7 +267,7 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
       tconv.b = std::make_shared<arm_compute::Tensor>();
     tconv.out = std::make_shared<arm_compute::Tensor>();
 
-    bool isDepthwise = (W->Shape()[1] == 1);
+    bool isDepthwise = (conv_attrs_.group > 1 && conv_attrs_.group == X->Shape()[1]);
 
     tconv.in->allocator()->init(arm_compute::TensorInfo(ACL_NCHW2NHWC(ACLTensorShape(X->Shape(), PREF_DIM)), arm_compute::Format::F32));
     if (isDepthwise)
