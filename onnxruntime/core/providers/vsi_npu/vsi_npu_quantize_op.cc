@@ -168,15 +168,9 @@ void VsiOpCallbackInfoConvInteger::Setup(const onnxruntime::Node* node,
 
     uint32_t tmp_output_operand_id = model->AddOperand(output_defs[0]->Name() + add_name);
     auto operand = model->GetOperand(tmp_output_operand_id);
-    operand->type = nnrt::OperandType::TENSOR_FLOAT16;
-    operand->quant.scalar.zeroPoint = 0;
-    operand->quant.scalar.scale = 1.0;
     auto shape = vsi_npu::GetTensorShape(*output_defs[0]);
-    const std::vector<int64_t>& dims = shape.GetDims();
-    for (auto dim : dims) {
-        operand->dimensions.push_back(static_cast<uint32_t>(dim));
-    }
-
+    vsi_npu::SetTensorDims(*output_defs[0], operand->dimensions);
+    operand->type = nnrt::OperandType::TENSOR_FLOAT16;
     conv_out_operand_ids.push_back(tmp_output_operand_id);
 
     auto op = std::make_shared<nnrt::op::GroupedConv2DOperation>();

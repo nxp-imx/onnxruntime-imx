@@ -26,6 +26,11 @@
 
 namespace onnxruntime {
 
+ModelShell::ModelShell() {
+    compiler_ = std::make_unique<nnrt::Compilation>(local_model_.get());
+    compiler_->setInterpreter(new VsiOrtInterpreter());
+}
+
 void ModelShell::AddOperandHelper(const NodeArg* node,
                                   nnrt::op::OperandPtr operand,
                                   uint32_t operandId,
@@ -154,9 +159,9 @@ void ModelShell::IdentifyInputsAndOutputs(const uint32_t* inputs_ptr,
                                           uint32_t output_count) {
     local_model_->identifyInputsAndOutputs(inputs_ptr, input_count, outputs_ptr, output_count);
     local_model_->finish();
-    compiler_ = std::make_unique<nnrt::Compilation>(local_model_.get());
-    compiler_->setInterpreter(new VsiOrtInterpreter());
-    execution_ptr_ = std::make_unique<nnrt::Execution>(compiler_.get());
+    if (execution_ptr_ == nullptr) {
+        execution_ptr_ = std::make_unique<nnrt::Execution>(compiler_.get());
+    }
 }
 
 int ModelShell::SetInput(uint32_t index,

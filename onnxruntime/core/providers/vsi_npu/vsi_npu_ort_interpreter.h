@@ -144,14 +144,28 @@ class VsiOpCallbackInfoSoftmax : public VsiOpCallbackInfo {
 class VsiOpCallbackInfoGemm : public VsiOpCallbackInfo {
    public:
     VsiOpCallbackInfoGemm(){};
-    nnrt::op::OperationPtr createOperationPtr() override {
-        return std::make_shared<nnrt::op::FullyConnectedOperation>();
-    };
-    void SetupAttribute(nnrt::op::OperationPtr op,
-                        const Node* node,
-                        ModelShellPtr& model,
-                        const onnxruntime::GraphViewer* graph_viewer) override;
+    void Setup(const onnxruntime::Node* node,
+               onnxruntime::ModelShellPtr& model,
+               const onnxruntime::GraphViewer* graph_viewer) override;
     bool IsNodeSupported(const onnxruntime::GraphViewer&, const Node*, std::string&) override;
+
+   private:
+    void AddTransposeOp(const onnxruntime::Node* node,
+                        onnxruntime::ModelShellPtr& model,
+                        std::vector<uint32_t> trans_operand_ids,
+                        std::string trans_add_name);
+    void AddAddOp(const onnxruntime::Node* node,
+                  onnxruntime::ModelShellPtr& model,
+                  std::vector<uint32_t> add_operand_ids,
+                  std::string add_add_name);
+    void AddMulOp(const onnxruntime::Node* node,
+                  onnxruntime::ModelShellPtr& model,
+                  std::vector<uint32_t> mul_operand_ids,
+                  std::vector<std::string> mul_add_names,
+                  uint32_t num);
+    void AddMatmulOp(const onnxruntime::Node* node,
+                     onnxruntime::ModelShellPtr& model,
+                     std::vector<uint32_t> matmul_operand_ids);
 };
 
 class VsiOpCallbackInfoLRN : public VsiOpCallbackInfo {

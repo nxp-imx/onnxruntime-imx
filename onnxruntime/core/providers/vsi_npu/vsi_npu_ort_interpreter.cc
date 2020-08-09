@@ -167,47 +167,315 @@ bool VsiOpCallbackInfoSoftmax::IsNodeSupported(const onnxruntime::GraphViewer& g
     return VsiOpCallbackInfo::IsNodeSupported(graph_viewer, node, reason);
 }
 
-void VsiOpCallbackInfoGemm::SetupAttribute(nnrt::op::OperationPtr op,
-                                           const Node* node,
-                                           ModelShellPtr& model,
-                                           const onnxruntime::GraphViewer* graph_viewer) {
-    op->setVxParam(
+void VsiOpCallbackInfoGemm::AddMulOp(const onnxruntime::Node* node,
+                                     onnxruntime::ModelShellPtr& model,
+                                     std::vector<uint32_t> mul_operand_ids,
+                                     std::vector<std::string> mul_add_names,
+                                     uint32_t num) {
+    auto input_defs = node->InputDefs();
+    auto output_defs = node->OutputDefs();
+    auto mul = std::make_shared<nnrt::op::MulOperation>();
+
+    std::vector<uint32_t> mul_in_operand_ids{mul_operand_ids[0], mul_operand_ids[1]};
+    std::vector<uint32_t> mul_out_operand_ids{mul_operand_ids[2]};
+
+    auto mul_input_tensor_info = std::make_shared<VsiGraphTensorInfo>();
+    mul_input_tensor_info->name = input_defs[num]->Name() + mul_add_names[0 + num * 2];
+    mul_input_tensor_info->is_initializer = true;
+    model->GetGraphInputs().push_back(mul_input_tensor_info);
+    model->GetGraphOutputs().push_back(mul_input_tensor_info);
+
+    auto mul_output_tensor_info = std::make_shared<VsiGraphTensorInfo>();
+    mul_output_tensor_info->name = input_defs[num]->Name() + mul_add_names[1 + num * 2];
+    mul_output_tensor_info->is_initializer = true;
+    model->GetGraphInputs().push_back(mul_output_tensor_info);
+
+    auto mul_intput_operand_a = model->GetOperand(mul_operand_ids[0]);
+    if (mul_intput_operand_a->ndim() == 0) {
+        mul_intput_operand_a->type = nnrt::OperandType::TENSOR_FLOAT32;
+        auto intput0_shape = vsi_npu::GetTensorShape(*input_defs[0]);
+        auto intput1_shape = vsi_npu::GetTensorShape(*input_defs[1]);
+        const std::vector<int64_t>& intput0_dims = intput0_shape.GetDims();
+        const std::vector<int64_t>& intput1_dims = intput1_shape.GetDims();
+        mul_intput_operand_a->dimensions.push_back(static_cast<uint32_t>(intput0_dims[0]));
+        mul_intput_operand_a->dimensions.push_back(static_cast<uint32_t>(intput1_dims[1]));
+    }
+    auto mul_intput_operand_b = model->GetOperand(mul_operand_ids[1]);
+    if (mul_intput_operand_b->ndim() == 0) {
+        mul_intput_operand_b->type = nnrt::OperandType::TENSOR_FLOAT32;
+        if (num == 1) {
+            vsi_npu::SetTensorDims(*input_defs[2], mul_intput_operand_b->dimensions);
+        } else if (num == 0) {
+            auto intput0_shape = vsi_npu::GetTensorShape(*input_defs[0]);
+            auto intput1_shape = vsi_npu::GetTensorShape(*input_defs[1]);
+            const std::vector<int64_t>& intput0_dims = intput0_shape.GetDims();
+            const std::vector<int64_t>& intput1_dims = intput1_shape.GetDims();
+            mul_intput_operand_b->dimensions.push_back(static_cast<uint32_t>(intput0_dims[0]));
+            mul_intput_operand_b->dimensions.push_back(static_cast<uint32_t>(intput1_dims[1]));
+        }
+    }
+
+    auto mul_output_operand = model->GetOperand(mul_operand_ids[2]);
+    if (mul_output_operand->ndim() == 0) {
+        mul_output_operand->type = nnrt::OperandType::TENSOR_FLOAT32;
+        vsi_npu::SetTensorDims(*output_defs[0], mul_output_operand->dimensions);
+    }
+
+    ProtoHelperNodeContext ctx(*node);
+    OpNodeProtoHelper<ProtoHelperNodeContext> attrs(&ctx);
+    float alpha{1.0};
+    float beta{1.0};
+    auto status_alpha = vsi_npu::GetAttr<float>(attrs, "alpha", &alpha).IsOK();
+    auto status_beta = vsi_npu::GetAttr<float>(attrs, "beta", &beta).IsOK();
+
+    auto tensor_scale = model->GetModelPtr()->operand(mul_operand_ids[1]);
+    auto tensor_size_scale = tensor_scale->size();
+    auto value = new float[tensor_size_scale];
+
+    if (num == 0 && status_alpha) {
+        for (uint16_t i = 0; i < tensor_size_scale; i++) {
+            value[i] = alpha;
+        }
+
+    } else if (num == 1 && status_beta) {
+        for (uint16_t i = 0; i < tensor_size_scale; i++) {
+            value[i] = beta;
+        }
+    }
+
+    std::shared_ptr<float> tensorValue(value);
+    const void* value_addr = reinterpret_cast<const void*>(tensorValue.get());
+    model->GetModelPtr()->setOperandValue(mul_operand_ids[1], value_addr, tensor_scale->bytes());
+
+    mul->setInputs(mul_in_operand_ids.data(), mul_in_operand_ids.size());
+    mul->setOutputs(mul_out_operand_ids.data(), mul_out_operand_ids.size());
+    model->AddOperation(mul, nullptr);
+}
+
+void VsiOpCallbackInfoGemm::AddTransposeOp(const onnxruntime::Node* node,
+                                           onnxruntime::ModelShellPtr& model,
+                                           std::vector<uint32_t> trans_operand_ids,
+                                           std::string trans_add_name) {
+    auto trans = std::make_shared<nnrt::op::PermuteOperation>();
+
+    std::vector<uint32_t> trans_in_operand_ids{trans_operand_ids[0]};
+    std::vector<uint32_t> trans_output_operand_ids{trans_operand_ids[1]};
+
+    auto input_defs = node->InputDefs();
+    auto output_defs = node->OutputDefs();
+
+    auto trans_output_tensor_info = std::make_shared<VsiGraphTensorInfo>();
+    trans_output_tensor_info->name = output_defs[0]->Name() + trans_add_name;
+    trans_output_tensor_info->is_initializer = true;
+    model->GetGraphInputs().push_back(trans_output_tensor_info);
+    model->GetGraphOutputs().push_back(trans_output_tensor_info);
+
+    auto trans_operand = model->GetOperand(trans_operand_ids[1]);
+    if (trans_operand->ndim() == 0) {
+        trans_operand->type = nnrt::OperandType::TENSOR_FLOAT32;
+        auto shape = vsi_npu::GetTensorShape(*input_defs[1]);
+        const std::vector<int64_t>& dims = shape.GetDims();
+        trans_operand->dimensions.push_back(static_cast<uint32_t>(dims[1]));
+        trans_operand->dimensions.push_back(static_cast<uint32_t>(dims[0]));
+    }
+
+    std::vector<int32_t> perm_default = {1, 0};
+    trans->perm = std::move(perm_default);
+
+    trans->setInputs(trans_in_operand_ids.data(), trans_in_operand_ids.size());
+    trans->setOutputs(trans_output_operand_ids.data(), trans_output_operand_ids.size());
+
+    model->AddOperation(trans, nullptr);
+}
+void VsiOpCallbackInfoGemm::AddAddOp(const onnxruntime::Node* node,
+                                     onnxruntime::ModelShellPtr& model,
+                                     std::vector<uint32_t> add_operand_ids,
+                                     std::string add_add_name) {
+    auto add = std::make_shared<nnrt::op::AddOperation>();
+
+    std::vector<uint32_t> add_in_operand_ids{add_operand_ids[0], add_operand_ids[1]};
+    std::vector<uint32_t> add_output_operand_ids{add_operand_ids[2]};
+
+    auto output_defs = node->OutputDefs();
+
+    auto add_output_tensor_info = std::make_shared<VsiGraphTensorInfo>();
+    add_output_tensor_info->name = output_defs[0]->Name() + add_add_name;
+    add_output_tensor_info->is_initializer = true;
+    model->GetGraphInputs().push_back(add_output_tensor_info);
+    model->GetGraphOutputs().push_back(add_output_tensor_info);
+
+    auto add_operand_a = model->GetOperand(add_operand_ids[0]);
+    if (add_operand_a->ndim() == 0) {
+        add_operand_a->type = nnrt::OperandType::TENSOR_FLOAT32;
+        vsi_npu::SetTensorDims(*output_defs[0], add_operand_a->dimensions);
+    }
+
+    add->setInputs(add_in_operand_ids.data(), add_in_operand_ids.size());
+    add->setOutputs(add_output_operand_ids.data(), add_output_operand_ids.size());
+
+    model->AddOperation(add, nullptr);
+}
+void VsiOpCallbackInfoGemm::AddMatmulOp(const onnxruntime::Node* node,
+                                        onnxruntime::ModelShellPtr& model,
+                                        std::vector<uint32_t> matmul_operand_ids) {
+    auto matmul = std::make_shared<nnrt::op::MatrixMulOperation>();
+
+    ProtoHelperNodeContext ctx(*node);
+    OpNodeProtoHelper<ProtoHelperNodeContext> attrs(&ctx);
+    int64_t transA{false};
+    auto status = vsi_npu::GetAttr<int64_t>(attrs, "transA", &transA).IsOK();
+    if (status && transA == 1) {
+        matmul->transpose[0] = true;
+    } else {
+        matmul->transpose[0] = false;
+    }
+    matmul->transpose[1] = false;
+
+    std::vector<uint32_t> matmul_in_operand_ids{matmul_operand_ids[0], matmul_operand_ids[1]};
+    std::vector<uint32_t> matmul_out_operand_ids{matmul_operand_ids[2]};
+
+    matmul->setInputs(matmul_in_operand_ids.data(), matmul_in_operand_ids.size());
+    matmul->setOutputs(matmul_out_operand_ids.data(), matmul_out_operand_ids.size());
+    matmul->setVxParam(
         nnrt::OverflowPolicy::SATURATE, nnrt::RoundingPolicy::TO_ZERO, nnrt::Rounding::FLOOR);
+    model->AddOperation(matmul, nullptr);
+};
+
+void VsiOpCallbackInfoGemm::Setup(const onnxruntime::Node* node,
+                                  onnxruntime::ModelShellPtr& model,
+                                  const onnxruntime::GraphViewer* graph_viewer) {
+    ProtoHelperNodeContext ctx(*node);
+    OpNodeProtoHelper<ProtoHelperNodeContext> attrs(&ctx);
+
+    auto input_defs = node->InputDefs();
+    auto output_defs = node->OutputDefs();
+
+    const std::string matmul_add_name = "@@matmuladdTmp";
+    const std::string trans_add_name = "@@transaddTmp";
+    const std::string mul_a_input_add_name = "@@mulainputaddTmp";
+    const std::string mul_a_output_add_name = "@@mulaoutputaddTmp";
+    const std::string mul_b_input_add_name = "@@mulbinputaddTmp";
+    const std::string mul_b_output_add_name = "@@mulboutputaddTmp";
+
+    int64_t is_trans{0};
+    bool is_scale{false};
+    bool is_add{false};
+
+    int64_t transB{0};
+    vsi_npu::GetAttr<int64_t>(attrs, "transB", &transB).IsOK();
+    if (transB == 1) is_trans = true;
+
+    float alpha{1.0};
+    float beta{1.0};
+    vsi_npu::GetAttr<float>(attrs, "alpha", &alpha).IsOK();
+    vsi_npu::GetAttr<float>(attrs, "beta", &beta).IsOK();
+    if (alpha != 1.0 || beta != 1.0) is_scale = true;
+
+    if (input_defs.size() == 3) is_add = true;
+
+    uint32_t trans_input_operand_id{0};
+    uint32_t trans_output_operand_id{0};
+    uint32_t mul_a_input_operand_id_a{0};
+    uint32_t mul_a_input_operand_id_b{0};
+    uint32_t mul_b_input_operand_id_a{0};
+    uint32_t mul_b_input_operand_id_b{0};
+    uint32_t mul_a_output_operand_id{0};
+    uint32_t mul_b_output_operand_id{0};
+    uint32_t add_input_operand_id_a{0};
+    uint32_t add_input_operand_id_b{0};
+    uint32_t add_output_operand_id{0};
+    uint32_t matmul_input_operand_id_a{0};
+    uint32_t matmul_input_operand_id_b{0};
+    uint32_t matmul_output_operand_id{0};
+
+    if (is_trans && is_scale && is_add) {
+        // TO DO
+    } else if (!is_trans && is_scale && is_add) {
+        matmul_input_operand_id_a = model->AddOperand(input_defs[0], graph_viewer);
+        matmul_input_operand_id_b = model->AddOperand(input_defs[1], graph_viewer);
+        matmul_output_operand_id = model->AddOperand(output_defs[0]->Name() + matmul_add_name);
+        mul_a_input_operand_id_a = matmul_output_operand_id;
+        mul_a_input_operand_id_b = model->AddOperand(input_defs[0]->Name() + mul_a_input_add_name);
+        mul_a_output_operand_id = model->AddOperand(output_defs[0]->Name() + mul_a_output_add_name);
+        mul_b_input_operand_id_a = model->AddOperand(input_defs[2], graph_viewer);
+        mul_b_input_operand_id_b = model->AddOperand(input_defs[2]->Name() + mul_b_input_add_name);
+        mul_b_output_operand_id = model->AddOperand(output_defs[0]->Name() + mul_b_output_add_name);
+        add_input_operand_id_a = mul_a_output_operand_id;
+        add_input_operand_id_b = mul_b_output_operand_id;
+        add_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
+
+        std::vector<uint32_t> matmul_operand_ids{
+            matmul_input_operand_id_a, matmul_input_operand_id_b, matmul_output_operand_id};
+        std::vector<uint32_t> add_operand_ids{
+            add_input_operand_id_a, add_input_operand_id_b, add_output_operand_id};
+        std::vector<uint32_t> mul_a_operand_ids{
+            mul_a_input_operand_id_a, mul_a_input_operand_id_b, mul_a_output_operand_id};
+        std::vector<uint32_t> mul_b_operand_ids{
+            mul_b_input_operand_id_a, mul_b_input_operand_id_b, mul_b_output_operand_id};
+        std::vector<std::string> mul_add_names{mul_a_input_add_name,
+                                               mul_a_output_add_name,
+                                               mul_b_input_add_name,
+                                               mul_b_output_add_name};
+
+        AddMatmulOp(node, model, matmul_operand_ids);
+        AddMulOp(node, model, mul_a_operand_ids, mul_add_names, 0);
+        AddMulOp(node, model, mul_b_operand_ids, mul_add_names, 1);
+        AddAddOp(node, model, add_operand_ids, matmul_add_name);
+    } else if (is_trans && !is_scale && is_add) {
+        trans_input_operand_id = model->AddOperand(input_defs[1], graph_viewer);
+        trans_output_operand_id = model->AddOperand(input_defs[1]->Name() + trans_add_name);
+        matmul_input_operand_id_a = model->AddOperand(input_defs[0], graph_viewer);
+        matmul_input_operand_id_b = trans_output_operand_id;
+        matmul_output_operand_id = model->AddOperand(output_defs[0]->Name() + matmul_add_name);
+        add_input_operand_id_a = matmul_output_operand_id;
+        add_input_operand_id_b = model->AddOperand(input_defs[2], graph_viewer);
+        add_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
+
+        std::vector<uint32_t> matmul_operand_ids{
+            matmul_input_operand_id_a, matmul_input_operand_id_b, matmul_output_operand_id};
+        std::vector<uint32_t> add_operand_ids{
+            add_input_operand_id_a, add_input_operand_id_b, add_output_operand_id};
+        std::vector<uint32_t> trans_operand_ids{trans_input_operand_id, trans_output_operand_id};
+
+        AddTransposeOp(node, model, trans_operand_ids, trans_add_name);
+        AddMatmulOp(node, model, matmul_operand_ids);
+        AddAddOp(node, model, add_operand_ids, matmul_add_name);
+    } else if (is_trans && is_scale && !is_add) {
+        // TO DO
+    } else if (!is_trans && !is_scale && is_add) {
+        matmul_input_operand_id_a = model->AddOperand(input_defs[0], graph_viewer);
+        matmul_input_operand_id_b = model->AddOperand(input_defs[1], graph_viewer);
+        matmul_output_operand_id = model->AddOperand(output_defs[0]->Name() + matmul_add_name);
+        add_input_operand_id_a = matmul_output_operand_id;
+        add_input_operand_id_b = model->AddOperand(input_defs[2], graph_viewer);
+        add_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
+
+        std::vector<uint32_t> matmul_operand_ids{
+            matmul_input_operand_id_a, matmul_input_operand_id_b, matmul_output_operand_id};
+        std::vector<uint32_t> add_operand_ids{
+            add_input_operand_id_a, add_input_operand_id_b, add_output_operand_id};
+
+        AddMatmulOp(node, model, matmul_operand_ids);
+        AddAddOp(node, model, add_operand_ids, matmul_add_name);
+    } else if (!is_trans && is_scale && !is_add) {
+        // TO DO
+    } else if (is_trans && !is_scale && !is_add) {
+        // TO DO
+    } else if (!is_trans && !is_scale && !is_add) {
+        matmul_input_operand_id_a = model->AddOperand(input_defs[0], graph_viewer);
+        matmul_input_operand_id_b = model->AddOperand(input_defs[1], graph_viewer);
+        matmul_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
+
+        std::vector<uint32_t> matmul_operand_ids{
+            matmul_input_operand_id_a, matmul_input_operand_id_b, matmul_output_operand_id};
+
+        AddMatmulOp(node, model, matmul_operand_ids);
+    }
 }
 
 bool VsiOpCallbackInfoGemm::IsNodeSupported(const onnxruntime::GraphViewer& graph_viewer,
                                             const Node* node,
                                             std::string& reason) {
-    ProtoHelperNodeContext ctx(*node);
-    OpNodeProtoHelper<ProtoHelperNodeContext> attrs(&ctx);
-
-    int64_t transA;
-    bool status = vsi_npu::GetAttr<int64_t>(attrs, "transA", &transA).IsOK();
-    if (status && transA == 1) return false;
-
-    int64_t transB;
-    status = vsi_npu::GetAttr<int64_t>(attrs, "transB", &transB).IsOK();
-    if (status && transB == 1) return false;
-
-    float alpha;
-    status = vsi_npu::GetAttr<float>(attrs, "alpha", &alpha).IsOK();
-    if (status && alpha != 1.0) return false;
-
-    float beta;
-    status = vsi_npu::GetAttr<float>(attrs, "beta", &beta).IsOK();
-    if (status && beta != 1.0) return false;
-
-    auto input_defs = node->InputDefs();
-    if (input_defs.size() == 3) {
-        auto input_c_shape = vsi_npu::GetTensorShape(*input_defs[2]);
-        auto output_defs = node->OutputDefs();
-        auto output_shape = vsi_npu::GetTensorShape(*output_defs[0]);
-        if (input_c_shape != output_shape) {
-            reason += "## add input and output should have same shape.";
-            return false;
-        }
-    }
-
     return VsiOpCallbackInfo::IsNodeSupported(graph_viewer, node, reason);
 }
 
@@ -406,10 +674,7 @@ void VsiOpCallbackInfoInstanceNormalization::Setup(const onnxruntime::Node* node
             model->AddOperand(input_defs[0]->Name() + "@@reshape_0");
         auto operand_pre_reshape = model->GetOperand(output_pre_reshape_operand_id);
         operand_pre_reshape->type = vsi_npu::convertToOperandType(input_defs[0]->Type());
-        const std::vector<int64_t>& dims_pre_reshape = shape.GetDims();
-        for (auto dim : dims_pre_reshape) {
-            operand_pre_reshape->dimensions.push_back(static_cast<uint32_t>(dim));
-        }
+        vsi_npu::SetTensorDims(*input_defs[0], operand_pre_reshape->dimensions);
         operand_pre_reshape->dimensions.push_back(1);
 
         std::vector<uint32_t> in_operand_ids_pre_reshape;
@@ -437,11 +702,7 @@ void VsiOpCallbackInfoInstanceNormalization::Setup(const onnxruntime::Node* node
             model->AddOperand(output_defs[0]->Name() + "@@reshape_1");
         auto operand_post_reshape = model->GetOperand(input_post_reshape_operand_id);
         operand_post_reshape->type = vsi_npu::convertToOperandType(output_defs[0]->Type());
-        shape = vsi_npu::GetTensorShape(*output_defs[0]);
-        const std::vector<int64_t>& dims_post_reshape = shape.GetDims();
-        for (auto dim : dims_post_reshape) {
-            operand_post_reshape->dimensions.push_back(static_cast<uint32_t>(dim));
-        }
+        vsi_npu::SetTensorDims(*output_defs[0], operand_post_reshape->dimensions);
         operand_post_reshape->dimensions.push_back(1);
 
         std::vector<uint32_t> in_operand_ids_post_reshape;
@@ -657,6 +918,7 @@ std::map<std::string, std::shared_ptr<VsiOpInfo>> vsi_npu_supported_ops = {
     REGISTER_OP(Pad),
     REGISTER_OP(BatchNormalization),
     REGISTER_OP(ConvInteger),
+    REGISTER_OP(MatMul),
 };
 
 bool VsiSupported(const std::string& opName) {

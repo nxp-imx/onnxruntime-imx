@@ -45,6 +45,8 @@ size_t GetTensorBytes(Ort::CustomOpApi& ort, OrtTensorTypeAndShapeInfo* info);
 
 TensorShape GetTensorShape(const onnxruntime::NodeArg& node_arg);
 
+void SetTensorDims(const onnxruntime::NodeArg& node_arg, std::vector<uint32_t>& dims);
+
 std::shared_ptr<uint8_t> UnpackTensor(const NodeArg* node,
                                       const ONNX_NAMESPACE::TensorProto& initializer);
 

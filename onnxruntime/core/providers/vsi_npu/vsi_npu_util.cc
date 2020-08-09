@@ -163,6 +163,14 @@ TensorShape GetTensorShape(const onnxruntime::NodeArg& node_arg) {
     return ts;
 }
 
+void SetTensorDims(const onnxruntime::NodeArg& node_arg, std::vector<uint32_t>& tensor_dims) {
+    auto shape = vsi_npu::GetTensorShape(node_arg);
+    const std::vector<int64_t>& dims = shape.GetDims();
+    for (auto dim : dims) {
+        tensor_dims.push_back(static_cast<uint32_t>(dim));
+    }
+}
+
 std::shared_ptr<uint8_t> UnpackTensor(const NodeArg* node,
                                       const ONNX_NAMESPACE::TensorProto& initializer) {
     std::shared_ptr<uint8_t> unpackedTensor;

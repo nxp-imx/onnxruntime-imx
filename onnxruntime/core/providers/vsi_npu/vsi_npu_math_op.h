@@ -72,6 +72,15 @@ class VsiOpCallbackInfoSum : public VsiOpCallbackInfo {
     };
 };
 
+class VsiOpCallbackInfoMatMul : public VsiOpCallbackInfo {
+   public:
+    VsiOpCallbackInfoMatMul(){};
+    void Setup(const Node*, ModelShellPtr&, const onnxruntime::GraphViewer*) override;
+    bool IsNodeSupported(const onnxruntime::GraphViewer& graph_viewer,
+                         const Node* node,
+                         std::string& reason) override;
+};
+
 #define MAP_OP_COMMON(name)                                                                    \
     class VsiOpInfo##name : public VsiOpInfo {                                                 \
        public:                                                                                 \
@@ -84,5 +93,6 @@ MAP_OP_COMMON(Sub)
 MAP_OP_COMMON(Mul)
 MAP_OP_COMMON(Div)
 MAP_OP_COMMON(Sum)
+MAP_OP_COMMON(MatMul)
 
 }  // namespace onnxruntime

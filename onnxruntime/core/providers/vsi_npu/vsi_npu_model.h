@@ -51,7 +51,7 @@ using ModelShellPtr = std::shared_ptr<ModelShell>;
 
 class ModelShell {
    public:
-    explicit ModelShell(){};
+    explicit ModelShell();
     ~ModelShell(){};
 
     uint32_t AddOperand(const NodeArg* node, const onnxruntime::GraphViewer* graph_viewer);
@@ -148,7 +148,7 @@ class ModelShell {
 
     nnrt::ModelPtr local_model_ = std::make_shared<nnrt::Model>();
     nnrt::CompilerUniquePtr compiler_;
-    nnrt::ExecUniquePtr execution_ptr_;
+    nnrt::ExecUniquePtr execution_ptr_ = nullptr;
     std::vector<std::shared_ptr<VsiGraphTensorInfo>> graph_inputs_;
     std::vector<std::shared_ptr<VsiGraphTensorInfo>> graph_outputs_;
     std::map<std::string, uint32_t> all_operand_ids_;
