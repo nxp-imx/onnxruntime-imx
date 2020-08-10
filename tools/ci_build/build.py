@@ -167,6 +167,8 @@ Use the individual flags to only run the specified stages.
     parser.add_argument("--armnn_relu", action='store_true',help="Use the Relu operator implementation from the ArmNN EP.")
     parser.add_argument("--use_cross_compile", action='store_true', help="Use cross compile.")
     parser.add_argument("--cmake_toolchain", help="Path to cmake tool chain.")
+    parser.add_argument("--path_to_vsi_npu_include", help="Path to VSI NPU includes. ")
+    parser.add_argument("--path_to_vsi_npu_libs", help="Path to VSI NPU libs. ")
     return parser.parse_args()
 
 def resolve_executable_path(command_or_path):
@@ -377,6 +379,12 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
 
     if path_to_protoc_exe:
         cmake_args += ["-DONNX_CUSTOM_PROTOC_EXECUTABLE=%s" % path_to_protoc_exe]
+
+    if args.path_to_vsi_npu_include:
+        cmake_args += ["-DVSI_NPU_INCLUDE_DIR=%s" % args.path_to_vsi_npu_include]
+
+    if args.path_to_vsi_npu_libs:
+        cmake_args += ["-DVSI_NPU_LIB_DIR=%s" % args.path_to_vsi_npu_libs]
 
     if args.gen_doc:
         cmake_args += ["-Donnxruntime_PYBIND_EXPORT_OPSCHEMA=ON"]

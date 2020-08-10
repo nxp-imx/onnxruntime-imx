@@ -499,17 +499,18 @@ if (onnxruntime_USE_VSI_NPU)
     "${ONNXRUNTIME_ROOT}/core/providers/vsi_npu/*.h"
     "${ONNXRUNTIME_ROOT}/core/providers/vsi_npu/*.cc"
   )
-  set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wl,-rpath-link $ENV{VIVANTE_SDK_DIR}/drivers")
+  set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
   source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_vsi_npu_cc_srcs})
   add_library(onnxruntime_providers_vsi_npu ${onnxruntime_providers_vsi_npu_cc_srcs})
   onnxruntime_add_include_to_target(onnxruntime_providers_vsi_npu onnxruntime_common onnxruntime_framework onnx onnx_proto protobuf::libprotobuf)
   add_dependencies(onnxruntime_providers_vsi_npu ${onnxruntime_EXTERNAL_DEPENDENCIES})
   set_target_properties(onnxruntime_providers_vsi_npu PROPERTIES FOLDER "ONNXRuntime")
-  target_include_directories(onnxruntime_providers_vsi_npu PRIVATE ${ONNXRUNTIME_ROOT} ${VSI_NPU_INCLUDE_DIR} $ENV{VIVANTE_SDK_DIR}/include
-      $ENV{NNRT_ROOT} $ENV{NNRT_ROOT}/ovxlib/include)
+  target_include_directories(onnxruntime_providers_vsi_npu PRIVATE ${ONNXRUNTIME_ROOT} ${VSI_NPU_INCLUDE_DIR})
   install(DIRECTORY ${PROJECT_SOURCE_DIR}/../include/onnxruntime/core/providers/vsi_npu  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core/providers)
   set_target_properties(onnxruntime_providers_vsi_npu PROPERTIES LINKER_LANGUAGE CXX)
-  link_directories(onnxruntime_providers_vsi_npu  $ENV{VIVANTE_SDK_DIR}/drivers )
+  if (VSI_NPU_LIB_DIR)
+    link_directories(onnxruntime_providers_vsi_npu  ${VSI_NPU_LIB_DIR})
+  endif()
   target_link_libraries(onnxruntime_providers_vsi_npu nnrt)
 endif()
 
