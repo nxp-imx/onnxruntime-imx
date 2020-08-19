@@ -76,6 +76,22 @@ class VsiOpCallbackInfoConvInteger : public VsiOpCallbackInfo {
     bool IsNodeSupported(const onnxruntime::GraphViewer&, const Node*, std::string&) override;
 };
 
+class VsiOpCallbackInfoQLinearConv : public VsiOpCallbackInfo {
+   public:
+    VsiOpCallbackInfoQLinearConv(){};
+    void Setup(const onnxruntime::Node* node,
+               onnxruntime::ModelShellPtr& model,
+               const onnxruntime::GraphViewer* graph_viewer) override;
+    Status Compute(FunctionState state,
+                   const OrtApi* api,
+                   OrtKernelContext* context,
+                   NodeIndex node_index) override;
+    bool IsNodeSupported(const onnxruntime::GraphViewer&, const Node*, std::string&) override;
+    void AddBiasOperand(const onnxruntime::Node* node,
+                        onnxruntime::ModelShellPtr& model,
+                        uint32_t operand_id);
+};
+
 #define MAP_OP_COMMON(name)                                                                    \
     class VsiOpInfo##name : public VsiOpInfo {                                                 \
        public:                                                                                 \
@@ -85,5 +101,6 @@ class VsiOpCallbackInfoConvInteger : public VsiOpCallbackInfo {
 MAP_OP_COMMON(DequantizeLinear)
 MAP_OP_COMMON(QuantizeLinear)
 MAP_OP_COMMON(ConvInteger)
+MAP_OP_COMMON(QLinearConv)
 
 }  // namespace onnxruntime

@@ -141,29 +141,141 @@ bool VsiOpCallbackInfoConv::IsNodeSupported(const onnxruntime::GraphViewer& grap
     return VsiOpCallbackInfo::IsNodeSupported(graph_viewer, node, reason);
 }
 
-void VsiOpCallbackInfoSoftmax::SetupAttribute(nnrt::op::OperationPtr op,
-                                              const Node* node,
-                                              ModelShellPtr& model,
-                                              const onnxruntime::GraphViewer* graph_viewer) {
+void VsiOpCallbackInfoSoftmax::Setup(const onnxruntime::Node* node,
+                                     onnxruntime::ModelShellPtr& model,
+                                     const onnxruntime::GraphViewer* graph_viewer) {
+    auto softmax = std::make_shared<nnrt::op::SoftmaxOperation>();
+
+    auto input_defs = node->InputDefs();
+    auto output_defs = node->OutputDefs();
+    int dim_size = input_defs[0]->Shape()->dim_size();
+
     ProtoHelperNodeContext ctx(*node);
     OpNodeProtoHelper<ProtoHelperNodeContext> attrs(&ctx);
 
-    auto softmax = std::dynamic_pointer_cast<nnrt::op::SoftmaxOperation>(op);
-    int32_t axis;
+    int32_t axis = 1;
     bool status = vsi_npu::GetAttr<int32_t>(attrs, "axis", &axis).IsOK();
-    ORT_ENFORCE(status);
-    softmax->axis = axis;
+    if (status && axis == -1) {
+        axis = (axis + dim_size) % dim_size;
+    }
+
+    uint32_t front_reshape_input_id{0};
+    uint32_t front_reshape_output_id{0};
+    uint32_t back_reshape_input_id{0};
+    uint32_t back_reshape_output_id{0};
+    uint32_t softmax_input_id{0};
+    uint32_t softmax_output_id{0};
+
+    std::vector<uint32_t> softmax_in_operand_ids;
+    std::vector<uint32_t> softmax_out_operand_ids;
+    const std::string softmax_input_add_name = "@@softmaxinputaddTmp";
+    const std::string softmax_output_add_name = "@@softmaxoutputaddTmp";
+
+    if (dim_size == 2) {
+        softmax_input_id = model->AddOperand(input_defs[0], graph_viewer);
+        softmax_output_id = model->AddOperand(output_defs[0], graph_viewer);
+        softmax_in_operand_ids.push_back(softmax_input_id);
+        softmax_out_operand_ids.push_back(softmax_output_id);
+        softmax->setInputs(softmax_in_operand_ids.data(), softmax_in_operand_ids.size());
+        softmax->setOutputs(softmax_out_operand_ids.data(), softmax_out_operand_ids.size());
+        softmax->axis = axis;
+        model->AddOperation(softmax, nullptr);
+    } else {
+        front_reshape_input_id = model->AddOperand(input_defs[0], graph_viewer);
+        front_reshape_output_id = model->AddOperand(input_defs[0]->Name() + softmax_input_add_name);
+        back_reshape_input_id = model->AddOperand(output_defs[0]->Name() + softmax_output_add_name);
+        back_reshape_output_id = model->AddOperand(output_defs[0], graph_viewer);
+        softmax_input_id = front_reshape_output_id;
+        softmax_output_id = back_reshape_input_id;
+        const std::vector<uint32_t> front_reshape_operand_ids{front_reshape_input_id,
+                                                              front_reshape_output_id};
+        const std::vector<uint32_t> back_reshape_operand_ids{back_reshape_input_id,
+                                                             back_reshape_output_id};
+        AddReshapeOp(node, model, front_reshape_operand_ids, softmax_input_add_name, true, axis);
+        softmax_in_operand_ids.push_back(softmax_input_id);
+        softmax_out_operand_ids.push_back(softmax_output_id);
+        softmax->setInputs(softmax_in_operand_ids.data(), softmax_in_operand_ids.size());
+        softmax->setOutputs(softmax_out_operand_ids.data(), softmax_out_operand_ids.size());
+        if (dim_size == 3) softmax->axis = 2;
+        else softmax->axis = 1;
+        model->AddOperation(softmax, nullptr);
+        AddReshapeOp(node, model, back_reshape_operand_ids, softmax_output_add_name, false, axis);
+    }
+}
+
+void VsiOpCallbackInfoSoftmax::AddReshapeOp(const onnxruntime::Node* node,
+                                            onnxruntime::ModelShellPtr& model,
+                                            const std::vector<uint32_t>& reshape_operand_ids,
+                                            const std::string& reshape_add_name,
+                                            bool isfront,
+                                            int32_t axis) {
+    auto reshape = std::make_shared<nnrt::op::ReshapeOperation>();
+    auto input_defs = node->InputDefs();
+    auto output_defs = node->OutputDefs();
+
+    auto reshape_add_tensor_info = std::make_shared<VsiGraphTensorInfo>();
+    if (isfront == true) {
+        reshape_add_tensor_info->name = input_defs[0]->Name() + reshape_add_name;
+    } else {
+        reshape_add_tensor_info->name = output_defs[0]->Name() + reshape_add_name;
+    }
+    reshape_add_tensor_info->is_initializer = true;
+    model->GetGraphInputs().push_back(reshape_add_tensor_info);
+
+    auto shape = vsi_npu::GetTensorShape(*input_defs[0]);
+    const std::vector<int64_t>& dims = shape.GetDims();
+    std::vector<uint32_t> vdims;
+    for (size_t i = 0; i < dims.size(); i++) {
+        vdims.push_back(static_cast<uint32_t>(dims[i]));
+    }
+
+    nnrt::op::OperandPtr reshap_operand;
+    if (isfront == true) {
+        reshap_operand = model->GetOperand(reshape_operand_ids[1]);
+    } else {
+        reshap_operand = model->GetOperand(reshape_operand_ids[0]);
+    }
+    reshap_operand->type = nnrt::OperandType::TENSOR_FLOAT32;
+
+    uint32_t inner_size = 1, outer_size = 1;
+    if (vdims.size() == 3) {
+        vdims.insert(vdims.begin(), 1);
+    }
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(axis); i++) {
+        inner_size *= vdims[i];
+    }
+
+    for (uint32_t i = static_cast<uint32_t>(axis + 1); i < vdims.size(); i++) {
+        outer_size *= vdims[i];
+    }
+
+    reshap_operand->dimensions.push_back(inner_size);
+    reshap_operand->dimensions.push_back(vdims[axis]);
+    reshap_operand->dimensions.push_back(outer_size);
+
+    if (isfront == true) {
+        std::vector<int32_t> vshapes{static_cast<int32_t>(inner_size),
+                                     static_cast<int32_t>(vdims[axis]),
+                                     static_cast<int32_t>(outer_size)};
+        reshape->shape = std::move(vshapes);
+    } else {
+        std::vector<int32_t> vshapes;
+        for (uint32_t i = 0; i < dims.size(); i++) {
+            vshapes.push_back(static_cast<int32_t>(dims[i]));
+        }
+    }
+
+    std::vector<uint32_t> reshape_in_operand_ids{reshape_operand_ids[0]};
+    std::vector<uint32_t> reshape_out_operand_ids{reshape_operand_ids[1]};
+    reshape->setInputs(reshape_in_operand_ids.data(), reshape_in_operand_ids.size());
+    reshape->setOutputs(reshape_out_operand_ids.data(), reshape_out_operand_ids.size());
+    model->AddOperation(reshape, nullptr);
 }
 
 bool VsiOpCallbackInfoSoftmax::IsNodeSupported(const onnxruntime::GraphViewer& graph_viewer,
-                                        const Node* node,
-                                        std::string& reason) {
-    auto input_defs = node->InputDefs();
-    auto shape = vsi_npu::GetTensorShape(*input_defs[0]);
-    if (shape.NumDimensions() != 2) {
-        reason += "## Only support Softmax2D now.";
-        return false;
-    }
+                                               const Node* node,
+                                               std::string& reason) {
     return VsiOpCallbackInfo::IsNodeSupported(graph_viewer, node, reason);
 }
 
@@ -919,6 +1031,7 @@ std::map<std::string, std::shared_ptr<VsiOpInfo>> vsi_npu_supported_ops = {
     REGISTER_OP(BatchNormalization),
     REGISTER_OP(ConvInteger),
     REGISTER_OP(MatMul),
+    REGISTER_OP(QLinearConv),
 };
 
 bool VsiSupported(const std::string& opName) {

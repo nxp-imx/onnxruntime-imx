@@ -459,17 +459,18 @@ Status ComputeStateFunc(FunctionState state,
                                     out_operand_Ids.size());
 
     size_t graph_inputs_num = model->GetGraphInputs().size();
-    for (size_t i = 0; i < graph_inputs_num; i++) {
+    for (size_t i = 0, j = 0; i < graph_inputs_num; i++) {
         if (!model->GetGraphInputs()[i]->is_initializer) {
             const OrtValue* input_tensor = ort.KernelContext_GetInput(context, i);
             const auto tensor_info = ort.GetTensorTypeAndShape(input_tensor);
             const auto& tensor_shape = ort.GetTensorShape(tensor_info);
             LOGS_DEFAULT(WARNING) << "TensorBytes:" << vsi_npu::GetTensorBytes(ort, tensor_info);
-            model->SetInput(i,
+            model->SetInput(j,
                             nullptr,
                             ort.GetTensorData<void>(input_tensor),
                             vsi_npu::GetTensorBytes(ort, tensor_info));
             ort.ReleaseTensorTypeAndShapeInfo(tensor_info);
+            j++;
         }
     }
 

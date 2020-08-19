@@ -131,14 +131,16 @@ class VsiOpCallbackInfoConv : public VsiOpCallbackInfo {
 class VsiOpCallbackInfoSoftmax : public VsiOpCallbackInfo {
    public:
     VsiOpCallbackInfoSoftmax(){};
-    nnrt::op::OperationPtr createOperationPtr() override {
-        return std::make_shared<nnrt::op::SoftmaxOperation>();
-    };
-    void SetupAttribute(nnrt::op::OperationPtr op,
-                        const Node* node,
-                        ModelShellPtr& model,
-                        const onnxruntime::GraphViewer* graph_viewer) override;
+    void Setup(const onnxruntime::Node* node,
+               onnxruntime::ModelShellPtr& model,
+               const onnxruntime::GraphViewer* graph_viewer) override;
     bool IsNodeSupported(const onnxruntime::GraphViewer&, const Node*, std::string&) override;
+
+   private:
+    void AddReshapeOp(const onnxruntime::Node* node,
+                      onnxruntime::ModelShellPtr& model,
+                      const std::vector<uint32_t>& reshape_operand_ids,
+                      const std::string& reshape_add_name,bool isfront, int32_t axis);
 };
 
 class VsiOpCallbackInfoGemm : public VsiOpCallbackInfo {
