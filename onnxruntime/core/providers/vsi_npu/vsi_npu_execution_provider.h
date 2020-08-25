@@ -24,6 +24,7 @@
 
 #pragma once
 #include "core/framework/allocatormgr.h"
+#include "core/platform/ort_mutex.h"
 #include "core/session/abi_session_options_impl.h"
 #include "vsi_npu_model.h"
 
@@ -47,9 +48,12 @@ class VsiNpuExecutionProvider : public IExecutionProvider {
     Status Compile(const std::vector<onnxruntime::Node*>& fused_nodes,
                    std::vector<NodeComputeInfo>& node_compute_funcs) override;
 
+    OrtMutex& GetMutex() { return mutex_; }
+
    private:
     int device_id_;
     std::vector<ModelShellPtr> model_list_;
+    OrtMutex mutex_;
 };
 
 }  // namespace onnxruntime

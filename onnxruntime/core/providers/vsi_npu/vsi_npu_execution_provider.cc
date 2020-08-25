@@ -541,7 +541,8 @@ Status VsiNpuExecutionProvider::Compile(const std::vector<onnxruntime::Node*>& f
         };
         compute_info.release_state_func = [](FunctionState /*state*/) {};
         compute_info.compute_func =
-            [fused_node](FunctionState state, const OrtApi* api, OrtKernelContext* context) {
+            [fused_node, this](FunctionState state, const OrtApi* api, OrtKernelContext* context) {
+                std::lock_guard<OrtMutex> lock(this->GetMutex());
                 return ComputeStateFunc(state, api, context, fused_node);
             };
 
