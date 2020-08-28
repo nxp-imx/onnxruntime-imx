@@ -206,17 +206,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
                                                                                         arm_compute::Size2D(aclDilation0, dilations[0]));
 #endif
 #if defined(ACL_2002)
-      bool optimizable =
-          bool(arm_compute::NEDepthwiseConvolutionLayerOptimized::validate(tconv.in->info(),
-                                                                           tconv.k->info(),
-                                                                           (B != nullptr) ? tconv.b->info() : nullptr,
-                                                                           tconv.out->info(),
-                                                                           aclPadStride,
-                                                                           1 /* depth multiplier */,
-                                                                           acl_activ_enabled ?
-                                                                              arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) :
-                                                                              arm_compute::ActivationLayerInfo(),
-                                                                           arm_compute::Size2D(aclDilation0, dilations[0])));
+      bool optimizable = false;
 #endif
       if(optimizable) {
         //optimized depthwise convolution
