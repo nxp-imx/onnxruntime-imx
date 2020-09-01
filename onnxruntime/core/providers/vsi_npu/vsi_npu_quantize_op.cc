@@ -52,6 +52,7 @@ void VsiOpCallbackInfoDequantizeLinear::SetupIO(nnrt::op::OperationPtr op,
         std::vector<int32_t> compute_input_index({kIndexScale, kIndexZeroPoint});
         auto compute_info = std::make_shared<VsiComputeInfo>();
         compute_info->operand_ids.push_back(input_operand_id);
+        compute_info->backup_names.push_back(*(input_defs[2]->Type()));
         model->CollectComputeInfo(node, graph_viewer, compute_input_index, compute_info);
     } else {
         auto tensor = model->GetModelPtr()->operand(input_operand_id);
@@ -66,10 +67,12 @@ Status VsiOpCallbackInfoDequantizeLinear::Compute(FunctionState state,
                                                   NodeIndex node_index) {
     Ort::CustomOpApi ort{*api};
     ModelShell* model = reinterpret_cast<ModelShell*>(state);
+
     auto local_model = model->GetModelPtr();
 
     auto compute_info = model->GetComputeInfo(node_index);
     if (compute_info != nullptr) {
+        auto tensor = local_model->operand(compute_info->operand_ids[0]);
         auto compute_input_ids = model->GetComputeInputIds(compute_info->compute_input_names);
 
         const int32_t kIndexScale = 0;
@@ -78,14 +81,17 @@ Status VsiOpCallbackInfoDequantizeLinear::Compute(FunctionState state,
         const OrtValue* input_tensor_scale =
             ort.KernelContext_GetInput(context, compute_input_ids[kIndexScale]);
         const auto input_tensor_scale_value = (float*)ort.GetTensorData<void>(input_tensor_scale);
+        tensor->quant.scalar.scale = *input_tensor_scale_value;
 
         const OrtValue* input_tensor_zp =
             ort.KernelContext_GetInput(context, compute_input_ids[kIndexZeroPoint]);
-        const auto input_tensor_zp_value = (uint8_t*)ort.GetTensorData<void>(input_tensor_zp);
-
-        auto tensor = local_model->operand(compute_info->operand_ids[0]);
-        tensor->quant.scalar.scale = *input_tensor_scale_value;
-        tensor->quant.scalar.zeroPoint = *input_tensor_zp_value;
+        if(compute_info->backup_names[0] == "tensor(uint8)"){
+            const auto input_tensor_zp_value = (uint8_t*)(ort.GetTensorData<void>(input_tensor_zp));
+            tensor->quant.scalar.zeroPoint = *input_tensor_zp_value;
+        }else{
+            const auto input_tensor_zp_value = (int8_t*)(ort.GetTensorData<void>(input_tensor_zp));
+            tensor->quant.scalar.zeroPoint = *input_tensor_zp_value;
+        }
     }
     return Status::OK();
 }
@@ -284,13 +290,10 @@ Status VsiOpCallbackInfoConvInteger::Compute(FunctionState state,
     tensor_w->quant.scalar.scale = 1.0f;
 
     auto tensor_size_w = tensor_w->size();
-
-    std::shared_ptr<uint8_t> tensorValue(new uint8_t[tensor_size_w]);
+    auto tensor_value = std::make_shared<std::vector<uint8_t>>(tensor_size_w);
     const OrtValue* input_tensor_w = ort.KernelContext_GetInput(context, compute_input_ids[0]);
     const auto input_tensor_w_value = ort.GetTensorData<void>(input_tensor_w);
-    memcpy(tensorValue.get(), input_tensor_w_value, tensor_size_w);
-
-    const void* value_addr = reinterpret_cast<const void*>(tensorValue.get());
+    const void* value_addr = reinterpret_cast<const void*>(input_tensor_w_value);
     model->GetModelPtr()->setOperandValue(
         compute_info->operand_ids[1], value_addr, tensor_w->bytes());
 
@@ -308,21 +311,18 @@ void VsiOpCallbackInfoQLinearConv::Setup(const onnxruntime::Node* node,
                                          const onnxruntime::GraphViewer* graph_viewer) {
     auto op = std::make_shared<nnrt::op::GroupedConv2DOperation>();
     auto input_defs = node->InputDefs();
+    auto output_defs = node->OutputDefs();
 
     uint32_t input_operand_id_x = model->AddOperand(input_defs[0], graph_viewer);
+    uint32_t output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
     uint32_t input_operand_id_w = -1;
     uint32_t input_operand_id_b = -1;
-    uint32_t output_operand_id = -1;
 
     std::vector<uint32_t> in_operand_ids{input_operand_id_x};
     std::vector<uint32_t> out_operand_ids;
 
     std::vector<float> x_scales;
     model->GetInitializerAsParameters(input_defs[1], graph_viewer, x_scales);
-
-    auto output_defs = node->OutputDefs();
-    output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
-    out_operand_ids.push_back(output_operand_id);
 
     if (x_scales.size() == 0) {
         input_operand_id_w = model->AddOperand(input_defs[3], graph_viewer);
@@ -332,7 +332,6 @@ void VsiOpCallbackInfoQLinearConv::Setup(const onnxruntime::Node* node,
         } else {
             input_operand_id_b = model->AddOperand(input_defs[8], graph_viewer);
         }
-
     } else {
         std::vector<uint8_t> x_zps;
         std::vector<float> w_scales;
@@ -366,8 +365,11 @@ void VsiOpCallbackInfoQLinearConv::Setup(const onnxruntime::Node* node,
         y_tensor->quant.scalar.scale = y_scales[0];
         y_tensor->quant.scalar.zeroPoint = y_zps[0];
     }
+
     in_operand_ids.push_back(input_operand_id_w);
     in_operand_ids.push_back(input_operand_id_b);
+    out_operand_ids.push_back(output_operand_id);
+
     op->setInputs(in_operand_ids.data(), in_operand_ids.size());
     op->setOutputs(out_operand_ids.data(), out_operand_ids.size());
 
@@ -444,19 +446,16 @@ void VsiOpCallbackInfoQLinearConv::AddBiasOperand(const onnxruntime::Node* node,
                                                   uint32_t operand_id) {
     auto input_defs = node->InputDefs();
     auto operand_b = model->GetOperand(operand_id);
-    auto shape = vsi_npu::GetTensorShape(*input_defs[0]);
+    auto shape = vsi_npu::GetTensorShape(*input_defs[3]);
     const std::vector<int64_t>& dims = shape.GetDims();
     operand_b->dimensions.push_back(dims[0]);
     operand_b->type = nnrt::OperandType::TENSOR_INT32;
 
-    auto operand_b_size = operand_b->size();
-    auto value = new float[operand_b_size];
-    for (size_t i = 0; i < operand_b_size; i++) {
-        value[i] = 0;
-    }
-    std::shared_ptr<float> tensorValue(value);
-    const void* value_addr = reinterpret_cast<const void*>(tensorValue.get());
-    model->GetModelPtr()->setOperandValue(operand_b, value_addr, operand_b->bytes());
+    auto operand_b_size = operand_b->bytes();
+    auto tensorValue = std::make_shared<std::vector<uint8_t>>(operand_b_size,0);
+    model->SetAddOperandValues(tensorValue);
+    const void* value_addr = reinterpret_cast<const void*>(tensorValue->data());
+    model->GetModelPtr()->setOperandValue(operand_id, value_addr, operand_b_size);
 }
 
 Status VsiOpCallbackInfoQLinearConv::Compute(FunctionState state,
