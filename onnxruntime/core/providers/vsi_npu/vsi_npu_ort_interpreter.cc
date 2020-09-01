@@ -588,7 +588,23 @@ void VsiOpCallbackInfoGemm::Setup(const onnxruntime::Node* node,
 bool VsiOpCallbackInfoGemm::IsNodeSupported(const onnxruntime::GraphViewer& graph_viewer,
                                             const Node* node,
                                             std::string& reason) {
-    return VsiOpCallbackInfo::IsNodeSupported(graph_viewer, node, reason);
+    if (VsiOpCallbackInfo::IsNodeSupported(graph_viewer, node, reason)) {
+        auto input_defs = node->InputDefs();
+        auto shape_input = vsi_npu::GetTensorShape(*input_defs[0]);
+        auto shape_w = vsi_npu::GetTensorShape(*input_defs[1]);
+        ProtoHelperNodeContext ctx(*node);
+        OpNodeProtoHelper<ProtoHelperNodeContext> attrs(&ctx);
+        int64_t transB{0};
+        vsi_npu::GetAttr<int64_t>(attrs, "transB", &transB).IsOK();
+        size_t count = shape_input[0] * shape_input[1];
+        if (transB == 0) {
+            count *= shape_w[0];
+        } else {
+            count *= shape_w[1];
+        }
+        if (count <= 1024 * 1024) return true;
+    }
+    return false;
 }
 
 void VsiOpCallbackInfoLRN::SetupAttribute(nnrt::op::OperationPtr op,

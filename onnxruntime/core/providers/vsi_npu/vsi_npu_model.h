@@ -104,6 +104,10 @@ class ModelShell {
 
     nnrt::ModelPtr& GetModelPtr() { return local_model_; }
 
+    void SetAddOperandValues(std::shared_ptr<std::vector<uint8_t>> operand_value_ptr) {
+        add_operand_values_.push_back(operand_value_ptr);
+    };
+
     void CollectComputeInfo(const Node* node,
                             const onnxruntime::GraphViewer* graph_viewer,
                             std::vector<int32_t>& compute_input_index,
@@ -153,6 +157,7 @@ class ModelShell {
     std::vector<std::shared_ptr<VsiGraphTensorInfo>> graph_outputs_;
     std::map<std::string, uint32_t> all_operand_ids_;
     std::map<NodeIndex, std::shared_ptr<VsiComputeInfo>> graph_compute_infos_;
+    std::vector<std::shared_ptr<std::vector<uint8_t>>> add_operand_values_;
 };
 
 }  // namespace onnxruntime
