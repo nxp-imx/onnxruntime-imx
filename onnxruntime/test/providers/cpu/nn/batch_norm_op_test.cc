@@ -43,6 +43,9 @@ void TestBatchNorm(const InputDataMap& input_data_map,
   if (spatial_mode == 0) {
     excluded_eps.insert(kNGraphExecutionProvider);
   }
+  if (expect_result == OpTester::ExpectResult::kExpectFailure) {
+    excluded_eps.insert(kVsiNpuExecutionProvider);
+  }
   test.Run(expect_result, err_str, excluded_eps);
 }
 

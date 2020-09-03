@@ -6,6 +6,8 @@
 #include <vector>
 #include <onnxruntime_cxx_api.h>
 
+#include "vsi_npu_provider_factory.h"
+
 int main(int argc, char* argv[]) {
   //*************************************************************************
   // initialize  enviroment...one enviroment per process
@@ -20,6 +22,9 @@ int main(int argc, char* argv[]) {
   // session (we also need to include cuda_provider_factory.h above which defines it)
   // #include "cuda_provider_factory.h"
   // OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 1);
+
+  // Enable VsiNpu EP to run on GPU
+  Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(session_options, 0));
 
   // Sets graph optimization level
   // Available levels are
