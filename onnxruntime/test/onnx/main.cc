@@ -39,6 +39,7 @@ void usage() {
       "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', 'ngraph', "
       "'openvino', 'nuphar', 'vsi_npu', 'acl' or 'armnn'. "
       "Default: 'cpu'.\n"
+      "\t-Q [quantize_models]: Specifies the use quantize model\n"
       "\t-x: Use parallel executor, default (without -x): sequential executor.\n"
       "\t-d [device_id]: Specifies the device id for multi-device (e.g. GPU). The value should > 0\n"
       "\t-o [optimization level]: Default is 99. Valid values are 0 (disable), 1 (basic), 2 (extended), 99 (all).\n"
@@ -103,6 +104,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_dml = false;
   bool enable_acl = false;
   bool enable_armnn = false;
+  bool enable_quantize = false;
   int device_id = 0;
   GraphOptimizationLevel graph_optimization_level = ORT_DISABLE_ALL;
   bool user_graph_optimization_level_set = false;
@@ -111,7 +113,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   OrtLoggingLevel logging_level = ORT_LOGGING_LEVEL_WARNING;
   {
     int ch;
-    while ((ch = getopt(argc, argv, ORT_TSTR("Ac:hj:Mn:r:e:xvo:d:"))) != -1) {
+    while ((ch = getopt(argc, argv, ORT_TSTR("Ac:hj:Mn:r:e:xvo:d:Q:"))) != -1) {
       switch (ch) {
         case 'A':
           enable_cpu_mem_arena = false;
@@ -177,6 +179,9 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             usage();
             return -1;
           }
+          break;
+        case 'Q':
+          enable_quantize = true;
           break;
         case 'x':
           execution_mode = ExecutionMode::ORT_PARALLEL;
@@ -259,7 +264,13 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
     data_dirs.emplace_back(argv[i]);
   }
   {
-    double per_sample_tolerance = 1e-3;
+    double per_sample_tolerance = 0.0;
+    if(enable_quantize){
+      per_sample_tolerance = enable_vsi_npu ? 0.15 : 1e-3;
+    }else{
+      per_sample_tolerance = 1e-3;
+    }
+    //double per_sample_tolerance = enable_vsi_npu ? 0.15 : 1e-3;
     // when cuda is enabled, set it to a larger value for resolving random MNIST test failure
     // when openvino is enabled, set it to a larger value for resolving MNIST accuracy mismatch
     double relative_per_sample_tolerance = enable_cuda ? 0.017 : enable_openvino ? 0.009 : 1e-3;

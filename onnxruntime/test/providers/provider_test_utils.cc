@@ -59,6 +59,44 @@ void Check(const OpTester::Data& expected_data, const Tensor& output_tensor, con
 }
 
 template <>
+void Check<int8_t>(const OpTester::Data& expected_data, const Tensor& output_tensor, const std::string& provider_type) {
+  auto& expected_tensor = expected_data.data_.Get<Tensor>();
+  auto* expected = expected_tensor.template Data<int8_t>();
+  auto* output = output_tensor.template Data<int8_t>();
+  auto size = output_tensor.Shape().Size();
+
+  if (expected_data.sort_output_) {
+    // if order can be jumbled in the output of an operator, sort both the expected and output buffers prior to
+    // comparison this is a "best-effort" algo and should satisfy the requirement for the few ops that do require this
+    // support without investing in a more sophisticated infrastructure for the same
+    sort_expected_and_actual_buffers<int8_t>(expected, output, size);
+  }
+
+  for (int i = 0; i < size; ++i) {
+    EXPECT_NEAR(expected[i], output[i], 1) << "i:" << i << ", provider_type: " << provider_type;
+  }
+}
+
+template <>
+void Check<uint8_t>(const OpTester::Data& expected_data, const Tensor& output_tensor, const std::string& provider_type) {
+  auto& expected_tensor = expected_data.data_.Get<Tensor>();
+  auto* expected = expected_tensor.template Data<uint8_t>();
+  auto* output = output_tensor.template Data<uint8_t>();
+  auto size = output_tensor.Shape().Size();
+
+  if (expected_data.sort_output_) {
+    // if order can be jumbled in the output of an operator, sort both the expected and output buffers prior to
+    // comparison this is a "best-effort" algo and should satisfy the requirement for the few ops that do require this
+    // support without investing in a more sophisticated infrastructure for the same
+    sort_expected_and_actual_buffers<uint8_t>(expected, output, size);
+  }
+
+  for (int i = 0; i < size; ++i) {
+    EXPECT_NEAR(expected[i], output[i], 1) << "i:" << i << ", provider_type: " << provider_type;
+  }
+}
+
+template <>
 void Check<double>(const OpTester::Data& expected_data, const Tensor& output_tensor,
                    const std::string& provider_type) {
   auto& expected_tensor = expected_data.data_.Get<Tensor>();
