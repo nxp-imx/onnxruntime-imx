@@ -43,14 +43,6 @@ std::unique_ptr<IExecutionProvider> DefaultVsiNpuExecutionProvider() {
 #endif
 }
 
-std::unique_ptr<IExecutionProvider> DefaultVsiNpuExecutionProvider() {
-#ifdef USE_VSI_NPU
-  return CreateExecutionProviderFactory_VsiNpu(0)->CreateProvider();
-#else
-  return nullptr;
-#endif
-}
-
 std::unique_ptr<IExecutionProvider> DefaultOpenVINOExecutionProvider() {
 #ifdef USE_OPENVINO
   return CreateExecutionProviderFactory_OpenVINO("CPU")->CreateProvider();
