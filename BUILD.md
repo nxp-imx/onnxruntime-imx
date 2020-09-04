@@ -104,6 +104,7 @@ The complete list of build options can be found by running `./build.sh (or .\bui
 * [DirectML](#DirectML)
 * [ARM Compute Library](#ARM-Compute-Library)
 * [ArmNN](#ArmNN)
+* [VsiNpu](#VsiNpu)
 
 **Options**
 * [OpenMP](#OpenMP)
@@ -459,6 +460,27 @@ The Relu operator is set by default to use the CPU execution provider for better
 ```
 ./build.sh --use_armnn --armnn_relu
 ```
+
+### VsiNpu
+See more information on the VsiNpu Execution Provider [here](./docs/execution_providers/VsiNpu-ExecutionProvider.md).
+
+#### Prerequisites
+* Supported backend: i.MX8 Armv8 GPU/NPU
+* Supported BSP: i.MX8 Yocto BSP
+  * Install i.MX8QM Yocto BSP SDK: e.g. 
+  ```
+  source fsl-imx-internal-xwayland-glibc-x86_64-imx-image-full-aarch64-imx8mpevk-toolchain-5.4-zeus.sh
+  ```
+* Set up the build environment:
+```
+source <sdk_install_path>/environment-setup-aarch64-poky-linux
+```
+
+#### Build Instructions
+```
+./build.sh --use_vsi_npu --path_to_vsi_npu_include=<sdk_install_path>/sysroots/aarch64-poky-linux/usr/include/OVXLIB
+```
+VSI NPU execution provider requires ovxlib headers from VeriSilicon's NN RT framework, which are usually found preinstalled on i.MX8 images in `/usr/include/OVXLIB` or in aarch64 sysroots when cross-compiling.
 
 ---
 
