@@ -1,5 +1,5 @@
 // Copyright(C) 2018 Intel Corporation
-// Copyright (c) 2019, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2019 NXP
 // Licensed under the MIT License
 
 #ifdef _WIN32
