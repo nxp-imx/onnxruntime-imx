@@ -12,6 +12,11 @@ To accelerate your NN using GPU or NPU (depending on availability), use:
 
 * [VSI NPU](./docs/execution_providers/VsiNpu-ExecutionProvider.md)
 
+To view all the changes, have a look at the official [GitHub changelog](https://github.com/microsoft/onnxruntime/releases):
+* [1.1.2](https://github.com/microsoft/onnxruntime/releases/tag/v1.1.2)
+* [1.1.1](https://github.com/microsoft/onnxruntime/releases/tag/v1.1.1)
+* [1.1.0](https://github.com/microsoft/onnxruntime/releases/tag/v1.1.0)
+
 ### Known Limitations
 
 ##### 1.1.2 (rel_imx_5.4.47_2.2.0)
