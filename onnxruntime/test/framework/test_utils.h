@@ -24,6 +24,9 @@
 #ifdef USE_RKNPU
 #include "core/providers/rknpu/rknpu_execution_provider.h"
 #endif
+#ifdef USE_ACL
+#include "core/providers/acl/acl_execution_provider.h"
+#endif
 
 namespace onnxruntime {
 class Graph;
@@ -52,6 +55,10 @@ IExecutionProvider* TestNnapiExecutionProvider();
 
 #ifdef USE_RKNPU
 IExecutionProvider* TestRknpuExecutionProvider();
+#endif
+
+#ifdef USE_ACL
+IExecutionProvider* TestACLExecutionProvider();
 #endif
 
 template <typename T>

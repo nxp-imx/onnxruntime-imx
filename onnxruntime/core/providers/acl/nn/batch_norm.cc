@@ -30,6 +30,8 @@
 // NEON
 #include "arm_compute/runtime/NEON/functions/NEBatchNormalizationLayer.h"
 
+#define PREF_DIM 4
+
 namespace onnxruntime {
 namespace acl {
 
@@ -72,7 +74,7 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
 
     auto layer = std::make_shared<arm_compute::NEBatchNormalizationLayer>();
 
-    tbatch_norm.in->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(X->Shape()), arm_compute::Format::F32));
+    tbatch_norm.in->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(X->Shape(), PREF_DIM), arm_compute::Format::F32));
     tbatch_norm.out->allocator()->init(arm_compute::TensorInfo(tbatch_norm.in->info()->tensor_shape(), arm_compute::Format::F32));
 
     tbatch_norm.scale->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(S->Shape()), arm_compute::Format::F32));
@@ -109,20 +111,7 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
 
 
   if(X->Shape().Size() != 0 && pBatchNorm->in->info()->has_padding() ){
-    arm_compute::Window aclInpuWindow;
-    aclInpuWindow.use_tensor_dimensions(pBatchNorm->in->info()->tensor_shape());
-
-    arm_compute::Iterator aclInputIt(pBatchNorm->in.get(), aclInpuWindow);
-    const unsigned int aclWidth = pBatchNorm->in->info()->dimension(0);
-    const unsigned int aclHeight = pBatchNorm->in->info()->dimension(1);
-
-    // copy input tensor into the larger buffer
-    arm_compute::execute_window_loop(
-      aclInpuWindow,
-      [&](const arm_compute::Coordinates& co) {
-        *reinterpret_cast<float*>(aclInputIt.ptr()) = x_data[co.z() * (aclWidth * aclHeight) + co.y() * aclHeight + co.x()];
-      },
-      aclInputIt);
+    importDataToTensor<T>(pBatchNorm->in.get(), x_data);
   }else{
     ACLImportMemory(pBatchNorm->in->allocator(), (void*)x_data, X->Shape().Size() * 4);
   }

@@ -1790,7 +1790,7 @@ void InferenceSession::AddPredefinedTransformers(GraphTransformerManager& transf
     auto transformers_to_register =
         optimizer_utils::GenerateTransformers(level, session_options_.free_dimension_overrides,
                                               *execution_providers_.Get(onnxruntime::kCpuExecutionProvider),
-                                              custom_list);
+                                              custom_list, GetRegisteredProviderTypes());
     for (auto& entry : transformers_to_register) {
       transformer_manager.Register(std::move(entry), level);
     }

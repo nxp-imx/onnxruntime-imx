@@ -6,6 +6,7 @@
 #include "core/graph/contrib_ops/attn_lstm_schema_defs.h"
 #include "core/graph/contrib_ops/contrib_defs.h"
 #include "core/graph/contrib_ops/nchwc_schema_defs.h"
+#include "core/graph/contrib_ops/nhwc_schema_defs.h"
 #include "core/graph/contrib_ops/range_schema_defs.h"
 #include "core/graph/onnx_protobuf.h"
 #include "core/graph/op.h"
@@ -2782,6 +2783,10 @@ Example 4:
   if (MlasNchwcGetBlockSize() > 1) {
     RegisterNchwcSchemas();
   }
+
+#if defined(USE_ACL) || defined(USE_ARMNN)
+  RegisterNhwcSchemas();
+#endif
 
   static const char* Gelu_ver1_doc =
       R"DOC(Gaussian Error Linear Unit.

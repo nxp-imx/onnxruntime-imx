@@ -82,7 +82,7 @@ class TransposeBase {
   std::vector<size_t> perm_;
 };
 
-class Transpose final : public OpKernel, public TransposeBase {
+class Transpose : public OpKernel, public TransposeBase {
  public:
   Transpose(const OpKernelInfo& info) : OpKernel(info), TransposeBase(info) {}
 
