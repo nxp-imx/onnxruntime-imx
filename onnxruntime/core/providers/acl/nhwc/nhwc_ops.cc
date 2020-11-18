@@ -306,7 +306,7 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
 #endif
         tconv.layer = std::move(layer);
       } else {
-#ifdef ACL_2002
+#if defined(ACL_2002) || defined(ACL_2008)
       auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer>();
 #else
       auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer3x3>();
@@ -432,7 +432,11 @@ Status NhwcPoolBase<T>::NhwcPool(OpKernelContext* context, MLAS_POOLING_KIND kin
       ORT_NOT_IMPLEMENTED("Not implemented type of pooling: ", PoolBase::op_name_);
 
     if (PoolBase::pool_attrs_.global_pooling) {
+#if defined(ACL_2002) || defined(ACL_2008)
+      layer->configure(tpool.in.get(), tpool.out.get(), arm_compute::PoolingLayerInfo(pool_type, arm_compute::DataLayout::NHWC));
+#else
       layer->configure(tpool.in.get(), tpool.out.get(), arm_compute::PoolingLayerInfo(pool_type));
+#endif
     } else {
       std::vector<int64_t> aclStrides(2);
       aclStrides[0] = (strides.size() == 2) ? strides[1] : 1;
@@ -468,7 +472,11 @@ Status NhwcPoolBase<T>::NhwcPool(OpKernelContext* context, MLAS_POOLING_KIND kin
       arm_compute::Size2D aclSize(aclKernelShape[0], aclKernelShape[1]);
 
       bool excludePadding = (pool_type == arm_compute::PoolingType::AVG && PoolBase::pool_attrs_.count_include_pad) ? false : true;
+#if defined(ACL_2002) || defined(ACL_2008)
+      arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, arm_compute::DataLayout::NHWC, aclPadStride, excludePadding);
+#else
       arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, aclPadStride, excludePadding);
+#endif
       layer->configure(tpool.in.get(), tpool.out.get(), pool_info);
     }
 
@@ -659,12 +667,14 @@ Status NhwcConcat<T>::Compute(OpKernelContext* ctx) const {
   Tensor* Y = ctx->Output(0, output_shape);
 
   arm_compute::Tensor output;
+  std::vector<const arm_compute::ITensor*> const_inputs_vector;
   std::vector<arm_compute::ITensor*> inputs_vector;
   for(int i = 0; i < input_count; i++) {
     arm_compute::Tensor* input = new arm_compute::Tensor();
+    const arm_compute::Tensor* const_input = input;
     auto X = input_tensors[i];
     input->allocator()->init(arm_compute::TensorInfo(ACL_NCHW2NHWC(ACLTensorShape(X->Shape(), PREF_DIM)), arm_compute::Format::F32));
-    
+    const_inputs_vector.push_back(const_input);
     inputs_vector.push_back(input);
   }
 
@@ -676,7 +686,12 @@ Status NhwcConcat<T>::Compute(OpKernelContext* ctx) const {
     axis = 1;
   if(axis_ == 3) // width
     axis = 2;
+
+#if defined(ACL_2008)
+  layer.configure(const_inputs_vector, &output, 3 - axis);
+#else
   layer.configure(inputs_vector, &output, 3 - axis);
+#endif
 
   for(int i = 0; i < input_count; i++) {
     auto X = input_tensors[i];

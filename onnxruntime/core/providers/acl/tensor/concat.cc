@@ -69,18 +69,24 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
   LOGS_DEFAULT(VERBOSE) << "Concat ACL:";
 
   arm_compute::Tensor output;
+  std::vector<const arm_compute::ITensor*> const_inputs_vector;
   std::vector<arm_compute::ITensor*> inputs_vector;
   for (int i = 0; i < input_count; i++) {
     arm_compute::Tensor* input = new arm_compute::Tensor();
+    const arm_compute::Tensor* const_input = input;
     auto X = input_tensors[i];
     LOGS_DEFAULT(VERBOSE) << "X[" << i << "]: " << X->Shape().ToString().c_str();
     input->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(X->Shape(), PREF_DIM), arm_compute::Format::F32));
-
+    const_inputs_vector.push_back(const_input);
     inputs_vector.push_back(input);
   }
 
   arm_compute::NEConcatenateLayer layer;
+#if defined(ACL_2008)
+  layer.configure(const_inputs_vector, &output, 3 - axis_);
+#else
   layer.configure(inputs_vector, &output, 3 - axis_);
+#endif
 
   LOGS_DEFAULT(VERBOSE) << "axis: " << axis_;
   LOGS_DEFAULT(VERBOSE) << std::endl;
@@ -88,7 +94,7 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
   for (int i = 0; i < input_count; i++) {
     auto X = input_tensors[i];
     const T* x_data = X->template Data<T>();
-    arm_compute::Tensor* in = static_cast<arm_compute::Tensor*>(inputs_vector[i]);
+    auto in = reinterpret_cast<arm_compute::Tensor*>(inputs_vector[i]);
 
     if (X->Shape().Size() != 0 && in->info()->has_padding() ){
       in->allocator()->allocate();

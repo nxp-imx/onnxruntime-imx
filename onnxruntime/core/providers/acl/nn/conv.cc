@@ -19,6 +19,8 @@
 
 // ACL
 #include "arm_compute/core/TensorInfo.h"
+#include "arm_compute/core/utils/misc/ShapeCalculator.h"
+#include "arm_compute/core/AccessWindowStatic.h"
 
 // NEON
 #include "arm_compute/runtime/NEON/functions/NEConvolutionLayer.h"
@@ -50,6 +52,104 @@ arm_compute::TensorShape Conv<T>::ACLReshapeWeightsDepthwise(arm_compute::Tensor
 
   return shape;
 }
+
+#if defined(ACL_2008)
+
+bool validate_window(arm_compute::ITensorInfo *input, arm_compute::ITensorInfo *weights, arm_compute::ITensorInfo *output, const arm_compute::PadStrideInfo &conv_info, unsigned int depth_multiplier, const arm_compute::Size2D &dilation) {
+    arm_compute::Window win;
+
+    // Configure kernel window (generic)
+    const unsigned int conv_stride_x = conv_info.stride().first;
+    const unsigned int conv_stride_y = conv_info.stride().second;
+    const unsigned int conv_pad_top  = conv_info.pad_top();
+    const unsigned int conv_pad_left = conv_info.pad_left();
+
+    unsigned int num_elems_written_per_iteration = 16 >> conv_stride_x;
+    unsigned int num_elems_read_per_iteration = 12 + 11 * (dilation.x() - 1);
+
+    win = arm_compute::calculate_max_window(*output, arm_compute::Steps(num_elems_written_per_iteration));
+
+    arm_compute::AccessWindowRectangle  input_access(input, -conv_pad_left, -conv_pad_top, num_elems_read_per_iteration, 3 + 2 * (dilation.y() - 1), conv_stride_x, conv_stride_y);
+    arm_compute::AccessWindowStatic     weights_access(weights, 0, 0, 3, 3);
+    arm_compute::AccessWindowHorizontal output_access(output, 0, num_elems_written_per_iteration);
+
+    bool window_changed = arm_compute::update_window_and_padding(win, input_access, weights_access, output_access);
+
+    return window_changed;
+}
+
+bool is_optimized_supported(const arm_compute::ITensorInfo *input, const arm_compute::ITensorInfo *weights, const arm_compute::ITensorInfo *biases, const arm_compute::ITensorInfo *output, const arm_compute::PadStrideInfo &conv_info, unsigned int depth_multiplier, const arm_compute::Size2D &dilation) {
+
+  if(dilation.x() < 1 || dilation.y() < 1)
+    return false;
+
+  const size_t idx_w = arm_compute::get_data_layout_dimension_index(input->data_layout(), arm_compute::DataLayoutDimension::WIDTH);
+  const size_t idx_h = arm_compute::get_data_layout_dimension_index(input->data_layout(), arm_compute::DataLayoutDimension::HEIGHT);
+  if( (weights->dimension(idx_w) + (weights->dimension(idx_w) - 1) * (dilation.x() - 1) > input->dimension(idx_w) + conv_info.pad_left() + conv_info.pad_right()) ||
+      (weights->dimension(idx_h) + (weights->dimension(idx_h) - 1) * (dilation.y() - 1) > input->dimension(idx_h) + conv_info.pad_top() + conv_info.pad_bottom()) )
+      return false;
+
+  if(biases != nullptr) {
+    const unsigned int channel_idx = arm_compute::get_data_layout_dimension_index(input->data_layout(), arm_compute::DataLayoutDimension::CHANNEL);
+    if(biases->num_dimensions() > 1 || biases->dimension(0) != weights->dimension(channel_idx))
+      return false;
+  }
+
+  // Reshape input shape if in NHWC format
+  const arm_compute::DataLayout data_layout = input->data_layout();
+  arm_compute::TensorShape in_shape{ input->tensor_shape() };
+  if(data_layout == arm_compute::DataLayout::NHWC) {
+    in_shape.set(arm_compute::Window::DimX, input->tensor_shape().y());
+    in_shape.set(arm_compute::Window::DimY, input->tensor_shape().z());
+    in_shape.set(arm_compute::Window::DimZ, input->tensor_shape().x());
+  }
+
+  // Check weighs size
+  std::set<unsigned int> supported_kernel_sizes = { 3, 5 };
+  const unsigned int     width_idx              = arm_compute::get_data_layout_dimension_index(data_layout, arm_compute::DataLayoutDimension::WIDTH);
+  const unsigned int     height_idx             = arm_compute::get_data_layout_dimension_index(data_layout, arm_compute::DataLayoutDimension::HEIGHT);
+  const unsigned int     kernel_w               = weights->dimension(width_idx);
+  const unsigned int     kernel_h               = weights->dimension(height_idx);
+  bool                   weights_supported      = (kernel_w == kernel_h) && (supported_kernel_sizes.count(kernel_w) != 0);
+
+  // Check for supported strides
+  const auto &strides           = conv_info.stride();
+  bool        supported_strides = (strides.first == strides.second) && ((strides.first == 1) || (strides.first == 2));
+
+  // Check for supported padding
+  const auto    pad_top           = conv_info.pad_top();
+  const auto    pad_right         = conv_info.pad_right();
+  const auto    pad_bottom        = conv_info.pad_bottom();
+  const auto    pad_left          = conv_info.pad_left();
+  arm_compute::PadStrideInfo same_pad = arm_compute::calculate_same_pad(in_shape, weights->tensor_shape(), conv_info, arm_compute::DataLayout::NCHW, dilation);
+  bool          is_same_padding   = (pad_top == same_pad.pad_top()) && (pad_right == same_pad.pad_right()) && (pad_bottom == same_pad.pad_bottom()) && (pad_left == same_pad.pad_left());
+  bool          is_valid_padding  = (pad_top == 0) && (pad_right == 0) && (pad_bottom == 0) && (pad_left == 0);
+  bool          supported_padding = is_same_padding || is_valid_padding;
+
+  bool is_dilation_supported = ((dilation == arm_compute::Size2D(1U, 1U)) || ((dilation.x() == dilation.y()) && strides.first == 1));
+
+  bool is_supported = weights_supported && supported_strides && supported_padding && is_dilation_supported;
+  if(!is_supported) {
+    if( (weights->dimension(width_idx) != 3 || weights->dimension(height_idx) != 3) ||
+        (conv_info.stride().first < 1 || conv_info.stride().first > 3) )
+        return false;
+
+    bool window_changed = validate_window(input->clone().get(), weights->clone().get(), output->clone().get(), conv_info, depth_multiplier, dilation);
+
+    if(window_changed)
+      return false;
+  }
+
+  if(output->total_size() != 0) {
+    const arm_compute::TensorShape output_shape = arm_compute::misc::shape_calculator::compute_depthwise_convolution_shape(*input, *weights, conv_info, depth_multiplier, dilation);
+    for(unsigned int i = 0; i < output_shape.num_dimensions(); i++)
+      if(output->tensor_shape()[i] != output_shape[i])
+        return false;
+  }
+
+  return true;
+}
+#endif
 
 #ifdef CONV_ACL
 template <typename T>
@@ -226,6 +326,14 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
                                                                               arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) :
                                                                               arm_compute::ActivationLayerInfo(),
                                                                            arm_compute::Size2D(aclDilation0, dilations[0])));
+#elif defined(ACL_2008)
+      bool optimizable = is_optimized_supported(tconv.in->info(),
+                                                tconv.k->info(),
+                                                (B != nullptr) ? tconv.b->info() : nullptr,
+                                                tconv.out->info(),
+                                                aclPadStride,
+                                                1 /* depth multiplier */,
+                                                arm_compute::Size2D(aclDilation0, dilations[0]));
 #endif
 
       if (optimizable) {
@@ -234,7 +342,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer3x3>();
 #elif defined(ACL_1908)
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayerOptimized>();
-#elif defined(ACL_2002)
+#elif defined(ACL_2002) || defined(ACL_2008)
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer>();
 #endif
 
@@ -242,7 +350,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
         layer->configure(tconv.in.get(), tconv.k.get(), (B != nullptr) ? tconv.b.get() : nullptr, tconv.out.get(),
                          aclPadStride, 1 /* depth multiplier */,
                          acl_activ_enabled ? arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) : arm_compute::ActivationLayerInfo());
-#elif defined(ACL_1905) || defined(ACL_1908) || defined(ACL_2002)
+#elif defined(ACL_1905) || defined(ACL_1908) || defined(ACL_2002) || defined(ACL_2008)
         layer->configure(tconv.in.get(), tconv.k.get(), (B != nullptr) ? tconv.b.get() : nullptr, tconv.out.get(),
                          aclPadStride, 1 /* depth multiplier */,
                          acl_activ_enabled ? arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) : arm_compute::ActivationLayerInfo(),

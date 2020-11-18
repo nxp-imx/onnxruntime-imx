@@ -61,7 +61,11 @@ ACLNEPool PoolOperation(onnxruntime::OpKernelContext* context,
     tpool.out->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(Y->Shape(), PREF_DIM), arm_compute::Format::F32));
 
     if (pool_attrs.global_pooling) {
+#if defined(ACL_2002) || defined(ACL_2008)
+      layer->configure(tpool.in.get(), tpool.out.get(), arm_compute::PoolingLayerInfo(pool_type, arm_compute::DataLayout::NCHW));
+#else
       layer->configure(tpool.in.get(), tpool.out.get(), arm_compute::PoolingLayerInfo(pool_type));
+#endif
     } else {
       std::vector<int64_t> aclStrides(2);
       aclStrides[0] = (strides.size() == 2) ? strides[1] : 1;
@@ -104,7 +108,11 @@ ACLNEPool PoolOperation(onnxruntime::OpKernelContext* context,
       LOGS_DEFAULT(VERBOSE) << "strides: {" << aclStrides[0] << "," << aclStrides[1] << "}";
       LOGS_DEFAULT(VERBOSE) << "excludePadding: " << excludePadding;
 
+#if defined(ACL_2002) || defined(ACL_2008)
+      arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, arm_compute::DataLayout::NCHW, aclPadStride, excludePadding);
+#else
       arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, aclPadStride, excludePadding);
+#endif
       layer->configure(tpool.in.get(), tpool.out.get(), pool_info);
     }
 
