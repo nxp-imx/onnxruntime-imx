@@ -27,7 +27,11 @@ class Concat : public onnxruntime::Concat {
   }
 
   ~Concat() {
-	concatLayers.erase(this);
+    ConcatIterator it = Concat::concatLayers.find((OpKernel*)this);
+    if (it != Concat::concatLayers.end()) {
+      Concat::run->UnloadNetwork(it->second);
+    }
+    concatLayers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;

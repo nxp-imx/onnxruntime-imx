@@ -27,6 +27,10 @@ class Pool final : public onnxruntime::Pool<T, PoolType> {
   }
 
   ~Pool() {
+    PoolLayersIterator it = Pool::poolLayers.find((OpKernel*)this);
+    if (it != Pool::poolLayers.end()) {
+      Pool::run->UnloadNetwork(it->second);
+    }
     poolLayers.erase(this);
   }
 

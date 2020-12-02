@@ -27,7 +27,11 @@ class Conv : public onnxruntime::Conv<T> {
   }
 
   ~Conv() {
-  	Conv::convLayers.erase(this);
+    ConvLayersIterator it = Conv::convLayers.find((OpKernel*)this);
+    if (it != Conv::convLayers.end()) {
+      Conv::run->UnloadNetwork(it->second);
+    }
+    Conv::convLayers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;

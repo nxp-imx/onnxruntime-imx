@@ -29,7 +29,11 @@ class Relu : public OpKernel {
   }
 
   ~Relu() {
-  	Relu::reluLayers.erase(this);
+    ReluLayersIterator it = Relu::reluLayers.find((OpKernel*)this);
+    if (it != Relu::reluLayers.end()) {
+      Relu::run->UnloadNetwork(it->second);
+    }
+    Relu::reluLayers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;

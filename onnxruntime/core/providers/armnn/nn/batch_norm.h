@@ -32,7 +32,11 @@ class BatchNorm final : public OpKernel {
   }
 
   ~BatchNorm() {
-	batchNormLayers.erase(this);
+    BatchNormLayersIterator it = BatchNorm::batchNormLayers.find((OpKernel*)this);
+    if (it != BatchNorm::batchNormLayers.end()) {
+      BatchNorm::run->UnloadNetwork(it->second);
+    }
+    batchNormLayers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;

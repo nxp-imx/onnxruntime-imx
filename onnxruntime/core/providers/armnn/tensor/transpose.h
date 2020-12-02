@@ -28,7 +28,11 @@ class Transpose : public onnxruntime::Transpose {
   }
 
   ~Transpose() {
-	transposeLayers.erase(this);
+    TransposeIterator it = Transpose::transposeLayers.find((OpKernel*)this);
+    if (it != Transpose::transposeLayers.end()) {
+      Transpose::run->UnloadNetwork(it->second);
+    }
+    transposeLayers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;

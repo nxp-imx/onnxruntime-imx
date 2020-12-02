@@ -80,7 +80,6 @@ class Gemm : public onnxruntime::Gemm<T> {
     if (it == Gemm::gemmLayers.end()) {
       
       armnn::NetworkId networkId;
-
       armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
 
       armnn::TensorShape inputShape = ArmNNTensorShape(X->Shape());
@@ -162,6 +161,10 @@ class Gemm : public onnxruntime::Gemm<T> {
   }
 
   ~Gemm() {
+    GEMMLayersIterator it = Gemm::gemmLayers.find((OpKernel*)this);
+    if (it != Gemm::gemmLayers.end()) {
+      Gemm::run->UnloadNetwork(it->second);
+    }
     gemmLayers.erase(this);
   }
 
