@@ -39,11 +39,11 @@ class NhwcTransformerImpl {
   NodeIndex InsertPermuteParentNode(Node& node, const Node::EdgeEnd* edge, bool bNHWC);
   NodeIndex InsertPermuteChildNode(Node& node, bool bNHWC);
   NodeIndex ReplaceNode(Node& node);
-  void PermuteWeights(NodeArg* src, NodeArg** dst, const std::string&);
+  void PermuteWeights(NodeArg* src, NodeArg** dst, const std::string&, bool nodeIsDepthwise);
 
-  DataLayout RequiredLayout(const Node& node);
-  bool SuportsReplacementNHWC(const Node& node);
-  bool RequiresWeightsPermutation(const Node& node);
+  DataLayout RequiredLayout(Node& node);
+  bool SuportsReplacementNHWC(Node& node);
+  bool RequiresWeightsPermutation(Node& node);
   bool isNot9x9(Node& node);
   bool isDepthwise(Node& node);
 
@@ -70,6 +70,25 @@ bool NhwcTransformerImpl::isNot9x9(Node& node) {
     return true;
   } 
   
+}
+
+bool NhwcTransformerImpl::isDepthwise(Node& node) {
+  auto& input_defs = node.MutableInputDefs();
+  const ONNX_NAMESPACE::TensorProto* conv_X_tensor_proto = nullptr;
+  bool depthwise = true;
+  int64_t channel = static_cast<int64_t>((&(node.GetAttributes().find("group")->second))->i());
+  if (channel == 1)
+    return false;
+
+  if (!graph_.GetInitializedTensor(input_defs[0
+]->Name(), conv_X_tensor_proto) ||
+      (conv_X_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
+      (conv_X_tensor_proto->dims_size() != 4) ||
+      (conv_X_tensor_proto->dims(1) != channel)) {
+
+    depthwise = false;
+  }
+  return depthwise;
 }
 
 NodeIndex NhwcTransformerImpl::InsertPermuteParentNode(Node& node, const Node::EdgeEnd* edge, bool bNHWC) {
@@ -138,7 +157,7 @@ NodeIndex NhwcTransformerImpl::InsertPermuteChildNode(Node& node, bool bNHWC) {
   return permute_node.Index();
 }
 
-bool NhwcTransformerImpl::RequiresWeightsPermutation(const Node& node) {
+bool NhwcTransformerImpl::RequiresWeightsPermutation(Node& node) {
    return ((node.GetExecutionProviderType() == kAclExecutionProvider ||
             node.GetExecutionProviderType() == kArmNNExecutionProvider) &&
            (node.OpType() == "Conv" ||
@@ -163,7 +182,7 @@ NodeIndex NhwcTransformerImpl::ReplaceNode(Node& node) {
 
   // Permute weights
   if (RequiresWeightsPermutation(node))
-    PermuteWeights(input_defs[1], &newNode.MutableInputDefs()[1], node.GetExecutionProviderType());
+    PermuteWeights(input_defs[1], &newNode.MutableInputDefs()[1], node.GetExecutionProviderType(), isDepthwise(node));
 
   NodeIndex oldIndex = node.Index();
   const std::vector<std::reference_wrapper<Node>> replacedNode({node});
@@ -173,13 +192,13 @@ NodeIndex NhwcTransformerImpl::ReplaceNode(Node& node) {
   return newNode.Index();
 }
 
-void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv_W_arg, __attribute__ ((unused)) const std::string& execution_provider) {
+void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv_W_arg, __attribute__ ((unused)) const std::string& execution_provider, bool nodeIsDepthwise)) {
   // Require that the weights tensor be static.
   const ONNX_NAMESPACE::TensorProto* conv_W_tensor_proto = nullptr;
   if (!graph_.GetInitializedTensor(input_def->Name(), conv_W_tensor_proto) ||
       (conv_W_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
       (conv_W_tensor_proto->dims_size() != 4) ||
-      (execution_provider == kArmNNExecutionProvider && conv_W_tensor_proto->dims(1) == 1)) {
+      (execution_provider == kArmNNExecutionProvider && nodeIsDepthwise)) {
 
     LOGS(logger, VERBOSE) << "Don't permute weights";
     return;
@@ -198,7 +217,7 @@ void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv
 
   arm_compute::NEPermute permutationLayer;
   permutationLayer.configure(&weights, &new_weights,
-    (conv_W_tensor_proto->dims(1) == 1) ? arm_compute::PermutationVector(3,2,0,1) : arm_compute::PermutationVector(2,0,1));
+    (conv_W.dims()[1] == 1) ? arm_compute::PermutationVector(3,2,0,1) : arm_compute::PermutationVector(2,0,1));
 
   weights.allocator()->import_memory(conv_W.data<float>());
 
@@ -232,8 +251,9 @@ bool axisInRange(const Node& node) {
  return axa < 4;
 }
 
-bool NhwcTransformerImpl::SuportsReplacementNHWC(const Node& node) {
-   return ((node.GetExecutionProviderType() == kAclExecutionProvider ||
+bool NhwcTransformerImpl::SuportsReplacementNHWC(Node& node) {
+   return
+          ((node.GetExecutionProviderType() == kAclExecutionProvider ||
             node.GetExecutionProviderType() == kArmNNExecutionProvider) &&
            ((node.OpType() == "Conv" && isNot9x9(node)) ||
             (node.OpType() == "FusedConv" && isNot9x9(node)) ||
@@ -245,7 +265,7 @@ bool NhwcTransformerImpl::SuportsReplacementNHWC(const Node& node) {
             (node.OpType() == "Concat" && axisInRange(node))));
 }
 
-DataLayout NhwcTransformerImpl::RequiredLayout(const Node& node) {
+DataLayout NhwcTransformerImpl::RequiredLayout(Node& node) {
   // Default to NCHW to cover all cases
   DataLayout layout = NchwLayout;
 
