@@ -53,6 +53,25 @@ class NhwcTransformerImpl {
   const logging::Logger& logger;
 };
 
+bool NhwcTransformerImpl::isNot9x9(Node& node) {
+  auto& input_defs = node.MutableInputDefs();
+  const ONNX_NAMESPACE::TensorProto* conv_W_tensor_proto = nullptr;
+  bool is9x9 = true;
+  if (!graph_.GetInitializedTensor(input_defs[1]->Name(), conv_W_tensor_proto) ||
+      (conv_W_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
+      (conv_W_tensor_proto->dims_size() != 4) ||
+      (conv_W_tensor_proto->dims(2) != 9 || conv_W_tensor_proto->dims(3) != 9)) {
+
+    is9x9 = false;
+  }
+  if(is9x9 == true) {
+    return false;
+  } else {
+    return true;
+  } 
+  
+}
+
 NodeIndex NhwcTransformerImpl::InsertPermuteParentNode(Node& node, const Node::EdgeEnd* edge, bool bNHWC) {
 
   const Node* parent_node = NULL;
@@ -216,8 +235,8 @@ bool axisInRange(const Node& node) {
 bool NhwcTransformerImpl::SuportsReplacementNHWC(const Node& node) {
    return ((node.GetExecutionProviderType() == kAclExecutionProvider ||
             node.GetExecutionProviderType() == kArmNNExecutionProvider) &&
-           (node.OpType() == "Conv" ||
-            node.OpType() == "FusedConv" ||
+           ((node.OpType() == "Conv" && isNot9x9(node)) ||
+            (node.OpType() == "FusedConv" && isNot9x9(node)) ||
             node.OpType() == "MaxPool" ||
             node.OpType() == "AveragePool" ||
             node.OpType() == "GlobalMaxPool" ||
