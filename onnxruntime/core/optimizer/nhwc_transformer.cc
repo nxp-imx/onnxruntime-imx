@@ -8,6 +8,7 @@
 #include "core/graph/graph_utils.h"
 #include "core/optimizer/initializer.h"
 #include "core/optimizer/nhwc_transformer.h"
+#include "core/mlas/inc/mlas.h"
 
 #include "core/providers/acl/acl_common.h"
 
@@ -192,22 +193,7 @@ NodeIndex NhwcTransformerImpl::ReplaceNode(Node& node) {
   return newNode.Index();
 }
 
-void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv_W_arg, __attribute__ ((unused)) const std::string& execution_provider, bool nodeIsDepthwise)) {
-  // Require that the weights tensor be static.
-  const ONNX_NAMESPACE::TensorProto* conv_W_tensor_proto = nullptr;
-  if (!graph_.GetInitializedTensor(input_def->Name(), conv_W_tensor_proto) ||
-      (conv_W_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
-      (conv_W_tensor_proto->dims_size() != 4) ||
-      (execution_provider == kArmNNExecutionProvider && nodeIsDepthwise)) {
-
-    LOGS(logger, VERBOSE) << "Don't permute weights";
-    return;
-  }
-
-  LOGS(logger, VERBOSE) << "Permute weights";
-
-  Initializer conv_W{*conv_W_tensor_proto, graph_.ModelPath()};
-
+std::vector<float> weightsPermutationACL(Initializer conv_W, std::vector<float> reordered_filter) {
   arm_compute::Tensor weights;
   arm_compute::Tensor new_weights;
 
@@ -219,27 +205,47 @@ void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv
   permutationLayer.configure(&weights, &new_weights,
     (conv_W.dims()[1] == 1) ? arm_compute::PermutationVector(3,2,0,1) : arm_compute::PermutationVector(2,0,1));
 
-  weights.allocator()->import_memory(conv_W.data<float>());
-
-  new_weights.allocator()->allocate();
+  onnxruntime::acl::ACLImportMemory(weights.allocator(), conv_W.data<float>(), weights.info()->tensor_shape().total_size() * 4);
+  onnxruntime::acl::ACLImportMemory(new_weights.allocator(), reordered_filter.data(), new_weights.info()->tensor_shape().total_size() * 4);
 
   permutationLayer.run();
 
   weights.allocator()->free();
 
-  float* reordered_filter = reinterpret_cast<float*>(new_weights.buffer());
+  return reordered_filter;
+}
+
+void NhwcTransformerImpl::PermuteWeights(NodeArg *input_def, NodeArg** nhwc_conv_W_arg, __attribute__ ((unused)) const std::string& execution_provider, bool nodeIsDepthwise) {
+  // Require that the weights tensor be static.
+  const ONNX_NAMESPACE::TensorProto* conv_W_tensor_proto = nullptr;
+  if (!graph_.GetInitializedTensor(input_def->Name(), conv_W_tensor_proto) ||
+      (conv_W_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
+      (conv_W_tensor_proto->dims_size() != 4) ||
+      (execution_provider == kArmNNExecutionProvider && nodeIsDepthwise)) {
+
+    return;
+  }
+
+  Initializer conv_W{*conv_W_tensor_proto, graph_.ModelPath()};
+
+  std::vector<float> reordered_filter(conv_W.size());
+
+  if(execution_provider == kAclExecutionProvider) {
+    reordered_filter = weightsPermutationACL(conv_W, reordered_filter);
+  } else {
+    int64_t OutputShape[] = {int64_t(conv_W.dims().data()[0]), int64_t(conv_W.dims().data()[2]), int64_t(conv_W.dims().data()[3]), int64_t(conv_W.dims().data()[1])};
+    MlasReorderOutputNhwc(OutputShape, conv_W.data<float>(), reordered_filter.data());
+  }
 
   ONNX_NAMESPACE::TensorProto nhwc_conv_W_tensor_proto;
 
   nhwc_conv_W_tensor_proto.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
   nhwc_conv_W_tensor_proto.set_name(graph_.GenerateNodeArgName("nhwc_conv_W_arg"));
-  nhwc_conv_W_tensor_proto.set_raw_data(reordered_filter, new_weights.info()->tensor_shape().total_size() * sizeof(float));
+  nhwc_conv_W_tensor_proto.set_raw_data(reordered_filter.data(), reordered_filter.size() * sizeof(float));
 
   for (size_t i = 0; i < 4; i++) {
     nhwc_conv_W_tensor_proto.add_dims(conv_W.dims()[i]);
   }
-
-  new_weights.allocator()->free();
 
   graph_.AddInitializedTensor(nhwc_conv_W_tensor_proto);
 
