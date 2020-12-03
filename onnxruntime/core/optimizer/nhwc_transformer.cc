@@ -45,7 +45,6 @@ class NhwcTransformerImpl {
   bool SuportsReplacementNHWC(const Node& node);
   bool RequiresWeightsPermutation(const Node& node);
   bool isNot9x9(Node& node);
-  bool is1x1(Node& node);
   bool isDepthwise(Node& node);
 
   std::map<NodeIndex, bool> nodes_layout;
