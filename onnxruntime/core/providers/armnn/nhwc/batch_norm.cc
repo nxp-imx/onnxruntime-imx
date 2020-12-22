@@ -134,5 +134,5 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
       .TypeConstraint("var", DataTypeImpl::GetTensorType<float>()),
     NHWCBatchNorm<float>);
 
-}  // namespace contrib
+}  // namespace armnn_ep
 }  // namespace onnxruntime

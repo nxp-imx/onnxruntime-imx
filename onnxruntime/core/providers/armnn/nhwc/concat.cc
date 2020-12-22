@@ -156,5 +156,5 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
     NHWCConcat<float>);
 
-}  // namespace contrib
+}  // namespace armnn_ep
 }  // namespace onnxruntime

@@ -52,5 +52,5 @@ class NHWCConcat : public onnxruntime::Concat {
   ArmNNExecutionProvider* provider_;
 };
 
-}  // namespace contrib
+}  // namespace armnn_ep
 }  // namespace onnxruntime

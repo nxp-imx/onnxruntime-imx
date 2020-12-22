@@ -51,5 +51,5 @@ class NHWCPool final : public onnxruntime::Pool<T, PoolType> {
   ArmNNExecutionProvider* provider_;
 };
 
-}  // namespace contrib
+}  // namespace armnn_ep
 }  // namespace onnxruntime

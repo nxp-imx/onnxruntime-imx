@@ -33,5 +33,5 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
     NHWCFusedConv);
 
-}  // namespace acl
+}  // namespace armnn_ep
 }  // namespace onnxruntime

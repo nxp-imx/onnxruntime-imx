@@ -219,5 +219,5 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(
         .TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
     NHWCPool<float, AveragePool>);
 
-}  // namespace contrib
+}  // namespace armnn_ep
 }  // namespace onnxruntime

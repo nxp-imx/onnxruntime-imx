@@ -55,5 +55,5 @@ class NHWCBatchNorm final : public OpKernel {
   ArmNNExecutionProvider* provider_;
 };
 
-}  // namespace contrib
+}  // namespace armnn_ep
 }  // namespace onnxruntime

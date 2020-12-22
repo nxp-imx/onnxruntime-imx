@@ -5,7 +5,6 @@
 #pragma once
 
 #include "core/framework/op_kernel.h"
-//#include "core/providers/cpu/nn/conv_attributes.h"
 #include "core/providers/cpu/nn/conv.h"
 #include "core/providers/cpu/nn/pool.h"
 #include "contrib_ops/cpu/fused_activation.h"

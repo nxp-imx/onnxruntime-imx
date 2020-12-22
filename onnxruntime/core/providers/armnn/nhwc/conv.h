@@ -54,5 +54,5 @@ class NHWCConv : public onnxruntime::Conv<T> {
 
 };
 
-}  // namespace contrib
+}  // namespace armnn_ep
 }  // namespace onnxruntime

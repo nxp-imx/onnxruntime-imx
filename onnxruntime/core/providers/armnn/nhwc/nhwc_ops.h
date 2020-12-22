@@ -35,5 +35,5 @@ class ReorderOutput : public ::onnxruntime::acl::ReorderOutput<T> {
   int64_t channels_;
 };
 
-}  // namespace contrib
+}  // namespace armnn_ep
 }  // namespace onnxruntime
