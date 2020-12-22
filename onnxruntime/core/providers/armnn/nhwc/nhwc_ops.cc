@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2020 NXP
 // Licensed under the MIT License.
 
 #include "core/framework/op_kernel_context_internal.h"

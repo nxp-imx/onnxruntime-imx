@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2020, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2020 NXP
 // Licensed under the MIT License.
 
 #include "core/providers/acl/tensor/transpose.h"

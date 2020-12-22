@@ -1,4 +1,4 @@
-// Copyright (c) 2019, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2019 NXP
 // Licensed under the MIT License
 
 #pragma once
