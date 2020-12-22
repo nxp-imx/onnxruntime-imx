@@ -6,6 +6,7 @@
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/tensor/concat.h"
 #include "core/providers/armnn/armnn_execution_provider.h"
+#include "core/providers/armnn/armnn_common.h"
 
 #include "armnn/ArmNN.hpp"
 
@@ -27,22 +28,28 @@ class NHWCConcat : public onnxruntime::Concat {
   }
 
   ~NHWCConcat() {
-	concatLayers.erase(this);
+    ConcatIterator it = NHWCConcat::rt->layers.find((OpKernel*)this);
+    if (it != NHWCConcat::rt->layers.end()) {
+      NHWCConcat::rt->run->UnloadNetwork(it->second);
+    }
+    NHWCConcat::rt->layers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
-  static armnn::IRuntimePtr initRuntime(){
-  	if (NHWCConcat::run)
-  		return std::move(NHWCConcat::run);
-	armnn::IRuntime::CreationOptions options;
-  	return std::move(armnn::IRuntime::Create(options));
+  static void initRuntime(){
+    if(!NHWCConcat::rt) {
+      static thread_local Runtime runtime_obj;
+      armnn::IRuntime::CreationOptions options;
+      runtime_obj.run = std::move(armnn::IRuntime::Create(options));
+
+      NHWCConcat::rt =  &runtime_obj;
+    }
   }
 
  protected:
-  static thread_local std::map<OpKernel*, armnn::NetworkId> concatLayers;
+  static thread_local Runtime* rt;
   ArmNNExecutionProvider* provider_;
-  static armnn::IRuntimePtr run;
 };
 
 }  // namespace contrib

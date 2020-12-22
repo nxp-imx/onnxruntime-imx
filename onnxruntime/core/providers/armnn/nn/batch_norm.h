@@ -8,6 +8,7 @@
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/nn/batch_norm.h"
 #include "core/providers/armnn/armnn_execution_provider.h"
+#include "core/providers/armnn/armnn_common.h"
 
 #include "armnn/ArmNN.hpp"
 
@@ -28,31 +29,32 @@ class BatchNorm final : public OpKernel {
 
     provider_ = (const_cast<ArmNNExecutionProvider*>(
         dynamic_cast<const ArmNNExecutionProvider*>(info.GetExecutionProvider())));
-    run = BatchNorm<T>::initRuntime();
   }
 
   ~BatchNorm() {
-    BatchNormLayersIterator it = BatchNorm::batchNormLayers.find((OpKernel*)this);
-    if (it != BatchNorm::batchNormLayers.end()) {
-      BatchNorm::run->UnloadNetwork(it->second);
+    BatchNormLayersIterator it = BatchNorm::rt->layers.find((OpKernel*)this);
+    if (it != BatchNorm::rt->layers.end()) {
+      BatchNorm::rt->run->UnloadNetwork(it->second);
     }
-    batchNormLayers.erase(this);
+    BatchNorm::rt->layers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
-  static armnn::IRuntimePtr initRuntime(){
-  	if (BatchNorm::run)
-  		return std::move(BatchNorm::run);
-	armnn::IRuntime::CreationOptions options;
-  	return std::move(armnn::IRuntime::Create(options));
+  static void initRuntime(){
+    if(!BatchNorm::rt) {
+      static thread_local Runtime runtime_obj;
+      armnn::IRuntime::CreationOptions options;
+      runtime_obj.run = std::move(armnn::IRuntime::Create(options));
+
+      BatchNorm::rt =  &runtime_obj;
+    }
   }
 
  protected:
   float epsilon_;
-  static thread_local std::map<OpKernel*, armnn::NetworkId> batchNormLayers;
+  static thread_local Runtime* rt;
   ArmNNExecutionProvider* provider_;
-  static armnn::IRuntimePtr run;
 };
 
 

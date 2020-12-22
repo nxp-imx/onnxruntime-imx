@@ -5,7 +5,6 @@
 #include "core/providers/armnn/tensor/transpose.h"
 #include "core/providers/common.h"
 
-#include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
 #define PREF_DIM 4
@@ -14,10 +13,7 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T>
-thread_local std::map<OpKernel*, armnn::NetworkId> Transpose<T>::transposeLayers;
-
-template <typename T>
-armnn::IRuntimePtr Transpose<T>::run = armnn::IRuntimePtr(nullptr, nullptr);
+thread_local Runtime* Transpose<T>::rt = nullptr;
 
 std::vector<unsigned int> armnnPermutation(std::vector<size_t> permutations, unsigned int rank) {
   // permuteShape assumes Tf/Np permute vectors, we must translate to armnn expected form
@@ -33,6 +29,8 @@ std::vector<unsigned int> armnnPermutation(std::vector<size_t> permutations, uns
 
 template <typename T>
 Status Transpose<T>::Compute(OpKernelContext* ctx) const {
+
+  Transpose<T>::initRuntime();
 
   const auto* input_tensor_ptr = ctx->Input<Tensor>(0);
   ORT_ENFORCE(input_tensor_ptr != nullptr);
@@ -62,8 +60,8 @@ Status Transpose<T>::Compute(OpKernelContext* ctx) const {
   T* y_data = Y.template MutableData<T>();
 
   armnn::NetworkId* pNetworkId;
-  TransposeIterator it = Transpose::transposeLayers.find((OpKernel*)this);
-  if (it == Transpose::transposeLayers.end()) {
+  TransposeIterator it = Transpose::rt->layers.find((OpKernel*)this);
+  if (it == Transpose::rt->layers.end()) {
 
     armnn::NetworkId networkId;
     armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
@@ -96,7 +94,7 @@ Status Transpose<T>::Compute(OpKernelContext* ctx) const {
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Transpose::run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Transpose::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
       LOGS_DEFAULT(WARNING) << "Got invalid operation; defaulting to cpu implementation";
@@ -104,22 +102,22 @@ Status Transpose<T>::Compute(OpKernelContext* ctx) const {
     }
 
     // Load graph into runtime
-    Transpose::run->LoadNetwork(networkId, std::move(optNet));
+    Transpose::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<TransposeIterator, bool> ret;
-    ret = Transpose::transposeLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = Transpose::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
     
   } else {
     pNetworkId = &it->second;
   }
 
-  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Transpose::run->GetInputTensorInfo(*pNetworkId, 0),
+  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Transpose::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           x_data)}};
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Transpose::run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Transpose::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        y_data)}};
 
-  Transpose::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  Transpose::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }

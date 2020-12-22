@@ -12,7 +12,6 @@
 #include "core/util/math_cpuonly.h"
 
 #include "core/providers/armnn/nn/conv.h"
-#include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
 #define PREF_DIM 4
@@ -21,10 +20,7 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T>
-thread_local std::map<OpKernel*, armnn::NetworkId> Conv<T>::convLayers;
-
-template <typename T>
-armnn::IRuntimePtr Conv<T>::run = armnn::IRuntimePtr(nullptr, nullptr);
+thread_local Runtime* Conv<T>::rt = nullptr;
 
 armnn::Convolution2dDescriptor createConvDescriptor(std::vector<int64_t> pads, std::vector<int64_t> dilations, std::vector<int64_t> strides, bool biasEnabled) {
   std::vector<int64_t> armnnStrides(2);
@@ -91,6 +87,9 @@ armnn::DepthwiseConvolution2dDescriptor createDepthwiseDescriptor(armnn::Convolu
 
 template <typename T>
 Status Conv<T>::Compute(OpKernelContext* context) const {
+
+  Conv<T>::initRuntime();
+
   size_t num_inputs = OpKernel::Node().InputDefs().size();
   const Tensor* X = context->Input<Tensor>(0);
   const Tensor* W = context->Input<Tensor>(1);
@@ -153,8 +152,8 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
   T* y_data = Y->template MutableData<T>();
 
   armnn::NetworkId* pNetworkId;
-  ConvLayersIterator it = Conv::convLayers.find((OpKernel*)this);
-  if (it == Conv::convLayers.end()) {
+  ConvLayersIterator it = Conv::rt->layers.find((OpKernel*)this);
+  if (it == Conv::rt->layers.end()) {
     armnn::NetworkId networkId;
     armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
 
@@ -267,7 +266,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
     }
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Conv::run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Conv::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
       LOGS_DEFAULT(WARNING) << "Got invalid operation; defaulting to cpu implementation";
@@ -275,23 +274,23 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
     }
 
     // Load graph into runtime
-    Conv::run->LoadNetwork(networkId, std::move(optNet));
+    Conv::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<ConvLayersIterator, bool> ret;
-    ret = Conv::convLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = Conv::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
 
   } else {
     pNetworkId = &it->second;
   }
 
-  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Conv::run->GetInputTensorInfo(*pNetworkId, 0),
+  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Conv::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           x_data)}};
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Conv::run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Conv::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        y_data)}};
 
   // Execute network
-  Conv::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  Conv::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   LOGS_DEFAULT(VERBOSE) << std::endl;
 

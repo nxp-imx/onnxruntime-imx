@@ -6,6 +6,7 @@
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/nn/conv.h"
 #include "core/providers/armnn/armnn_execution_provider.h"
+#include "core/providers/armnn/armnn_common.h"
 
 #include "armnn/ArmNN.hpp"
 
@@ -23,31 +24,32 @@ class Conv : public onnxruntime::Conv<T> {
   explicit Conv(const OpKernelInfo& info) : onnxruntime::Conv<T>(info), conv_attrs_(info) {
     provider_ = (const_cast<ArmNNExecutionProvider*>(
         static_cast<const ArmNNExecutionProvider*>(info.GetExecutionProvider())));
-    run = Conv<T>::initRuntime();
   }
 
   ~Conv() {
-    ConvLayersIterator it = Conv::convLayers.find((OpKernel*)this);
-    if (it != Conv::convLayers.end()) {
-      Conv::run->UnloadNetwork(it->second);
+    ConvLayersIterator it = Conv::rt->layers.find((OpKernel*)this);
+    if (it != Conv::rt->layers.end()) {
+      Conv::rt->run->UnloadNetwork(it->second);
     }
-    Conv::convLayers.erase(this);
+    Conv::rt->layers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
-  static armnn::IRuntimePtr initRuntime(){
-    if(Conv::run)
-      return std::move(Conv::run);
-    armnn::IRuntime::CreationOptions options;
-    return std::move(armnn::IRuntime::Create(options));
+  static void initRuntime(){
+    if(!Conv::rt) {
+      static thread_local Runtime runtime_obj;
+      armnn::IRuntime::CreationOptions options;
+      runtime_obj.run = std::move(armnn::IRuntime::Create(options));
+
+      Conv::rt =  &runtime_obj;
+    }
   }
 
  protected:
-  static thread_local std::map<OpKernel*, armnn::NetworkId> convLayers;
+  static thread_local Runtime* rt;
   ConvAttributes conv_attrs_;
   ArmNNExecutionProvider* provider_;
-  static armnn::IRuntimePtr run;
   std::string activation_type;
 
 };

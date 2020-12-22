@@ -7,7 +7,6 @@
 #include "core/framework/TensorSeq.h"
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
 
-#include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
 #include <iostream>
@@ -18,13 +17,12 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T>
-thread_local std::map<OpKernel*, armnn::NetworkId> NHWCConcat<T>::concatLayers;
-
-template <typename T>
-armnn::IRuntimePtr NHWCConcat<T>::run = NHWCConcat<T>::initRuntime();
+thread_local Runtime* NHWCConcat<T>::rt = nullptr;
 
 template <typename T>
 Status NHWCConcat<T>::Compute(OpKernelContext* ctx) const {
+
+  NHWCConcat<T>::initRuntime();
 
   // Number of input tensors to concatenate
   auto input_count = Node().InputArgCount().front();
@@ -72,8 +70,8 @@ Status NHWCConcat<T>::Compute(OpKernelContext* ctx) const {
   Tensor* Y = ctx->Output(0, output_shape);
 
   armnn::NetworkId* pNetworkId;
-  ConcatIterator it = NHWCConcat::concatLayers.find((OpKernel*)this);
-  if (it == NHWCConcat::concatLayers.end()) {
+  ConcatIterator it = NHWCConcat::rt->layers.find((OpKernel*)this);
+  if (it == NHWCConcat::rt->layers.end()) {
 
     armnn::NetworkId networkId;
     armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
@@ -121,17 +119,17 @@ Status NHWCConcat<T>::Compute(OpKernelContext* ctx) const {
     layer->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo(mergeDims, armnn::DataType::Float32)); 
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCConcat::run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCConcat::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
       return onnxruntime::Concat::Compute(ctx);
     }
 
     // Load graph into runtime
-    NHWCConcat::run->LoadNetwork(networkId, std::move(optNet));
+    NHWCConcat::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<ConcatIterator, bool> ret;
-    ret = NHWCConcat::concatLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = NHWCConcat::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
     
   } else {
@@ -140,12 +138,12 @@ Status NHWCConcat<T>::Compute(OpKernelContext* ctx) const {
 
   armnn::InputTensors inputTensors{};
   for (int index = 0; index < input_count; ++index)
-    inputTensors.push_back({index, armnn::ConstTensor(NHWCConcat::run->GetInputTensorInfo(*pNetworkId, index),
+    inputTensors.push_back({index, armnn::ConstTensor(NHWCConcat::rt->run->GetInputTensorInfo(*pNetworkId, index),
                                                        input_tensors[index]->template Data<T>())});
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCConcat::run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCConcat::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        Y->template MutableData<T>())}};
 
-  NHWCConcat::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  NHWCConcat::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }

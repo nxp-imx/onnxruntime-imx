@@ -6,6 +6,7 @@
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/nn/pool.h"
 #include "core/providers/armnn/armnn_execution_provider.h"
+#include "core/providers/armnn/armnn_common.h"
 
 #include "armnn/ArmNN.hpp"
 
@@ -26,22 +27,28 @@ class NHWCPool final : public onnxruntime::Pool<T, PoolType> {
   }
 
   ~NHWCPool() {
-    poolLayers.erase(this);
+    PoolLayersIterator it = NHWCPool::rt->layers.find((OpKernel*)this);
+    if (it != NHWCPool::rt->layers.end()) {
+      NHWCPool::rt->run->UnloadNetwork(it->second);
+    }
+    NHWCPool::rt->layers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
-  static armnn::IRuntimePtr initRuntime(){
-    if (NHWCPool::run)
-      return std::move(NHWCPool::run);
-    armnn::IRuntime::CreationOptions options;
-    return std::move(armnn::IRuntime::Create(options));
+  static void initRuntime(){
+    if(!NHWCPool::rt) {
+      static thread_local Runtime runtime_obj;
+      armnn::IRuntime::CreationOptions options;
+      runtime_obj.run = std::move(armnn::IRuntime::Create(options));
+
+      NHWCPool::rt =  &runtime_obj;
+    }
   }
 
  private:
-  static thread_local std::map<OpKernel*, armnn::NetworkId> poolLayers;
+  static thread_local Runtime* rt;
   ArmNNExecutionProvider* provider_;
-  static armnn::IRuntimePtr run;
 };
 
 }  // namespace contrib

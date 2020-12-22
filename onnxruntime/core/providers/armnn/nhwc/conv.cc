@@ -14,7 +14,6 @@
 #include "core/util/math_cpuonly.h"
 
 #include "core/providers/armnn/nhwc/conv.h"
-#include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
 #include "armnn/ArmNN.hpp"
@@ -27,10 +26,7 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T>
-thread_local std::map<OpKernel*, armnn::NetworkId> NHWCConv<T>::convLayers;
-
-template <typename T>
-armnn::IRuntimePtr NHWCConv<T>::run = NHWCConv<T>::initRuntime();
+thread_local Runtime* NHWCConv<T>::rt = nullptr;
 
 armnn::Convolution2dDescriptor createNHWCConvDescriptor(std::vector<int64_t> pads, std::vector<int64_t> dilations, std::vector<int64_t> strides, bool biasEnabled){
 
@@ -96,6 +92,9 @@ armnn::DepthwiseConvolution2dDescriptor createNHWCDepthwiseDescriptor(armnn::Con
 
 template <typename T>
 Status NHWCConv<T>::Compute(OpKernelContext* context) const {
+
+  NHWCConv<T>::initRuntime();
+
   size_t num_inputs = OpKernel::Node().InputDefs().size();
   const Tensor* X = context->Input<Tensor>(0);
     const Tensor* W = context->Input<Tensor>(1);
@@ -145,8 +144,8 @@ Status NHWCConv<T>::Compute(OpKernelContext* context) const {
     T* y_data = Y->template MutableData<T>();
 
     armnn::NetworkId* pNetworkId;
-    ConvLayersIterator it = NHWCConv::convLayers.find((OpKernel*)this);
-    if (it == NHWCConv::convLayers.end()) {
+    ConvLayersIterator it = NHWCConv::rt->layers.find((OpKernel*)this);
+    if (it == NHWCConv::rt->layers.end()) {
 
       armnn::NetworkId networkId;
       armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
@@ -268,26 +267,26 @@ Status NHWCConv<T>::Compute(OpKernelContext* context) const {
       }
 
       // Optimise ArmNN network
-      armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCConv::run->GetDeviceSpec());
+      armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCConv::rt->run->GetDeviceSpec());
 
       // Load graph into runtime
-      NHWCConv::run->LoadNetwork(networkId, std::move(optNet));
+      NHWCConv::rt->run->LoadNetwork(networkId, std::move(optNet));
 
       std::pair<ConvLayersIterator, bool> ret;
-      ret = NHWCConv::convLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+      ret = NHWCConv::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
       pNetworkId = &ret.first->second;
 
     } else {
       pNetworkId = &it->second;
     }
 
-    armnn::InputTensors inputTensors{{0, armnn::ConstTensor(NHWCConv::run->GetInputTensorInfo(*pNetworkId, 0),
+    armnn::InputTensors inputTensors{{0, armnn::ConstTensor(NHWCConv::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                             x_data)}};
-    armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCConv::run->GetOutputTensorInfo(*pNetworkId, 0),
+    armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCConv::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                          y_data)}};
 
     // Execute network
-    NHWCConv::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+    NHWCConv::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
     return Status::OK();
 }

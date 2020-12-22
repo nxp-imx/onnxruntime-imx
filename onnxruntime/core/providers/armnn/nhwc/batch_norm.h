@@ -6,6 +6,7 @@
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/nn/batch_norm.h"
 #include "core/providers/armnn/armnn_execution_provider.h"
+#include "core/providers/armnn/armnn_common.h"
 
 #include "armnn/ArmNN.hpp"
 
@@ -29,23 +30,29 @@ class NHWCBatchNorm final : public OpKernel {
   }
 
   ~NHWCBatchNorm() {
-	batchNormLayers.erase(this);
+    BatchNormLayersIterator it = NHWCBatchNorm::rt->layers.find((OpKernel*)this);
+    if (it != NHWCBatchNorm::rt->layers.end()) {
+      NHWCBatchNorm::rt->run->UnloadNetwork(it->second);
+    }
+    NHWCBatchNorm::rt->layers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
-  static armnn::IRuntimePtr initRuntime(){
-  	if (NHWCBatchNorm::run)
-  		return std::move(NHWCBatchNorm::run);
-	armnn::IRuntime::CreationOptions options;
-  	return std::move(armnn::IRuntime::Create(options));
+  static void initRuntime(){
+    if(!NHWCBatchNorm::rt) {
+      static thread_local Runtime runtime_obj;
+      armnn::IRuntime::CreationOptions options;
+      runtime_obj.run = std::move(armnn::IRuntime::Create(options));
+
+      NHWCBatchNorm::rt =  &runtime_obj;
+    }
   }
 
  protected:
   float epsilon_;
-  static thread_local std::map<OpKernel*, armnn::NetworkId> batchNormLayers;
+  static thread_local Runtime* rt;
   ArmNNExecutionProvider* provider_;
-  static armnn::IRuntimePtr run;
 };
 
 }  // namespace contrib

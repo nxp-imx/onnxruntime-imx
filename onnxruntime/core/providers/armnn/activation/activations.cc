@@ -8,7 +8,6 @@
 #pragma warning(disable : 4244)
 #endif
 
-#include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/activation/activations.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
@@ -16,13 +15,12 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T>
-thread_local std::map<OpKernel*, armnn::NetworkId> Relu<T>::reluLayers;
-
-template <typename T>
-armnn::IRuntimePtr Relu<T>::run = armnn::IRuntimePtr(nullptr, nullptr);
+thread_local Runtime* Relu<T>::rt = nullptr;
 
 template <typename T>
 Status Relu<T>::Compute(OpKernelContext* context) const {
+
+  Relu<T>::initRuntime();
 
   const Tensor* X = context->Input<Tensor>(0);
   Tensor* Y = context->Output(0, X->Shape());
@@ -31,8 +29,8 @@ Status Relu<T>::Compute(OpKernelContext* context) const {
   T* dst_data = Y->template MutableData<T>();
 
   armnn::NetworkId* pNetworkId;
-  ReluLayersIterator it = Relu::reluLayers.find((OpKernel*)this);
-  if (it == Relu::reluLayers.end()) {
+  ReluLayersIterator it = Relu::rt->layers.find((OpKernel*)this);
+  if (it == Relu::rt->layers.end()) {
     
     armnn::NetworkId networkId;
     armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
@@ -59,29 +57,29 @@ Status Relu<T>::Compute(OpKernelContext* context) const {
     activation->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Relu::run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Relu::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
       ORT_NOT_IMPLEMENTED("Something went wrong when creating the layer");
     }
 
     // Load graph into runtime
-    Relu::run->LoadNetwork(networkId, std::move(optNet));
+    Relu::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<ReluLayersIterator, bool> ret;
-    ret = Relu::reluLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = Relu::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
 
   } else {
     pNetworkId = &it->second;
   }
 
-  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Relu::run->GetInputTensorInfo(*pNetworkId, 0),
+  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Relu::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           src_data)}};
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Relu::run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Relu::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        dst_data)}};
 
-  Relu::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  Relu::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }

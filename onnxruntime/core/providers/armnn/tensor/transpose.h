@@ -6,6 +6,7 @@
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/tensor/transpose.h"
 #include "core/providers/armnn/armnn_execution_provider.h"
+#include "core/providers/armnn/armnn_common.h"
 
 #include "armnn/ArmNN.hpp"
 
@@ -24,30 +25,31 @@ class Transpose : public onnxruntime::Transpose {
 
     provider_ = (const_cast<ArmNNExecutionProvider*>(
         dynamic_cast<const ArmNNExecutionProvider*>(info.GetExecutionProvider())));
-    run = Transpose<T>::initRuntime();
   }
 
   ~Transpose() {
-    TransposeIterator it = Transpose::transposeLayers.find((OpKernel*)this);
-    if (it != Transpose::transposeLayers.end()) {
-      Transpose::run->UnloadNetwork(it->second);
+    TransposeIterator it = Transpose::rt->layers.find((OpKernel*)this);
+    if (it != Transpose::rt->layers.end()) {
+      Transpose::rt->run->UnloadNetwork(it->second);
     }
-    transposeLayers.erase(this);
+    Transpose::rt->layers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
-  static armnn::IRuntimePtr initRuntime(){
-  	if (Transpose::run)
-  		return std::move(Transpose::run);
-	armnn::IRuntime::CreationOptions options;
-  	return std::move(armnn::IRuntime::Create(options));
+  static void initRuntime(){
+    if(!Transpose::rt) {
+      static thread_local Runtime runtime_obj;
+      armnn::IRuntime::CreationOptions options;
+      runtime_obj.run = std::move(armnn::IRuntime::Create(options));
+
+      Transpose::rt =  &runtime_obj;
+    }
   }
 
  protected:
-  static thread_local std::map<OpKernel*, armnn::NetworkId> transposeLayers;
+  static thread_local Runtime* rt;
   ArmNNExecutionProvider* provider_;
-  static armnn::IRuntimePtr run;
 };
 
 }  // namespace armnn_ep

@@ -8,6 +8,7 @@
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/activation/activations.h"
 #include "core/providers/armnn/armnn_execution_provider.h"
+#include "core/providers/armnn/armnn_common.h"
 
 #include "armnn/ArmNN.hpp"
 
@@ -25,30 +26,31 @@ class Relu : public OpKernel {
   explicit Relu(const OpKernelInfo& info) : OpKernel(info) {
     provider_ = (const_cast<ArmNNExecutionProvider*>(
         static_cast<const ArmNNExecutionProvider*>(info.GetExecutionProvider())));
-    run = Relu<T>::initRuntime();
   }
 
   ~Relu() {
-    ReluLayersIterator it = Relu::reluLayers.find((OpKernel*)this);
-    if (it != Relu::reluLayers.end()) {
-      Relu::run->UnloadNetwork(it->second);
+    ReluLayersIterator it = Relu::rt->layers.find((OpKernel*)this);
+    if (it != Relu::rt->layers.end()) {
+      Relu::rt->run->UnloadNetwork(it->second);
     }
-    Relu::reluLayers.erase(this);
+    Relu::rt->layers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
-  static armnn::IRuntimePtr initRuntime(){
-    if(Relu::run)
-      return std::move(Relu::run);
-    armnn::IRuntime::CreationOptions options;
-    return std::move(armnn::IRuntime::Create(options));
+  static void initRuntime(){
+    if(!Relu::rt) {
+      static thread_local Runtime runtime_obj;
+      armnn::IRuntime::CreationOptions options;
+      runtime_obj.run = std::move(armnn::IRuntime::Create(options));
+
+      Relu::rt =  &runtime_obj;
+    }
   }
 
  private:
-  static thread_local std::map<OpKernel*, armnn::NetworkId> reluLayers;
+  static thread_local Runtime* rt;
   ArmNNExecutionProvider* provider_;
-  static armnn::IRuntimePtr run;
 };
 
 }  // namespace armnn_ep

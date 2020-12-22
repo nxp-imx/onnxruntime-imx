@@ -10,7 +10,6 @@
 #include "core/util/math_cpuonly.h"
 
 #include "core/providers/armnn/nhwc/pool.h"
-#include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
 #include "armnn/ArmNN.hpp"
@@ -21,10 +20,7 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T, typename PoolType>
-thread_local std::map<OpKernel*, armnn::NetworkId> NHWCPool<T, PoolType>::poolLayers;
-
-template <typename T, typename PoolType>
-armnn::IRuntimePtr NHWCPool<T, PoolType>::run = NHWCPool<T, PoolType>::initRuntime();
+thread_local Runtime* NHWCPool<T, PoolType>::rt = nullptr;
 
 armnn::Pooling2dDescriptor createNHWCDescriptor(std::vector<int64_t> pads, std::vector<int64_t> strides, std::vector<int64_t> kernel_shape, armnn::PoolingAlgorithm pool_type, onnxruntime::PoolAttributes pool_attrs){
 
@@ -78,6 +74,8 @@ armnn::Pooling2dDescriptor createNHWCDescriptor(std::vector<int64_t> pads, std::
 template <typename T, typename PoolType>
 Status NHWCPool<T, PoolType>::Compute(OpKernelContext* context) const {
 
+  NHWCPool<T, PoolType>::initRuntime();
+
   const Tensor* X = context->Input<Tensor>(0);
   const TensorShape& x_shape = X->Shape();
 
@@ -112,8 +110,8 @@ Status NHWCPool<T, PoolType>::Compute(OpKernelContext* context) const {
   T* y_data = Y->template MutableData<T>();
 
   armnn::NetworkId* pNetworkId;
-  PoolLayersIterator it = NHWCPool::poolLayers.find((OpKernel*)this);
-  if (it == NHWCPool::poolLayers.end()) {
+  PoolLayersIterator it = NHWCPool::rt->layers.find((OpKernel*)this);
+  if (it == NHWCPool::rt->layers.end()) {
 
     armnn::PoolingAlgorithm pool_type;
     if (PoolBase::op_name_ == "GlobalAveragePool" || PoolBase::op_name_ == "AveragePool"){
@@ -157,26 +155,26 @@ Status NHWCPool<T, PoolType>::Compute(OpKernelContext* context) const {
     pool_armnn->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCPool::run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCPool::rt->run->GetDeviceSpec());
 
     // Load graph into runtime
-    NHWCPool::run->LoadNetwork(networkId, std::move(optNet));
+    NHWCPool::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<PoolLayersIterator, bool> ret;
-    ret = NHWCPool::poolLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = NHWCPool::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
 
   } else {
     pNetworkId = &it->second;
   }
 
-  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(NHWCPool::run->GetInputTensorInfo(*pNetworkId, 0),
+  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(NHWCPool::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           x_data)}};
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCPool::run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCPool::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        y_data)}};
 
   // Execute network
-  NHWCPool::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  NHWCPool::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }

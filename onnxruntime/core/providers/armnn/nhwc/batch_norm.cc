@@ -7,7 +7,6 @@
 #include "core/util/math_cpuonly.h"
 
 #include "core/providers/armnn/nhwc/batch_norm.h"
-#include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
 #include <thread>
@@ -19,13 +18,12 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T>
-thread_local std::map<OpKernel*, armnn::NetworkId> NHWCBatchNorm<T>::batchNormLayers;
-
-template <typename T>
-armnn::IRuntimePtr NHWCBatchNorm<T>::run = NHWCBatchNorm<T>::initRuntime();
+thread_local Runtime* NHWCBatchNorm<T>::rt = nullptr;
 
 template <typename T>
 Status NHWCBatchNorm<T>::Compute(OpKernelContext* context) const {
+
+  NHWCBatchNorm<T>::initRuntime();
 
   const Tensor* X = context->Input<Tensor>(0);
   const Tensor* S = context->Input<Tensor>(1);//scale
@@ -42,8 +40,8 @@ Status NHWCBatchNorm<T>::Compute(OpKernelContext* context) const {
   T* y_data = Y->template MutableData<T>();
 
   armnn::NetworkId* pNetworkId;
-  BatchNormLayersIterator it = NHWCBatchNorm::batchNormLayers.find((OpKernel*)this);
-  if (it == NHWCBatchNorm::batchNormLayers.end()) {
+  BatchNormLayersIterator it = NHWCBatchNorm::rt->layers.find((OpKernel*)this);
+  if (it == NHWCBatchNorm::rt->layers.end()) {
     
     armnn::NetworkId networkId;
     armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
@@ -95,29 +93,29 @@ Status NHWCBatchNorm<T>::Compute(OpKernelContext* context) const {
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCBatchNorm::run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCBatchNorm::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
       ORT_NOT_IMPLEMENTED("Something went wrong when creating the layer");
     }
 
     // Load graph into runtime
-    NHWCBatchNorm::run->LoadNetwork(networkId, std::move(optNet));
+    NHWCBatchNorm::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<BatchNormLayersIterator, bool> ret;
-    ret = NHWCBatchNorm::batchNormLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = NHWCBatchNorm::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
 
   } else {
     pNetworkId = &it->second;
   }
 
-  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(NHWCBatchNorm::run->GetInputTensorInfo(*pNetworkId, 0),
+  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(NHWCBatchNorm::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           x_data)}};
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCBatchNorm::run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCBatchNorm::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        y_data)}};
 
-  NHWCBatchNorm::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  NHWCBatchNorm::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }

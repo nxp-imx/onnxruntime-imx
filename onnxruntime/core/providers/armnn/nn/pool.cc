@@ -10,7 +10,6 @@
 #include "core/util/math_cpuonly.h"
 
 #include "core/providers/armnn/nn/pool.h"
-#include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
 #define PREF_DIM 4
@@ -19,16 +18,10 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T, typename PoolType>
-thread_local std::map<OpKernel*, armnn::NetworkId> Pool<T, PoolType>::poolLayers;
-
-template <typename T, typename PoolType>
-armnn::IRuntimePtr Pool<T, PoolType>::run = armnn::IRuntimePtr(nullptr, nullptr);
+thread_local Runtime* Pool<T, PoolType>::rt = nullptr;
 
 template <typename T>
-thread_local std::map<OpKernel*, armnn::NetworkId> MaxPoolV8<T>::maxPoolLayers;
-
-template <typename T>
-armnn::IRuntimePtr MaxPoolV8<T>::run = armnn::IRuntimePtr(nullptr, nullptr);
+thread_local Runtime* MaxPoolV8<T>::rt = nullptr;
 
 armnn::Pooling2dDescriptor createDescriptor(std::vector<int64_t> pads, std::vector<int64_t> strides, std::vector<int64_t> kernel_shape, armnn::PoolingAlgorithm pool_type, onnxruntime::PoolAttributes pool_attrs){
 
@@ -88,6 +81,8 @@ armnn::Pooling2dDescriptor createDescriptor(std::vector<int64_t> pads, std::vect
 template <typename T, typename PoolType>
 Status Pool<T, PoolType>::Compute(OpKernelContext* context) const {
 
+  Pool<T, PoolType>::initRuntime();
+
   const Tensor* X = context->Input<Tensor>(0);
   const TensorShape& x_shape = X->Shape();
 
@@ -126,8 +121,8 @@ Status Pool<T, PoolType>::Compute(OpKernelContext* context) const {
   T* y_data = Y->template MutableData<T>();
 
   armnn::NetworkId* pNetworkId;
-  PoolLayersIterator it = Pool::poolLayers.find((OpKernel*)this);
-  if (it == Pool::poolLayers.end()) {
+  PoolLayersIterator it = Pool::rt->layers.find((OpKernel*)this);
+  if (it == Pool::rt->layers.end()) {
 
     armnn::PoolingAlgorithm pool_type;
     if (PoolBase::op_name_ == "GlobalAveragePool" || PoolBase::op_name_ == "AveragePool"){
@@ -165,7 +160,7 @@ Status Pool<T, PoolType>::Compute(OpKernelContext* context) const {
     pool_armnn->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Pool::run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Pool::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
         LOGS_DEFAULT(WARNING) << "Got invalid operation; defaulting to cpu implementation";
@@ -173,29 +168,31 @@ Status Pool<T, PoolType>::Compute(OpKernelContext* context) const {
     }
 
     // Load graph into runtime
-    Pool::run->LoadNetwork(networkId, std::move(optNet));
+    Pool::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<PoolLayersIterator, bool> ret;
-    ret = Pool::poolLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = Pool::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
 
   } else {
     pNetworkId = &it->second;
   }
 
-  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Pool::run->GetInputTensorInfo(*pNetworkId, 0),
+  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Pool::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           x_data)}};
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Pool::run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Pool::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        y_data)}};
 
   // Execute network
-  Pool::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  Pool::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }
 
 template <typename T>
 Status MaxPoolV8<T>::Compute(OpKernelContext* context) const {
+
+  MaxPoolV8<T>::initRuntime();
 
   const Tensor* X = context->Input<Tensor>(0);
   const TensorShape& x_shape = X->Shape();
@@ -229,8 +226,8 @@ Status MaxPoolV8<T>::Compute(OpKernelContext* context) const {
   T* y_data = Y->template MutableData<T>();
 
   armnn::NetworkId* pNetworkId;
-  PoolLayersIterator it = MaxPoolV8::maxPoolLayers.find((OpKernel*)this);
-  if (it == MaxPoolV8::maxPoolLayers.end()) {
+  PoolLayersIterator it = MaxPoolV8::rt->layers.find((OpKernel*)this);
+  if (it == MaxPoolV8::rt->layers.end()) {
 
     armnn::NetworkId networkId;
 
@@ -256,7 +253,7 @@ Status MaxPoolV8<T>::Compute(OpKernelContext* context) const {
     pool_armnn->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, MaxPoolV8::run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, MaxPoolV8::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
         LOGS_DEFAULT(WARNING) << "Got invalid operation; defaulting to cpu implementation";
@@ -264,23 +261,23 @@ Status MaxPoolV8<T>::Compute(OpKernelContext* context) const {
     }
 
     // Load graph into runtime
-    MaxPoolV8::run->LoadNetwork(networkId, std::move(optNet));
+    MaxPoolV8::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<PoolLayersIterator, bool> ret;
-    ret = MaxPoolV8::maxPoolLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = MaxPoolV8::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
 
   } else {
     pNetworkId = &it->second;
   }
 
-  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(MaxPoolV8::run->GetInputTensorInfo(*pNetworkId, 0),
+  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(MaxPoolV8::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           x_data)}};
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(MaxPoolV8::run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(MaxPoolV8::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        y_data)}};
 
   // Execute network
-  MaxPoolV8::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  MaxPoolV8::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }
