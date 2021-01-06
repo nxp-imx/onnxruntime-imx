@@ -107,6 +107,7 @@ target_link_libraries(onnxruntime PRIVATE
     ${PROVIDERS_DML}
     ${PROVIDERS_ACL}
     ${PROVIDERS_ARMNN}
+    ${PROVIDERS_VSI_NPU}
     ${onnxruntime_winml}
     onnxruntime_optimizer
     onnxruntime_providers

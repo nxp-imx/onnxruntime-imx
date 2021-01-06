@@ -107,6 +107,7 @@ set(onnxruntime_pybind11_state_libs
     ${PROVIDERS_DML}
     ${PROVIDERS_ACL}
     ${PROVIDERS_ARMNN}
+    ${PROVIDERS_VSI_NPU}
     onnxruntime_optimizer
     onnxruntime_providers
     onnxruntime_util

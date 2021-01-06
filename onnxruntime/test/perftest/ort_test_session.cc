@@ -96,6 +96,11 @@ OnnxRuntimeTestSession::OnnxRuntimeTestSession(Ort::Env& env, std::random_device
 #else
     ORT_THROW("ArmNN is not supported in this build\n");
 #endif
+#ifdef USE_VSI_NPU
+    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(session_options, 0));
+#else
+    ORT_THROW("VsiNpu is not supported in this build\n");
+#endif
   } else if (provider_name == onnxruntime::kMIGraphXExecutionProvider) {
 #ifdef USE_MIGRAPHX
     Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_MIGraphX(session_options, 0));

@@ -65,6 +65,9 @@ elif '--use_acl' in sys.argv:
 elif '--use_armnn' in sys.argv:
     package_name = 'onnxruntime-armnn'
     sys.argv.remove('--use_armnn')
+elif '--use_vsi_npu' in sys.argv:
+    package_name = 'onnxruntime-vsinpu'
+    sys.argv.remove('--use_vsi_npu')
 elif '--use_dml' in sys.argv:
     package_name = 'onnxruntime-dml'
     sys.argv.remove('--use_dml')

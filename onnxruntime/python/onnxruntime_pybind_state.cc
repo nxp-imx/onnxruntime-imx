@@ -123,6 +123,12 @@ struct OrtStatus {
 #define BACKEND_ARMNN ""
 #endif
 
+#if USE_VSI_NPU
+#define BACKEND_VSI_NPU "-VSI_NPU"
+#else
+#define BACKEND_VSI_NPU ""
+#endif
+
 #if USE_DML
 #define BACKEND_DML "-DML"
 #else
@@ -169,6 +175,9 @@ std::string nuphar_settings;
 #ifdef USE_ARMNN
 #include "core/providers/armnn/armnn_provider_factory.h"
 #endif
+#ifdef USE_VSI_NPU
+#include "core/providers/vsi_npu/vsi_npu_provider_factory.h"
+#endif
 #ifdef USE_DML
 #include "core/providers/dml/dml_provider_factory.h"
 #endif
@@ -191,6 +200,7 @@ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Nuphar
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_VITISAI(const char* backend_type, int device_id);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ACL(int use_arena);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ArmNN(int use_arena);
+std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_VsiNpu(int device_id);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_DML(int device_id);
 }  // namespace onnxruntime
 
@@ -612,6 +622,11 @@ void RegisterExecutionProviders(InferenceSession* sess, const std::vector<std::s
       RegisterExecutionProvider(
           sess, *onnxruntime::CreateExecutionProviderFactory_ArmNN(sess->GetSessionOptions().enable_cpu_mem_arena));
 #endif
+    } else if (type == kVsiNpuExecutionProvider) {
+#ifdef USE_VSI_NPU
+      RegisterExecutionProvider(
+          sess, *onnxruntime::CreateExecutionProviderFactory_VsiNpu(0);
+#endif
     } else if (type == kDmlExecutionProvider) {
 #ifdef USE_DML
       RegisterExecutionProvider(sess, *onnxruntime::CreateExecutionProviderFactory_DML(0));
@@ -774,6 +789,9 @@ void addGlobalMethods(py::module& m, const Environment& env) {
 #endif
 #ifdef USE_ARMNN
                 onnxruntime::CreateExecutionProviderFactory_ArmNN(0)
+#endif
+#ifdef USE_VSI_NPU
+                onnxruntime::CreateExecutionProviderFactory_VsiNpu(0)
 #endif
 #ifdef USE_DML
                     onnxruntime::CreateExecutionProviderFactory_DML(0)

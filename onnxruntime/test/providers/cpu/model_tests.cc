@@ -613,6 +613,9 @@ TEST_P(ModelTest, Run) {
 #ifdef USE_ARMNN
   provider_names.push_back(ORT_TSTR("armnn"));
 #endif
+#ifdef USE_VSI_NPU
+  provider_names.push_back(ORT_TSTR("vsi_npu"));
+#endif
   std::vector<std::basic_string<ORTCHAR_T>> v;
   // Permanently exclude following tests because ORT support only opset starting from 7,
   // Please make no more changes to the list

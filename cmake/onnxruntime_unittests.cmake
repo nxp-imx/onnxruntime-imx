@@ -388,6 +388,10 @@ if(onnxruntime_USE_ARMNN)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_armnn)
 endif()
 
+if(onnxruntime_USE_VSI_NPU)
+  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_vsi_npu)
+endif()
+
 if (onnxruntime_ENABLE_LANGUAGE_INTEROP_OPS)
   set(ONNXRUNTIME_INTEROP_TEST_LIBS PRIVATE onnxruntime_language_interop onnxruntime_pyop)
 endif()
@@ -407,6 +411,7 @@ set(ONNXRUNTIME_TEST_LIBS
     ${PROVIDERS_DML}
     ${PROVIDERS_ACL}
     ${PROVIDERS_ARMNN}
+    ${PROVIDERS_VSI_NPU}
     onnxruntime_optimizer
     onnxruntime_providers
     onnxruntime_util

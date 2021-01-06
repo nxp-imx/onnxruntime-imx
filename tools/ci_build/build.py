@@ -354,6 +354,15 @@ def parse_arguments():
     parser.add_argument(
         "--build_micro_benchmarks", action='store_true',
         help="Build ONNXRuntime micro-benchmarks.")
+    parser.add_argument(
+        "--use_vsi_npu", action='store_true',
+        help="Enable VsiNpu Execution Provider.")
+    parser.add_argument(
+        "--ovxlib_include",
+        help="Path to OVXLIB header files required by the VsiNpu EP.")
+    parser.add_argument(
+        "--vsi_npu_libs",
+        help="Path to OVXLIB and NN RT libraries required by the VsiNpu EP.")
 
     # options to reduce binary size
     parser.add_argument("--minimal_build", action='store_true',
@@ -567,6 +576,8 @@ def use_dev_mode(args):
         return 'OFF'
     if args.use_armnn:
         return 'OFF'
+    if args.use_vsi_npu:
+        return 'OFF'
     if args.ios and is_macOS():
         return 'OFF'
     return 'ON'
@@ -574,7 +585,8 @@ def use_dev_mode(args):
 
 def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home,
                         mpi_home, nccl_home, tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs,
-                        path_to_protoc_exe, configs, cmake_extra_defines, args, cmake_extra_args):
+                        ovxlib_include, vsi_npu_libs, path_to_protoc_exe, configs, cmake_extra_defines, args,
+                        cmake_extra_args):
     log.info("Generating CMake build tree")
     cmake_dir = os.path.join(source_dir, "cmake")
     # TODO: fix jemalloc build so it does not conflict with onnxruntime
@@ -674,6 +686,8 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
             "OFF" if args.armnn_relu else "ON"),
         "-Donnxruntime_ARMNN_BN_USE_CPU=" + (
             "OFF" if args.armnn_bn else "ON"),
+        "-Donnxruntime_USE_VSI_NPU=" + (
+            "ON" if args.use_vsi_npu else "OFF"),
         # Training related flags
         "-Donnxruntime_ENABLE_NVTX_PROFILE=" + (
             "ON" if args.enable_nvtx_profile else "OFF"),
@@ -696,6 +710,12 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
 
     if armnn_libs and os.path.exists(armnn_libs):
         cmake_args += ["-Donnxruntime_ARMNN_LIBS=" + armnn_libs]
+
+    if ovxlib_include and os.path.exists(ovxlib_include):
+        cmake_args += ["-Donnxruntime_OVXLIB_INCLUDE=" + ovxlib_include]
+
+    if vsi_npu_libs and os.path.exists(vsi_npu_libs):
+        cmake_args += ["-Donnxruntime_VSI_NPU_LIBS=" + vsi_npu_libs]
 
     if mpi_home and os.path.exists(mpi_home):
         cmake_args += ["-Donnxruntime_MPI_HOME=" + mpi_home]
@@ -1327,7 +1347,7 @@ def run_nodejs_tests(nodejs_binding_dir):
 
 def build_python_wheel(
         source_dir, build_dir, configs, use_cuda, use_ngraph, use_dnnl,
-        use_tensorrt, use_openvino, use_nuphar, use_vitisai, use_acl, use_armnn, use_dml,
+        use_tensorrt, use_openvino, use_nuphar, use_vitisai, use_acl, use_armnn, use_vsi_npu, use_dml,
         wheel_name_suffix, enable_training, nightly_build=False, featurizers_build=False, use_ninja=False):
     for config in configs:
         cwd = get_config_build_dir(build_dir, config)
@@ -1376,6 +1396,8 @@ def build_python_wheel(
             args.append('--use_acl')
         elif use_armnn:
             args.append('--use_armnn')
+        elif use_vsi_npu:
+            args.append('--use_vsi_npu')
         elif use_dml:
             args.append('--use_dml')
 
@@ -1651,6 +1673,9 @@ def main():
     armnn_home = args.armnn_home
     armnn_libs = args.armnn_libs
 
+    ovxlib_include = args.ovxlib_include
+    vsi_npu_libs = args.vsi_npu_libs
+
     # if using tensorrt, setup tensorrt paths
     tensorrt_home = setup_tensorrt_vars(args)
 
@@ -1739,7 +1764,7 @@ def main():
                     "Only Windows ARM(64) cross-compiled builds supported "
                     "currently through this script")
             install_ubuntu_deps(args)
-            if not is_docker() and not args.use_acl and not args.use_armnn:
+            if not is_docker() and not args.use_acl and not args.use_armnn and not args.use_vsi_npu:
                 install_python_deps()
         if args.enable_pybind and is_windows():
             install_python_deps(args.numpy_version)
@@ -1747,7 +1772,7 @@ def main():
             setup_test_data(build_dir, configs)
         generate_build_tree(
             cmake_path, source_dir, build_dir, cuda_home, cudnn_home, mpi_home, nccl_home,
-            tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs,
+            tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs, ovxlib_include, vsi_npu_libs,
             path_to_protoc_exe, configs, cmake_extra_defines, args, cmake_extra_args)
 
     if args.clean:
@@ -1787,6 +1812,7 @@ def main():
                 args.use_vitisai,
                 args.use_acl,
                 args.use_armnn,
+                args.use_vsi_npu,
                 args.use_dml,
                 args.wheel_name_suffix,
                 args.enable_training,

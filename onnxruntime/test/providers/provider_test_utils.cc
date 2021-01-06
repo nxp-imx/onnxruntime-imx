@@ -820,6 +820,8 @@ void OpTester::Run(
           execution_provider = DefaultAclExecutionProvider();
         else if (provider_type == onnxruntime::kArmNNExecutionProvider)
           execution_provider = DefaultArmNNExecutionProvider();
+        else if (provider_type == onnxruntime::kVsiNpuExecutionProvider)
+          execution_provider = DefaultVsiNpuExecutionProvider();
         // skip if execution provider is disabled
         if (execution_provider == nullptr)
           continue;

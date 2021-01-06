@@ -103,6 +103,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_dml = false;
   bool enable_acl = false;
   bool enable_armnn = false;
+  bool enable_vsi_npu = false;
   bool enable_migraphx = false;
   int device_id = 0;
   GraphOptimizationLevel graph_optimization_level = ORT_ENABLE_ALL;
@@ -174,6 +175,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             enable_acl = true;
           } else if (!CompareCString(optarg, ORT_TSTR("armnn"))) {
             enable_armnn = true;
+          } else if (!CompareCString(optarg, ORT_TSTR("vsi_npu"))) {
+            enable_vsi_npu = true;
           } else if (!CompareCString(optarg, ORT_TSTR("migraphx"))) {
             enable_migraphx = true;
           } else {
@@ -397,6 +400,14 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
       Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_ArmNN(sf, enable_cpu_mem_arena ? 1 : 0));
 #else
       fprintf(stderr, "ArmNN is not supported in this build\n");
+      return -1;
+#endif
+    }
+    if (enable_vsi_npu) {
+#ifdef USE_VSI_NPU
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(sf, device_id));
+#else
+      fprintf(stderr, "VsiNpu is not supported in this build\n");
       return -1;
 #endif
     }

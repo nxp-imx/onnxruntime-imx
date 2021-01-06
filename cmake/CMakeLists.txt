@@ -103,6 +103,7 @@ option(onnxruntime_USE_ACL_1908 "Build with ACL version 1908 support" OFF)
 option(onnxruntime_USE_ACL_2002 "Build with ACL version 2002 support" OFF)
 option(onnxruntime_USE_ACL_2008 "Build with ACL version 2008 support" OFF)
 option(onnxruntime_USE_ARMNN "Build with ArmNN support" OFF)
+option(onnxruntime_USE_VSI_NPU "Build with VsiNpu support" OFF)
 option(onnxruntime_ARMNN_RELU_USE_CPU "Use the CPU implementation for the Relu operator for the ArmNN EP" ON)
 option(onnxruntime_ARMNN_BN_USE_CPU "Use the CPU implementation for the Batch Normalization operator for the ArmNN EP" ON)
 option(onnxruntime_ENABLE_INSTRUMENT "Enable Instrument with Event Tracing for Windows (ETW)" OFF)
@@ -720,6 +721,21 @@ if (onnxruntime_USE_ARMNN)
   endif()
 
   list(APPEND onnxruntime_EXTERNAL_LIBRARIES armnn pthread arm_compute_core arm_compute arm_compute_graph)
+endif()
+
+# VsiNpu
+if(onnxruntime_USE_VSI_NPU)
+  add_definitions(-DUSE_VSI_NPU=1)
+
+  if (NOT ${onnxruntime_VSI_NPU_LIBS} STREQUAL "")
+    find_library(NNRT_LIBRARY NAMES nnrt
+                     PATHS ${onnxruntime_VSI_NPU_LIBS}
+                     NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+
+    link_libraries(nnrt)
+  endif()
+
+  list(APPEND onnxruntime_EXTERNAL_LIBRARIES nnrt)
 endif()
 
 # MKLML
