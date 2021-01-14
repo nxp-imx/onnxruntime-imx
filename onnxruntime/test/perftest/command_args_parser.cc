@@ -25,7 +25,7 @@ namespace perftest {
 
 /*static*/ void CommandLineParser::ShowUsage() {
   printf(
-      "perf_test [options...] model_path [result_file]\n"
+      "onnxruntime_perf_test [options...] model_path [result_file]\n"
       "Options:\n"
       "\t-m [test_mode]: Specifies the test mode. Value could be 'duration' or 'times'.\n"
       "\t\tProvide 'duration' to run the test for a fix duration, and 'times' to repeated for a certain times. \n"
@@ -34,7 +34,7 @@ namespace perftest {
       "\t-I: Generate tensor input binding (Free dimensions are treated as 1.)\n"
       "\t-c [parallel runs]: Specifies the (max) number of runs to invoke simultaneously. Default:1.\n"
       "\t-e [cpu|cuda|dnnl|tensorrt|ngraph|openvino|nuphar|dml|acl]: Specifies the provider 'cpu','cuda','dnnl','tensorrt', "
-      "'ngraph', 'openvino', 'nuphar', 'dml' or 'acl'. "
+      "'ngraph', 'openvino', 'nuphar', 'dml', 'acl', 'armnn' or 'vsi_npu'. "
       "Default:'cpu'.\n"
       "\t-b [tf|ort]: backend to use. Default:ort\n"
       "\t-r [repeated_times]: Specifies the repeated times if running in 'times' test mode.Default:1000.\n"
