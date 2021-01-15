@@ -97,7 +97,11 @@ static void BM_FindMinMaxMlasAvx(benchmark::State& state) {
   float min = std::numeric_limits<float>::max();
   float max = std::numeric_limits<float>::lowest();
   for (auto _ : state) {
+    #if defined(MLAS_TARGET_AMD64)
     MlasReduceMinimumMaximumF32KernelAvx(data, &min, &max, batch_size);
+    #else
+    MlasReduceMinimumMaximumF32Kernel(data, &min, &max, batch_size);
+    #endif
   }
   aligned_free(data);
 }

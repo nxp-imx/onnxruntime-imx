@@ -17,6 +17,7 @@
 
 using namespace onnxruntime;
 using namespace onnx;
+using namespace onnxruntime::common;
 extern OrtEnv* env;
 
 class Allocs : public IExecutionProvider {
