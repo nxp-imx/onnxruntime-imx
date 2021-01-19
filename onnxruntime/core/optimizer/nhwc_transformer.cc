@@ -205,8 +205,8 @@ std::vector<float> weightsPermutationACL(Initializer conv_W, std::vector<float> 
   permutationLayer.configure(&weights, &new_weights,
     (conv_W.dims()[1] == 1) ? arm_compute::PermutationVector(3,2,0,1) : arm_compute::PermutationVector(2,0,1));
 
-  onnxruntime::acl::ACLImportMemory(weights.allocator(), conv_W.data<float>(), weights.info()->tensor_shape().total_size() * 4);
-  onnxruntime::acl::ACLImportMemory(new_weights.allocator(), reordered_filter.data(), new_weights.info()->tensor_shape().total_size() * 4);
+  weights.allocator()->import_memory(conv_W.data<float>());
+  new_weights.allocator()->import_memory(reordered_filter.data());
 
   permutationLayer.run();
 
