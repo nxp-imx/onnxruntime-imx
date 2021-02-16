@@ -322,6 +322,10 @@ def parse_arguments():
         "--use_telemetry", action='store_true',
         help="Only official builds can set this flag to enable telemetry.")
     parser.add_argument(
+        "--use_cross_compile", action='store_true', help="Use corss compile.")
+    parser.add_argument(
+        "--cmake_toolchain", help="Path to cmake tool chain.")
+    parser.add_argument(
         "--enable_wcos", action='store_true',
         help="Build for Windows Core OS.")
     parser.add_argument(
@@ -763,6 +767,9 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
     if args.use_cuda and not is_windows():
         nvml_stub_path = cuda_home + "/lib64/stubs"
         cmake_args += ["-DCUDA_CUDA_LIBRARY=" + nvml_stub_path]
+
+    if args.use_cross_compile:
+        cmake_args += ["-DCMAKE_TOOLCHAIN_FILE=" + args.cmake_toolchain]
 
     if args.use_preinstalled_eigen:
         cmake_args += ["-Donnxruntime_USE_PREINSTALLED_EIGEN=ON",

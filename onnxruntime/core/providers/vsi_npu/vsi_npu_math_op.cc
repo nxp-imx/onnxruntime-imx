@@ -44,20 +44,6 @@ void VsiOpCallbackInfoAbs::Setup(const Node* node,
     op->setOutputs(out_operand_ids.data(), out_operand_ids.size());
 
     model->AddOperation(op, nullptr);
-
-    const auto* type_proto = input_defs[0]->TypeAsProto();
-    if (type_proto->tensor_type().elem_type() ==
-            ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT8 ||
-        type_proto->tensor_type().elem_type() ==
-            ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT8) {
-        auto input_tensor = model->GetModelPtr()->operand(input_operand_id);
-        input_tensor->quant.scalar.zeroPoint = 0;
-        input_tensor->quant.scalar.scale = 1.0f;
-
-        auto output_tensor = model->GetModelPtr()->operand(output_operand_id);
-        output_tensor->quant.scalar.zeroPoint = 0;
-        output_tensor->quant.scalar.scale = 1.0f;
-    }
 }
 
 void VsiOpCallbackInfoMatMul::Setup(const Node* node,

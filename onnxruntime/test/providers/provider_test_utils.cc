@@ -69,6 +69,44 @@ void Check(const OpTester::Data& expected_data, const Tensor& output_tensor,
 }
 
 template <>
+void Check<int8_t>(const OpTester::Data& expected_data, const Tensor& output_tensor, const std::string& provider_type) {
+  auto& expected_tensor = expected_data.data_.Get<Tensor>();
+  auto* expected = expected_tensor.template Data<int8_t>();
+  auto* output = output_tensor.template Data<int8_t>();
+  auto size = output_tensor.Shape().Size();
+
+  if (expected_data.sort_output_) {
+    // if order can be jumbled in the output of an operator, sort both the expected and output buffers prior to
+    // comparison this is a "best-effort" algo and should satisfy the requirement for the few ops that do require this
+    // support without investing in a more sophisticated infrastructure for the same
+    sort_expected_and_actual_buffers<int8_t>(expected, output, size);
+  }
+
+  for (int i = 0; i < size; ++i) {
+    EXPECT_NEAR(expected[i], output[i], 1) << "i:" << i << ", provider_type: " << provider_type;
+  }
+}
+
+template <>
+void Check<uint8_t>(const OpTester::Data& expected_data, const Tensor& output_tensor, const std::string& provider_type) {
+  auto& expected_tensor = expected_data.data_.Get<Tensor>();
+  auto* expected = expected_tensor.template Data<uint8_t>();
+  auto* output = output_tensor.template Data<uint8_t>();
+  auto size = output_tensor.Shape().Size();
+
+  if (expected_data.sort_output_) {
+    // if order can be jumbled in the output of an operator, sort both the expected and output buffers prior to
+    // comparison this is a "best-effort" algo and should satisfy the requirement for the few ops that do require this
+    // support without investing in a more sophisticated infrastructure for the same
+    sort_expected_and_actual_buffers<uint8_t>(expected, output, size);
+  }
+
+  for (int i = 0; i < size; ++i) {
+    EXPECT_NEAR(expected[i], output[i], 1) << "i:" << i << ", provider_type: " << provider_type;
+  }
+}
+
+template <>
 void Check<double>(const OpTester::Data& expected_data,
                    const Tensor& output_tensor,
                    const std::string& provider_type) {
@@ -742,6 +780,7 @@ void OpTester::Run(
     // Run the model
     static const std::string all_provider_types[] = {
         kCpuExecutionProvider,
+        kVsiNpuExecutionProvider,
         kCudaExecutionProvider,
         kDnnlExecutionProvider,
         kNGraphExecutionProvider,
@@ -839,6 +878,7 @@ void OpTester::Run(
               provider_type == onnxruntime::kOpenVINOExecutionProvider ||
               provider_type == onnxruntime::kTensorrtExecutionProvider ||
               provider_type == onnxruntime::kNupharExecutionProvider ||
+              provider_type == onnxruntime::kVsiNpuExecutionProvider ||
               provider_type == onnxruntime::kNnapiExecutionProvider)
             continue;
           auto reg = execution_provider->GetKernelRegistry();

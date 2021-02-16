@@ -452,9 +452,21 @@ EXECUTE_RESULT DataRunner::RunTaskImpl(size_t task_id) {
     const std::string& output_name = output.first;
     auto iter = name_fetch_output_map.find(output_name);
     if (iter == name_fetch_output_map.end()) {
-      res = EXECUTE_RESULT::INVALID_GRAPH;
-      LOGF_DEFAULT(ERROR, "cannot find %s in the outputs", output_name.c_str());
-      break;
+      std::string output_name1 = "";
+      for (auto kv : name_fetch_output_map)
+      {
+        if (kv.first.find(output_name) != std::string::npos)
+        {
+          output_name1 = kv.first;
+          break;
+        }
+      }
+      iter = name_fetch_output_map.find(output_name1);
+      if (iter == name_fetch_output_map.end()) {
+        res = EXECUTE_RESULT::INVALID_GRAPH;
+        LOGF_DEFAULT(ERROR, "cannot find %s in the outputs", output_name.c_str());
+        break;
+      }
     }
     OrtValue* actual_output_value = iter->second;
     std::pair<COMPARE_RESULT, std::string> ret =

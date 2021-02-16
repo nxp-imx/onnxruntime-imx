@@ -465,126 +465,105 @@ void VsiOpCallbackInfoGemm::Setup(const onnxruntime::Node* node,
     auto input_defs = node->InputDefs();
     auto output_defs = node->OutputDefs();
 
-    const std::string matmul_add_name = "@@matmuladdTmp";
-    const std::string trans_add_name = "@@transaddTmp";
-    const std::string mul_a_input_add_name = "@@mulainputaddTmp";
-    const std::string mul_a_output_add_name = "@@mulaoutputaddTmp";
-    const std::string mul_b_input_add_name = "@@mulbinputaddTmp";
-    const std::string mul_b_output_add_name = "@@mulboutputaddTmp";
-
-    int64_t is_trans{0};
-    bool is_scale{false};
-    bool is_add{false};
-
     int64_t transB{0};
-    vsi_npu::GetAttr<int64_t>(attrs, "transB", &transB).IsOK();
-    if (transB == 1) is_trans = true;
+     vsi_npu::GetAttr<int64_t>(attrs, "transB", &transB).IsOK();
+    bool is_transB = (transB == 1);
 
     float alpha{1.0};
     float beta{1.0};
     vsi_npu::GetAttr<float>(attrs, "alpha", &alpha).IsOK();
     vsi_npu::GetAttr<float>(attrs, "beta", &beta).IsOK();
-    if (alpha != 1.0 || beta != 1.0) is_scale = true;
 
-    if (input_defs.size() == 3) is_add = true;
+    bool has_alpha = (alpha != 1.0);
+    bool has_beta = (beta != 1.0);
+    bool has_C = (input_defs.size() == 3);
 
-    uint32_t trans_input_operand_id{0};
-    uint32_t trans_output_operand_id{0};
-    uint32_t mul_a_input_operand_id_a{0};
+    const std::string trans_b_add_name = "@@trans_addTmp";
+    const std::string matmul_add_name = "@@matmul_addTmp";
+    const std::string mul_a_input_add_name = "@@mul_a_input_addTmp";
+    const std::string mul_a_output_add_name = "@@mul_a_output_addTmp";
+    const std::string mul_b_input_add_name = "@@mul_b_input_addTmp";
+    const std::string mul_b_output_add_name = "@@mul_b_output_addTmp";
+
+    uint32_t trans_a_output_operand_id{0};
+    uint32_t trans_b_input_operand_id{0};
+    uint32_t trans_b_output_operand_id{0};
+    uint32_t add_output_operand_id{0};
+    uint32_t matmul_output_operand_id{0};
     uint32_t mul_a_input_operand_id_b{0};
+    uint32_t mul_a_output_operand_id{0};
     uint32_t mul_b_input_operand_id_a{0};
     uint32_t mul_b_input_operand_id_b{0};
-    uint32_t mul_a_output_operand_id{0};
     uint32_t mul_b_output_operand_id{0};
-    uint32_t add_input_operand_id_a{0};
-    uint32_t add_input_operand_id_b{0};
-    uint32_t add_output_operand_id{0};
-    uint32_t matmul_input_operand_id_a{0};
-    uint32_t matmul_input_operand_id_b{0};
-    uint32_t matmul_output_operand_id{0};
 
-    if (is_trans && is_scale && is_add) {
-        // TO DO
-    } else if (!is_trans && is_scale && is_add) {
-        matmul_input_operand_id_a = model->AddOperand(input_defs[0], graph_viewer);
-        matmul_input_operand_id_b = model->AddOperand(input_defs[1], graph_viewer);
-        matmul_output_operand_id = model->AddOperand(output_defs[0]->Name() + matmul_add_name);
-        mul_a_input_operand_id_a = matmul_output_operand_id;
-        mul_a_input_operand_id_b = model->AddOperand(input_defs[0]->Name() + mul_a_input_add_name);
-        mul_a_output_operand_id = model->AddOperand(output_defs[0]->Name() + mul_a_output_add_name);
-        mul_b_input_operand_id_a = model->AddOperand(input_defs[2], graph_viewer);
-        mul_b_input_operand_id_b = model->AddOperand(input_defs[2]->Name() + mul_b_input_add_name);
-        mul_b_output_operand_id = model->AddOperand(output_defs[0]->Name() + mul_b_output_add_name);
-        add_input_operand_id_a = mul_a_output_operand_id;
-        add_input_operand_id_b = mul_b_output_operand_id;
-        add_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
-
-        std::vector<uint32_t> matmul_operand_ids{
-            matmul_input_operand_id_a, matmul_input_operand_id_b, matmul_output_operand_id};
-        std::vector<uint32_t> add_operand_ids{
-            add_input_operand_id_a, add_input_operand_id_b, add_output_operand_id};
-        std::vector<uint32_t> mul_a_operand_ids{
-            mul_a_input_operand_id_a, mul_a_input_operand_id_b, mul_a_output_operand_id};
-        std::vector<uint32_t> mul_b_operand_ids{
-            mul_b_input_operand_id_a, mul_b_input_operand_id_b, mul_b_output_operand_id};
-        std::vector<std::string> mul_add_names{mul_a_input_add_name,
+    std::vector<std::string> mul_add_names{mul_a_input_add_name,
                                                mul_a_output_add_name,
                                                mul_b_input_add_name,
                                                mul_b_output_add_name};
 
-        AddMatmulOp(node, model, matmul_operand_ids);
-        AddMulOp(node, model, mul_a_operand_ids, mul_add_names, 0);
-        AddMulOp(node, model, mul_b_operand_ids, mul_add_names, 1);
-        AddAddOp(node, model, add_operand_ids, matmul_add_name);
-    } else if (is_trans && !is_scale && is_add) {
-        trans_input_operand_id = model->AddOperand(input_defs[1], graph_viewer);
-        trans_output_operand_id = model->AddOperand(input_defs[1]->Name() + trans_add_name);
-        matmul_input_operand_id_a = model->AddOperand(input_defs[0], graph_viewer);
-        matmul_input_operand_id_b = trans_output_operand_id;
+    // NNRT support transA, but not support transB
+    trans_a_output_operand_id = model->AddOperand(input_defs[0], graph_viewer);
+
+    if (is_transB) {
+        trans_b_input_operand_id = model->AddOperand(input_defs[1], graph_viewer);
+        trans_b_output_operand_id = model->AddOperand(input_defs[1]->Name() + trans_b_add_name);
+        std::vector<uint32_t> trans_operand_ids{trans_b_input_operand_id, trans_b_output_operand_id};
+        AddTransposeOp(node, model, trans_operand_ids, trans_b_add_name);
+    }
+    else {
+        trans_b_output_operand_id = model->AddOperand(input_defs[1], graph_viewer);
+    }
+
+    add_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
+    if (has_C) {
         matmul_output_operand_id = model->AddOperand(output_defs[0]->Name() + matmul_add_name);
-        add_input_operand_id_a = matmul_output_operand_id;
-        add_input_operand_id_b = model->AddOperand(input_defs[2], graph_viewer);
-        add_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
-
         std::vector<uint32_t> matmul_operand_ids{
-            matmul_input_operand_id_a, matmul_input_operand_id_b, matmul_output_operand_id};
+            trans_a_output_operand_id, trans_b_output_operand_id, matmul_output_operand_id};
+        AddMatmulOp(node, model, matmul_operand_ids);
+
+        if (has_alpha) {
+            mul_a_input_operand_id_b = model->AddOperand(input_defs[0]->Name() + mul_a_input_add_name);
+            mul_a_output_operand_id = model->AddOperand(output_defs[0]->Name() + mul_a_output_add_name);
+            std::vector<uint32_t> mul_a_operand_ids{
+                matmul_output_operand_id, mul_a_input_operand_id_b, mul_a_output_operand_id};
+            AddMulOp(node, model, mul_a_operand_ids, mul_add_names, 0);
+        }
+        else {
+            mul_a_output_operand_id = matmul_output_operand_id;
+        }
+
+        if (has_beta) {
+            mul_b_input_operand_id_a = model->AddOperand(input_defs[2], graph_viewer);
+            mul_b_input_operand_id_b = model->AddOperand(input_defs[0]->Name() + mul_b_input_add_name);
+            mul_b_output_operand_id = model->AddOperand(output_defs[0]->Name() + mul_b_output_add_name);
+            std::vector<uint32_t> mul_b_operand_ids{
+                mul_b_input_operand_id_a, mul_b_input_operand_id_b, mul_b_output_operand_id};
+            AddMulOp(node, model, mul_b_operand_ids, mul_add_names, 1);
+        }
+        else {
+            mul_b_output_operand_id = model->AddOperand(input_defs[2], graph_viewer);
+        }
+
         std::vector<uint32_t> add_operand_ids{
-            add_input_operand_id_a, add_input_operand_id_b, add_output_operand_id};
-        std::vector<uint32_t> trans_operand_ids{trans_input_operand_id, trans_output_operand_id};
-
-        AddTransposeOp(node, model, trans_operand_ids, trans_add_name);
-        AddMatmulOp(node, model, matmul_operand_ids);
+            mul_a_output_operand_id, mul_b_output_operand_id, add_output_operand_id};
         AddAddOp(node, model, add_operand_ids, matmul_add_name);
-    } else if (is_trans && is_scale && !is_add) {
-        // TO DO
-    } else if (!is_trans && !is_scale && is_add) {
-        matmul_input_operand_id_a = model->AddOperand(input_defs[0], graph_viewer);
-        matmul_input_operand_id_b = model->AddOperand(input_defs[1], graph_viewer);
-        matmul_output_operand_id = model->AddOperand(output_defs[0]->Name() + matmul_add_name);
-        add_input_operand_id_a = matmul_output_operand_id;
-        add_input_operand_id_b = model->AddOperand(input_defs[2], graph_viewer);
-        add_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
+    } else {
+        if (has_alpha) {
+            matmul_output_operand_id = model->AddOperand(output_defs[0]->Name() + matmul_add_name);
+                std::vector<uint32_t> matmul_operand_ids{
+            trans_a_output_operand_id, trans_b_output_operand_id, matmul_output_operand_id};
+            AddMatmulOp(node, model, matmul_operand_ids);
 
-        std::vector<uint32_t> matmul_operand_ids{
-            matmul_input_operand_id_a, matmul_input_operand_id_b, matmul_output_operand_id};
-        std::vector<uint32_t> add_operand_ids{
-            add_input_operand_id_a, add_input_operand_id_b, add_output_operand_id};
-
-        AddMatmulOp(node, model, matmul_operand_ids);
-        AddAddOp(node, model, add_operand_ids, matmul_add_name);
-    } else if (!is_trans && is_scale && !is_add) {
-        // TO DO
-    } else if (is_trans && !is_scale && !is_add) {
-        // TO DO
-    } else if (!is_trans && !is_scale && !is_add) {
-        matmul_input_operand_id_a = model->AddOperand(input_defs[0], graph_viewer);
-        matmul_input_operand_id_b = model->AddOperand(input_defs[1], graph_viewer);
-        matmul_output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
-
-        std::vector<uint32_t> matmul_operand_ids{
-            matmul_input_operand_id_a, matmul_input_operand_id_b, matmul_output_operand_id};
-
-        AddMatmulOp(node, model, matmul_operand_ids);
+            mul_a_input_operand_id_b = model->AddOperand(input_defs[0]->Name() + mul_a_input_add_name);
+            std::vector<uint32_t> mul_a_operand_ids{
+                matmul_output_operand_id, mul_a_input_operand_id_b, add_output_operand_id};
+            AddMulOp(node, model, mul_a_operand_ids, mul_add_names, 0);
+        }
+        else {
+            std::vector<uint32_t> matmul_operand_ids{
+                trans_a_output_operand_id, trans_b_output_operand_id, add_output_operand_id};
+            AddMatmulOp(node, model, matmul_operand_ids);
+        }
     }
 }
 
@@ -724,14 +703,6 @@ void VsiOpCallbackInfoUpsample::Setup(const Node* node,
         op->outputWidth = outputWidth;
         model->AddOperation(op, nullptr);
         compute_info->op = op;
-    }
-
-    const auto* type_proto = input_defs[0]->TypeAsProto();
-    if (type_proto->tensor_type().elem_type() ==
-        ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT8) {
-        auto tensor = model->GetModelPtr()->operand(input_operand_id);
-        tensor->quant.scalar.zeroPoint = 0;
-        tensor->quant.scalar.scale = 1.0f;
     }
 }
 
