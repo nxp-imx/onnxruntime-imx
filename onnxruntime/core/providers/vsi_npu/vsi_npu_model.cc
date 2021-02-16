@@ -40,6 +40,20 @@ void ModelShell::AddOperandHelper(const NodeArg* node,
         type = vsi_npu::convertToOperandType(node->Type());
     }
     operand->type = type;
+    std::array<nnrt::OperandType, 5> quant_type = {
+        nnrt::OperandType::TENSOR_QUANT8_ASYMM,
+        nnrt::OperandType::TENSOR_QUANT8_SYMM,
+        nnrt::OperandType::TENSOR_QUANT16_ASYMM,
+        nnrt::OperandType::TENSOR_QUANT16_SYMM,
+    };
+    bool is_quant_type = std::any_of(
+            quant_type.begin(), quant_type.end(), [operand](nnrt::OperandType dt) { return operand->type == dt; });
+
+    if (is_quant_type) {
+        if (operand->quant.scalar.scale == 0.0f) {
+            operand->quant.scalar.scale = 1.0f;
+        }
+    }
 
     const std::vector<int64_t>& dims = shape.GetDims();
     for (auto dim : dims) {

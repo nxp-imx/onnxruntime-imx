@@ -277,21 +277,5 @@ void VsiOpCallbackInfoTranspose::Setup(const Node* node,
     }
 
     model->AddOperation(op, nullptr);
-
-    //add the zp and scale to int8 and uint8 tensor
-    //ovxlib will handle type transformation from int8 to uint8
-    const auto* type_proto = input_defs[0]->TypeAsProto();
-    if (type_proto->tensor_type().elem_type() ==
-            ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_INT8 ||
-        type_proto->tensor_type().elem_type() ==
-            ONNX_NAMESPACE::TensorProto_DataType::TensorProto_DataType_UINT8) {
-        auto input_tensor = model->GetModelPtr()->operand(input_operand_id);
-        input_tensor->quant.scalar.zeroPoint = 0;
-        input_tensor->quant.scalar.scale = 1.0f;
-
-        auto output_tensor = model->GetModelPtr()->operand(output_operand_id);
-        output_tensor->quant.scalar.zeroPoint = 0;
-        output_tensor->quant.scalar.scale = 1.0f;
-    }
 }
 }  // namespace onnxruntime
