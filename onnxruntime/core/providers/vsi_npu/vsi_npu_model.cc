@@ -42,6 +42,7 @@ void ModelShell::AddOperandHelper(const NodeArg* node,
     operand->type = type;
     std::array<nnrt::OperandType, 5> quant_type = {
         nnrt::OperandType::TENSOR_QUANT8_ASYMM,
+        nnrt::OperandType::TENSOR_QUANT8_ASYMM_SIGNED,
         nnrt::OperandType::TENSOR_QUANT8_SYMM,
         nnrt::OperandType::TENSOR_QUANT16_ASYMM,
         nnrt::OperandType::TENSOR_QUANT16_SYMM,
