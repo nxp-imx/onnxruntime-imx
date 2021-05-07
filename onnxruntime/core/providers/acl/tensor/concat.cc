@@ -82,7 +82,7 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
   }
 
   arm_compute::NEConcatenateLayer layer;
-#if defined(ACL_2008)
+#if defined(ACL_2008) || defined(ACL_2102)
   layer.configure(const_inputs_vector, &output, 3 - axis_);
 #else
   layer.configure(inputs_vector, &output, 3 - axis_);

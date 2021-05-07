@@ -303,7 +303,7 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
 #endif
         tconv.layer = std::move(layer);
       } else {
-#if defined(ACL_2002) || defined(ACL_2008)
+#if defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
       auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer>();
 #else
       auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer3x3>();
@@ -429,7 +429,7 @@ Status NhwcPoolBase<T>::NhwcPool(OpKernelContext* context, MLAS_POOLING_KIND kin
       ORT_NOT_IMPLEMENTED("Not implemented type of pooling: ", PoolBase::op_name_);
 
     if (PoolBase::pool_attrs_.global_pooling) {
-#if defined(ACL_2002) || defined(ACL_2008)
+#if defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
       layer->configure(tpool.in.get(), tpool.out.get(), arm_compute::PoolingLayerInfo(pool_type, arm_compute::DataLayout::NHWC));
 #else
       layer->configure(tpool.in.get(), tpool.out.get(), arm_compute::PoolingLayerInfo(pool_type));
@@ -469,7 +469,7 @@ Status NhwcPoolBase<T>::NhwcPool(OpKernelContext* context, MLAS_POOLING_KIND kin
       arm_compute::Size2D aclSize(aclKernelShape[0], aclKernelShape[1]);
 
       bool excludePadding = (pool_type == arm_compute::PoolingType::AVG && PoolBase::pool_attrs_.count_include_pad) ? false : true;
-#if defined(ACL_2002) || defined(ACL_2008)
+#if defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
       arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, arm_compute::DataLayout::NHWC, aclPadStride, excludePadding);
 #else
       arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, aclPadStride, excludePadding);
@@ -684,7 +684,7 @@ Status NhwcConcat<T>::Compute(OpKernelContext* ctx) const {
   if(axis_ == 3) // width
     axis = 2;
 
-#if defined(ACL_2008)
+#if defined(ACL_2008) || defined(ACL_2102)
   layer.configure(const_inputs_vector, &output, 3 - axis);
 #else
   layer.configure(inputs_vector, &output, 3 - axis);
