@@ -20,8 +20,9 @@
 // ACL
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
+#if defined(ACL_2008)
 #include "arm_compute/core/AccessWindowStatic.h"
-
+#endif
 // NEON
 #include "arm_compute/runtime/NEON/functions/NEConvolutionLayer.h"
 #include "arm_compute/runtime/NEON/functions/NEDepthwiseConvolutionLayer.h"
@@ -334,6 +335,17 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
                                                 aclPadStride,
                                                 1 /* depth multiplier */,
                                                 arm_compute::Size2D(aclDilation0, dilations[0]));
+#elif defined(ACL_2102)
+      bool optimizable = bool(arm_compute::NEDepthwiseConvolutionLayer::validate(tconv.in->info(),
+                                                                           tconv.k->info(),
+                                                                           (B != nullptr) ? tconv.b->info() : nullptr,
+                                                                           tconv.out->info(),
+                                                                           aclPadStride,
+                                                                           1 /* depth multiplier */,
+                                                                           acl_activ_enabled ?
+                                                                           arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) :
+                                                                           arm_compute::ActivationLayerInfo(),
+                                                                           arm_compute::Size2D(aclDilation0, dilations[0])));
 #endif
 
       if (optimizable) {
@@ -342,7 +354,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer3x3>();
 #elif defined(ACL_1908)
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayerOptimized>();
-#elif defined(ACL_2002) || defined(ACL_2008)
+#elif defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer>();
 #endif
 
@@ -350,7 +362,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
         layer->configure(tconv.in.get(), tconv.k.get(), (B != nullptr) ? tconv.b.get() : nullptr, tconv.out.get(),
                          aclPadStride, 1 /* depth multiplier */,
                          acl_activ_enabled ? arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) : arm_compute::ActivationLayerInfo());
-#elif defined(ACL_1905) || defined(ACL_1908) || defined(ACL_2002) || defined(ACL_2008)
+#elif defined(ACL_1905) || defined(ACL_1908) || defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
         layer->configure(tconv.in.get(), tconv.k.get(), (B != nullptr) ? tconv.b.get() : nullptr, tconv.out.get(),
                          aclPadStride, 1 /* depth multiplier */,
                          acl_activ_enabled ? arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) : arm_compute::ActivationLayerInfo(),
