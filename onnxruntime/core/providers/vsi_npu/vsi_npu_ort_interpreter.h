@@ -107,14 +107,6 @@ bool VsiSupported(const std::string& opName);
 
 std::shared_ptr<VsiOpInfo> getVsiFunc(const std::string& opName);
 
-class VsiOpCallbackInfoRelu : public VsiOpCallbackInfo {
-   public:
-    VsiOpCallbackInfoRelu(){};
-    nnrt::op::OperationPtr createOperationPtr() override {
-        return std::make_shared<nnrt::op::ReluOperation>();
-    };
-};
-
 class VsiOpCallbackInfoConv : public VsiOpCallbackInfo {
    public:
     VsiOpCallbackInfoConv(){};
@@ -170,54 +162,9 @@ class VsiOpCallbackInfoGemm : public VsiOpCallbackInfo {
                      std::vector<uint32_t> matmul_operand_ids);
 };
 
-class VsiOpCallbackInfoLRN : public VsiOpCallbackInfo {
-   public:
-    VsiOpCallbackInfoLRN(){};
-    nnrt::op::OperationPtr createOperationPtr() override {
-        return std::make_shared<nnrt::op::LocalResponseNormOperation>();
-    };
-    void SetupAttribute(nnrt::op::OperationPtr op,
-                        const Node* node,
-                        ModelShellPtr& model,
-                        const onnxruntime::GraphViewer* graph_viewer) override;
-};
-
-class VsiOpCallbackInfoLeakyRelu : public VsiOpCallbackInfo {
-   public:
-    VsiOpCallbackInfoLeakyRelu(){};
-    nnrt::op::OperationPtr createOperationPtr() override {
-        return std::make_shared<nnrt::op::LeakyReluOperation>();
-    };
-    void SetupAttribute(nnrt::op::OperationPtr op,
-                        const Node* node,
-                        ModelShellPtr& model,
-                        const onnxruntime::GraphViewer* graph_viewer) override;
-};
-
 class VsiOpCallbackInfoUpsample : public VsiOpCallbackInfo {
    public:
     VsiOpCallbackInfoUpsample(){};
-    void Setup(const Node*, ModelShellPtr&, const onnxruntime::GraphViewer*) override;
-    Status Compute(FunctionState state,
-                   const OrtApi* api,
-                   OrtKernelContext* context,
-                   NodeIndex node_index) override;
-    bool IsNodeSupported(const onnxruntime::GraphViewer&, const Node*, std::string&) override;
-};
-
-class VsiOpCallbackInfoInstanceNormalization : public VsiOpCallbackInfo {
-   public:
-    VsiOpCallbackInfoInstanceNormalization(){};
-    void Setup(const Node*, ModelShellPtr&, const onnxruntime::GraphViewer*) override;
-    Status Compute(FunctionState state,
-                   const OrtApi* api,
-                   OrtKernelContext* context,
-                   NodeIndex node_index) override;
-};
-
-class VsiOpCallbackInfoBatchNormalization : public VsiOpCallbackInfo {
-   public:
-    VsiOpCallbackInfoBatchNormalization(){};
     void Setup(const Node*, ModelShellPtr&, const onnxruntime::GraphViewer*) override;
     Status Compute(FunctionState state,
                    const OrtApi* api,
@@ -232,14 +179,9 @@ class VsiOpCallbackInfoBatchNormalization : public VsiOpCallbackInfo {
         VsiOpInfo##name() { SetupCallbackInfo(std::make_shared<VsiOpCallbackInfo##name>()); }; \
     };
 
-MAP_OP_COMMON(Relu)
 MAP_OP_COMMON(Conv)
 MAP_OP_COMMON(Softmax)
 MAP_OP_COMMON(Gemm)
-MAP_OP_COMMON(LRN)
-MAP_OP_COMMON(LeakyRelu)
 MAP_OP_COMMON(Upsample)
-MAP_OP_COMMON(InstanceNormalization)
-MAP_OP_COMMON(BatchNormalization)
 
 }  // namespace onnxruntime

@@ -29,7 +29,17 @@ namespace onnxruntime {
 class VsiOpCallbackInfoAbs : public VsiOpCallbackInfo {
    public:
     VsiOpCallbackInfoAbs(){};
-    void Setup(const Node*, ModelShellPtr&, const onnxruntime::GraphViewer*) override;
+    nnrt::op::OperationPtr createOperationPtr() override {
+        return std::make_shared<nnrt::op::AbsOperation>();
+    };
+};
+
+class VsiOpCallbackInfoSqrt : public VsiOpCallbackInfo {
+   public:
+    VsiOpCallbackInfoSqrt(){};
+    nnrt::op::OperationPtr createOperationPtr() override {
+        return std::make_shared<nnrt::op::SqrtOperation>();
+    };
 };
 
 class VsiOpCallbackInfoAdd : public VsiOpCallbackInfo {
@@ -81,6 +91,30 @@ class VsiOpCallbackInfoMatMul : public VsiOpCallbackInfo {
                          std::string& reason) override;
 };
 
+class VsiOpCallbackInfoLog : public VsiOpCallbackInfo {
+   public:
+    VsiOpCallbackInfoLog(){};
+    nnrt::op::OperationPtr createOperationPtr() override {
+        return std::make_shared<nnrt::op::LogOperation>();
+    };
+};
+
+class VsiOpCallbackInfoPow : public VsiOpCallbackInfo {
+   public:
+    VsiOpCallbackInfoPow(){};
+    nnrt::op::OperationPtr createOperationPtr() override {
+        return std::make_shared<nnrt::op::PowOperation>();
+    };
+};
+
+class VsiOpCallbackInfoExp : public VsiOpCallbackInfo {
+   public:
+    VsiOpCallbackInfoExp(){};
+    nnrt::op::OperationPtr createOperationPtr() override {
+        return std::make_shared<nnrt::op::ExpOperation>();
+    };
+};
+
 #define MAP_OP_COMMON(name)                                                                    \
     class VsiOpInfo##name : public VsiOpInfo {                                                 \
        public:                                                                                 \
@@ -88,11 +122,15 @@ class VsiOpCallbackInfoMatMul : public VsiOpCallbackInfo {
     };
 
 MAP_OP_COMMON(Abs)
+MAP_OP_COMMON(Sqrt)
 MAP_OP_COMMON(Add)
 MAP_OP_COMMON(Sub)
 MAP_OP_COMMON(Mul)
 MAP_OP_COMMON(Div)
 MAP_OP_COMMON(Sum)
 MAP_OP_COMMON(MatMul)
+MAP_OP_COMMON(Log)
+MAP_OP_COMMON(Pow)
+MAP_OP_COMMON(Exp)
 
 }  // namespace onnxruntime

@@ -25,27 +25,6 @@
 
 namespace onnxruntime {
 
-void VsiOpCallbackInfoAbs::Setup(const Node* node,
-                                 ModelShellPtr& model,
-                                 const onnxruntime::GraphViewer* graph_viewer) {
-    std::vector<uint32_t> in_operand_ids;
-    auto op = std::make_shared<nnrt::op::AbsOperation>();
-    auto input_defs = node->InputDefs();
-
-    uint32_t input_operand_id = model->AddOperand(input_defs[0], graph_viewer);
-    in_operand_ids.push_back(input_operand_id);
-
-    std::vector<uint32_t> out_operand_ids;
-    auto output_defs = node->OutputDefs();
-    uint32_t output_operand_id = model->AddOperand(output_defs[0], graph_viewer);
-    out_operand_ids.push_back(output_operand_id);
-
-    op->setInputs(in_operand_ids.data(), in_operand_ids.size());
-    op->setOutputs(out_operand_ids.data(), out_operand_ids.size());
-
-    model->AddOperation(op, nullptr);
-}
-
 void VsiOpCallbackInfoMatMul::Setup(const Node* node,
                                     ModelShellPtr& model,
                                     const onnxruntime::GraphViewer* graph_viewer) {
