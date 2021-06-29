@@ -385,6 +385,10 @@ if(onnxruntime_USE_DNNL)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_dnnl onnxruntime_providers_shared)
 endif()
 
+if(onnxruntime_USE_VSI_NPU)
+  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_vsi_npu)
+endif()
+
 if(onnxruntime_USE_OPENVINO)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_openvino onnxruntime_providers_shared)
 endif()
@@ -450,6 +454,7 @@ set(ONNXRUNTIME_TEST_LIBS
     ${PROVIDERS_CUDA}
     # TENSORRT, DNNL, and OpenVINO are explicitly linked at runtime
     ${PROVIDERS_MIGRAPHX}
+    ${PROVIDERS_VSI_NPU}
     ${PROVIDERS_NUPHAR}
     ${PROVIDERS_NNAPI}
     ${PROVIDERS_RKNPU}
@@ -531,6 +536,9 @@ onnxruntime_add_include_to_target(onnxruntime_test_utils onnxruntime_common onnx
 
 if (onnxruntime_USE_DNNL)
   target_compile_definitions(onnxruntime_test_utils PUBLIC USE_DNNL=1)
+endif()
+if (onnxruntime_USE_VSI_NPU)
+  target_compile_definitions(onnxruntime_test_utils PUBLIC USE_VSI_NPU=1)
 endif()
 if (onnxruntime_USE_DML)
   target_add_dml(onnxruntime_test_utils)

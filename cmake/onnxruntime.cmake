@@ -102,6 +102,7 @@ target_link_libraries(onnxruntime PRIVATE
     ${PROVIDERS_NNAPI}
     ${PROVIDERS_RKNPU}
     ${PROVIDERS_MIGRAPHX}
+    ${PROVIDERS_VSI_NPU}
     ${PROVIDERS_NUPHAR}
     ${PROVIDERS_VITISAI}
     ${PROVIDERS_DML}

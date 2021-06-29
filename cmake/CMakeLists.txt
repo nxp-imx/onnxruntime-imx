@@ -59,6 +59,7 @@ option(onnxruntime_ENABLE_MEMLEAK_CHECKER "Experimental: Enable memory leak chec
 option(onnxruntime_USE_CUDA "Build with CUDA support" OFF)
 option(onnxruntime_ENABLE_CUDA_LINE_NUMBER_INFO "When building with CUDA support, generate device code line number information." OFF)
 option(onnxruntime_USE_OPENVINO "Build with OpenVINO support" OFF)
+option(onnxruntime_USE_VSI_NPU "Build with Vsi Npu support" OFF)
 option(onnxruntime_USE_COREML "Build with CoreML support" OFF)
 option(onnxruntime_USE_NNAPI_BUILTIN "Build with builtin NNAPI lib for Android NNAPI support" OFF)
 option(onnxruntime_USE_RKNPU "Build with RKNPU support" OFF)
@@ -1135,6 +1136,10 @@ if(onnxruntime_USE_OPENVINO)
     add_definitions(-DDEVICE_NAME="${onnxruntime_USE_OPENVINO_DEVICE}")
   endif()
 
+endif()
+
+if(onnxruntime_USE_VSI_NPU)
+  add_definitions(-DUSE_VSI_NPU=1)
 endif()
 
 if (onnxruntime_USE_VITISAI)

@@ -28,6 +28,7 @@ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Rknpu(
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Tensorrt(const OrtTensorRTProviderOptions* params);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_MIGraphX(int device_id);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ACL(int use_arena);
+std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_VsiNpu(int device_id);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ArmNN(int use_arena);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_CoreML(uint32_t);
 
@@ -62,6 +63,14 @@ std::unique_ptr<IExecutionProvider> DefaultOpenVINOExecutionProvider() {
 #ifdef USE_OPENVINO
   OrtOpenVINOProviderOptions params;
   return CreateExecutionProviderFactory_OpenVINO(&params)->CreateProvider();
+#else
+  return nullptr;
+#endif
+}
+
+std::unique_ptr<IExecutionProvider> DefaultVsiNpuExecutionProvider() {
+#ifdef USE_VSI_NPU
+  return CreateExecutionProviderFactory_VsiNpu(0)->CreateProvider();
 #else
   return nullptr;
 #endif

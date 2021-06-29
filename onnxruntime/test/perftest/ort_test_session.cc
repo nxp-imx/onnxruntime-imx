@@ -155,6 +155,12 @@ OnnxRuntimeTestSession::OnnxRuntimeTestSession(Ort::Env& env, std::random_device
 #else
     ORT_THROW("Acl is not supported in this build\n");
 #endif
+  } else if (provider_name == onnxruntime::kVsiNpuExecutionProvider) {
+#ifdef USE_VSI_NPU
+    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(session_options, 0));
+#else
+    ORT_THROW("VSI_NPU is not supported in this build\n");
+#endif
   } else if (provider_name == onnxruntime::kArmNNExecutionProvider) {
 #ifdef USE_ARMNN
     Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_ArmNN(session_options,
