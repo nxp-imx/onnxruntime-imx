@@ -932,13 +932,6 @@ template std::unique_ptr<Tensor> ReduceCompute<MLFloat16, CUDNN_REDUCE_TENSOR_NO
     bool keep_dims, bool calculate_log, bool calculate_sqt, bool log_sum_exp,
     bool fast_reduction, const TensorShape* input_shape_override);
 
-template Tensor ReduceCompute<MLFloat16, CUDNN_REDUCE_TENSOR_NO_INDICES>(
-    CUDAExecutionProvider& cuda_ep, cudnnReduceTensorOp_t cudnn_reduce_op,
-    AllocatorPtr allocator,
-    const Tensor& input, const std::vector<int64_t>& axes,
-    bool keep_dims, bool calculate_log, bool calculate_sqt, bool log_sum_exp,
-    bool fast_reduction, const TensorShape* input_shape_override);
-
 }  // namespace ReductionOps
 
 #if defined(CUDA_VERSION) && CUDA_VERSION >= 11000
