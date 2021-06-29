@@ -392,6 +392,8 @@ def parse_arguments():
     parser.add_argument(
         "--use_openmp", action='store_true', help="Build with OpenMP")
     parser.add_argument(
+        "--use_vsi_npu", action='store_true', help="Build with VSI NPU.")
+    parser.add_argument(
         "--enable_msinternal", action="store_true",
         help="Enable for Microsoft internal builds only.")
     parser.add_argument("--llvm_path", help="Path to llvm dir")
@@ -446,7 +448,7 @@ def parse_arguments():
         "--use_telemetry", action='store_true',
         help="Only official builds can set this flag to enable telemetry.")
     parser.add_argument(
-        "--use_cross_compile", action='store_true', help="Use corss compile.")
+        "--use_cross_compile", action='store_true', help="Use cross compile.")
     parser.add_argument(
         "--cmake_toolchain", help="Path to cmake tool chain.")
     parser.add_argument(
@@ -557,7 +559,8 @@ def get_linux_distro():
 
 def is_ubuntu_1604():
     dist, ver = get_linux_distro()
-    return dist == 'Ubuntu' and ver.startswith('16.04')
+    # return dist == 'Ubuntu' and ver.startswith('16.04')
+    return True
 
 
 def get_config_build_dir(build_dir, config):
@@ -682,6 +685,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
         "-Donnxruntime_DNNL_OPENCL_ROOT=" + (args.dnnl_opencl_root if args.use_dnnl else ""),
         "-Donnxruntime_USE_NNAPI_BUILTIN=" + ("ON" if args.use_nnapi else "OFF"),
         "-Donnxruntime_USE_RKNPU=" + ("ON" if args.use_rknpu else "OFF"),
+        "-Donnxruntime_USE_VSI_NPU=" + ("ON" if args.use_vsi_npu else "OFF"),
         "-Donnxruntime_USE_OPENMP=" + (
             "ON" if args.use_openmp and not (
                 args.use_nnapi or
@@ -811,6 +815,9 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
     if args.use_cuda and not is_windows():
         nvml_stub_path = cuda_home + "/lib64/stubs"
         cmake_args += ["-DCUDA_CUDA_LIBRARY=" + nvml_stub_path]
+
+    if args.use_cross_compile:
+        cmake_args += ["-DCMAKE_TOOLCHAIN_FILE=" + args.cmake_toolchain]
 
     if args.use_preinstalled_eigen:
         cmake_args += ["-Donnxruntime_USE_PREINSTALLED_EIGEN=ON",
@@ -2045,9 +2052,8 @@ def main():
 
         if is_ubuntu_1604():
             if (args.arm or args.arm64):
-                raise BuildError(
-                    "Only Windows ARM(64) cross-compiled builds supported "
-                    "currently through this script")
+                path_to_protoc_exe = build_protoc_for_host(
+                    cmake_path, source_dir, build_dir, args)
             if not is_docker() and not args.use_acl and not args.use_armnn:
                 install_python_deps()
         if args.enable_pybind and is_windows():
