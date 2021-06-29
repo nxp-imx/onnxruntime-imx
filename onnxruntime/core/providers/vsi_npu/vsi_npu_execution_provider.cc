@@ -38,7 +38,7 @@ VsiNpuExecutionProvider::VsiNpuExecutionProvider(const VsiNpuExecutionProviderIn
     : IExecutionProvider{onnxruntime::kVsiNpuExecutionProvider}, device_id_(info.device_id) {
     AllocatorCreationInfo default_memory_info{
         [](int) {
-            return onnxruntime::make_unique<CPUAllocator>(
+            return std::make_unique<CPUAllocator>(
                 OrtMemoryInfo(VSI_NPU, OrtAllocatorType::OrtDeviceAllocator));
     }};
 
@@ -46,7 +46,7 @@ VsiNpuExecutionProvider::VsiNpuExecutionProvider(const VsiNpuExecutionProviderIn
 
     AllocatorCreationInfo cpu_memory_info{
         [](int) {
-            return onnxruntime::make_unique<CPUAllocator>(
+            return std::make_unique<CPUAllocator>(
                 OrtMemoryInfo(VSI_NPU, OrtAllocatorType::OrtDeviceAllocator, OrtDevice(), 0, OrtMemTypeCPUOutput));
     }};
 
@@ -130,17 +130,17 @@ static void AppendClusterToSubGraph(const std::vector<NodeIndex>& nodes,
                                     std::vector<std::unique_ptr<ComputeCapability>>& result) {
     static size_t op_counter = 0;
 
-    auto meta_def = onnxruntime::make_unique<IndexedSubGraph::MetaDef>();
+    auto meta_def = std::make_unique<IndexedSubGraph::MetaDef>();
     meta_def->name = "VsiNpuCustomOp_" + std::to_string(++op_counter);
     meta_def->since_version = 1;
     meta_def->status = ONNX_NAMESPACE::EXPERIMENTAL;
     meta_def->inputs = inputs;
     meta_def->outputs = outputs;
 
-    std::unique_ptr<IndexedSubGraph> sub_graph = onnxruntime::make_unique<IndexedSubGraph>();
+    std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
     sub_graph->nodes = nodes;
     sub_graph->SetMetaDef(std::move(meta_def));
-    result.push_back(onnxruntime::make_unique<ComputeCapability>(std::move(sub_graph)));
+    result.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
 }
 
 static std::vector<NodeIndex> GetUnsupportedNodeIndices(

@@ -392,7 +392,14 @@ def parse_arguments():
     parser.add_argument(
         "--use_openmp", action='store_true', help="Build with OpenMP")
     parser.add_argument(
-        "--use_vsi_npu", action='store_true', help="Build with VSI NPU.")
+        "--use_vsi_npu", action='store_true',
+        help="Enable VsiNpu Execution Provider.")
+    parser.add_argument(
+        "--ovxlib_include",
+        help="Path to OVXLIB header files required by the VsiNpu EP.")
+    parser.add_argument(
+        "--vsi_npu_libs",
+        help="Path to OVXLIB and NN RT libraries required by the VsiNpu EP.")
     parser.add_argument(
         "--enable_msinternal", action="store_true",
         help="Enable for Microsoft internal builds only.")
@@ -653,7 +660,8 @@ def use_dev_mode(args):
 
 def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home, rocm_home,
                         mpi_home, nccl_home, tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs,
-                        path_to_protoc_exe, configs, cmake_extra_defines, args, cmake_extra_args):
+                        ovxlib_include, vsi_npu_libs, path_to_protoc_exe, configs, cmake_extra_defines, args,
+                        cmake_extra_args):
     log.info("Generating CMake build tree")
     cmake_dir = os.path.join(source_dir, "cmake")
     cmake_args = [
@@ -766,6 +774,12 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
 
     if armnn_libs and os.path.exists(armnn_libs):
         cmake_args += ["-Donnxruntime_ARMNN_LIBS=" + armnn_libs]
+
+    if ovxlib_include and os.path.exists(ovxlib_include):
+        cmake_args += ["-Donnxruntime_OVXLIB_INCLUDE=" + ovxlib_include]
+
+    if vsi_npu_libs and os.path.exists(vsi_npu_libs):
+        cmake_args += ["-Donnxruntime_VSI_NPU_LIBS=" + vsi_npu_libs]
 
     if mpi_home and os.path.exists(mpi_home):
         if args.use_mpi:
@@ -1919,6 +1933,9 @@ def main():
     armnn_home = args.armnn_home
     armnn_libs = args.armnn_libs
 
+    ovxlib_include = args.ovxlib_include
+    vsi_npu_libs = args.vsi_npu_libs
+
     # if using tensorrt, setup tensorrt paths
     tensorrt_home = setup_tensorrt_vars(args)
 
@@ -2070,7 +2087,7 @@ def main():
             args.rocm_version = ""
         generate_build_tree(
             cmake_path, source_dir, build_dir, cuda_home, cudnn_home, rocm_home, mpi_home, nccl_home,
-            tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs,
+            tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs, ovxlib_include, vsi_npu_libs,
             path_to_protoc_exe, configs, cmake_extra_defines, args, cmake_extra_args)
 
     if args.clean:

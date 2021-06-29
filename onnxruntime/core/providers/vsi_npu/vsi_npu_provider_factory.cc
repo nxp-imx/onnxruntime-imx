@@ -42,7 +42,7 @@ struct VsiNpuProviderFactory : IExecutionProviderFactory {
 std::unique_ptr<IExecutionProvider> VsiNpuProviderFactory::CreateProvider() {
     VsiNpuExecutionProviderInfo info;
     info.device_id = device_id_;
-    return onnxruntime::make_unique<VsiNpuExecutionProvider>(info);
+    return std::make_unique<VsiNpuExecutionProvider>(info);
 }
 
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_VsiNpu(int device_id) {

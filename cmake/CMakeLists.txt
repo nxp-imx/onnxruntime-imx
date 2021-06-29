@@ -1368,8 +1368,19 @@ if(onnxruntime_USE_OPENVINO)
 
 endif()
 
+# VsiNpu
 if(onnxruntime_USE_VSI_NPU)
   add_definitions(-DUSE_VSI_NPU=1)
+
+  if (NOT ${onnxruntime_VSI_NPU_LIBS} STREQUAL "")
+    find_library(NNRT_LIBRARY NAMES nnrt
+                     PATHS ${onnxruntime_VSI_NPU_LIBS}
+                     NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+
+    link_libraries(nnrt)
+  endif()
+
+  list(APPEND onnxruntime_EXTERNAL_LIBRARIES nnrt)
 endif()
 
 if (onnxruntime_USE_VITISAI)
