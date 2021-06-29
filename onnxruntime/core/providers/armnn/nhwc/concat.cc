@@ -2,12 +2,14 @@
 // Copyright 2020 NXP
 // Licensed under the MIT License.
 
-#include "core/providers/armnn/tensor/concat.h"
+#include "core/providers/armnn/nhwc/concat.h"
 #include "core/providers/common.h"
 #include "core/framework/TensorSeq.h"
 #include "arm_compute/core/utils/misc/ShapeCalculator.h"
 
 #include "core/providers/armnn/armnn_fwd.h"
+
+#include <iostream>
 
 #define PREF_DIM 4
 
@@ -15,12 +17,12 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T>
-thread_local Runtime* Concat<T>::rt = nullptr;
+thread_local Runtime* NHWCConcat<T>::rt = nullptr;
 
 template <typename T>
-Status Concat<T>::Compute(OpKernelContext* ctx) const {
+Status NHWCConcat<T>::Compute(OpKernelContext* ctx) const {
 
-  Concat<T>::initRuntime();
+  NHWCConcat<T>::initRuntime();
 
   // Number of input tensors to concatenate
   auto input_count = Node().InputArgCount().front();
@@ -28,14 +30,9 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
   // Hold pointers to the input tensors to be used in the PrepareForCompute() step
   std::vector<const Tensor*> input_tensors;
   input_tensors.reserve(input_count);
-
-  LOGS_DEFAULT(VERBOSE) << "Concat ArmNN:";
   for (int i = 0; i < input_count; ++i) {
     input_tensors.push_back(ctx->Input<Tensor>(i));
-    LOGS_DEFAULT(VERBOSE) << "X[" << i << "]: " << ctx->Input<Tensor>(i)->Shape().ToString().c_str();
   }
-  LOGS_DEFAULT(VERBOSE) << "axis: " << axis_;
-  LOGS_DEFAULT(VERBOSE) << std::endl;
 
   std::vector<int64_t> output_dims = input_tensors[0]->Shape().GetDims();
 
@@ -58,17 +55,23 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
     output_dims.insert(output_dims.begin() + axis_, static_cast<int64_t>(input_count));
   }
 
-  if(output_dims.size() > 4 || axis_ > 3) {
-    LOGS_DEFAULT(WARNING) << "ArmNN does not have support for tensors with 4 or more dimensions; defaulting to cpu implementation";
+  int axis = axis_;
+  if(axis_ == 1) // channel
+    axis = 3;
+  if(axis_ == 2) // height
+    axis = 1;
+  if(axis_ == 3) // width
+    axis = 2;
+
+  if(output_dims.size() > 4 || axis_ > 3)
     return onnxruntime::Concat::Compute(ctx);
-  }
 
   TensorShape output_shape(output_dims);
   Tensor* Y = ctx->Output(0, output_shape);
 
   armnn::NetworkId* pNetworkId;
-  ConcatIterator it = Concat::rt->layers.find((OpKernel*)this);
-  if (it == Concat::rt->layers.end()) {
+  ConcatIterator it = NHWCConcat::rt->layers.find((OpKernel*)this);
+  if (it == NHWCConcat::rt->layers.end()) {
 
     armnn::NetworkId networkId;
     armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
@@ -76,28 +79,39 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
     const unsigned int supportedNumDims = 4;
     unsigned int numConcatViews = input_count;
     armnn::OriginsDescriptor concatDescriptor(static_cast<uint32_t>(numConcatViews), supportedNumDims);
-    concatDescriptor.SetConcatAxis(axis_);
+    concatDescriptor.SetConcatAxis(axis);
     armnn::TensorShape mergeDims(supportedNumDims);
     unsigned int mergeDim = 0;
     for (unsigned int viewIndex = 0; viewIndex < numConcatViews; ++viewIndex) {
       // Copy the input tensor shape to mergeDimSizes and initialize the view origin coordinates for the current input
       mergeDims = ArmNNTensorShape(input_tensors[viewIndex]->Shape(), PREF_DIM);
+      mergeDims = { mergeDims[0],
+                    mergeDims[2],
+                    mergeDims[3],
+                    mergeDims[1] };
+
       unsigned int* viewOrigin = const_cast<unsigned int*>(concatDescriptor.GetViewOrigin(viewIndex));
       std::fill(viewOrigin, viewOrigin + supportedNumDims, 0);
 
       // Update the view origin coordinates and the merge dimension value
-      concatDescriptor.SetViewOriginCoord(viewIndex, axis_, mergeDim);
-      mergeDim += mergeDims[axis_];
+      concatDescriptor.SetViewOriginCoord(viewIndex, axis, mergeDim);
+      mergeDim += mergeDims[axis];
     }
 
     // Update the output shape
-    mergeDims[axis_] = mergeDim;
+    mergeDims[axis] = mergeDim;
     armnn::IConnectableLayer *layer = myNetwork->AddConcatLayer(concatDescriptor, "concat_armnn");
 
     for (unsigned int viewIndex = 0; viewIndex < numConcatViews; ++viewIndex) {
       armnn::IConnectableLayer *InputLayer  = myNetwork->AddInputLayer(viewIndex);
       InputLayer->GetOutputSlot(0).Connect(layer->GetInputSlot(viewIndex));
-      InputLayer->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo(ArmNNTensorShape(input_tensors[viewIndex]->Shape(), PREF_DIM), armnn::DataType::Float32));
+
+      armnn::TensorShape inputShape = ArmNNTensorShape(input_tensors[viewIndex]->Shape(), PREF_DIM);
+      inputShape = { inputShape[0],
+                     inputShape[2],
+                     inputShape[3],
+                     inputShape[1] };
+      InputLayer->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo(inputShape, armnn::DataType::Float32));
     }
 
     armnn::IConnectableLayer *OutputLayer = myNetwork->AddOutputLayer(0);
@@ -105,18 +119,17 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
     layer->GetOutputSlot(0).SetTensorInfo(armnn::TensorInfo(mergeDims, armnn::DataType::Float32)); 
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Concat::rt->run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCConcat::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
-      LOGS_DEFAULT(WARNING) << "Got invalid operation; defaulting to cpu implementation";
       return onnxruntime::Concat::Compute(ctx);
     }
 
     // Load graph into runtime
-    Concat::rt->run->LoadNetwork(networkId, std::move(optNet));
+    NHWCConcat::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<ConcatIterator, bool> ret;
-    ret = Concat::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = NHWCConcat::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
     
   } else {
@@ -125,31 +138,23 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
 
   armnn::InputTensors inputTensors{};
   for (int index = 0; index < input_count; ++index)
-    inputTensors.push_back({index, armnn::ConstTensor(Concat::rt->run->GetInputTensorInfo(*pNetworkId, index),
+    inputTensors.push_back({index, armnn::ConstTensor(NHWCConcat::rt->run->GetInputTensorInfo(*pNetworkId, index),
                                                        input_tensors[index]->template Data<T>())});
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(Concat::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCConcat::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        Y->template MutableData<T>())}};
 
-  Concat::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  NHWCConcat::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }
-
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(
+ONNX_OPERATOR_TYPED_KERNEL_EX(
     Concat,
-    kOnnxDomain,
-    4, 10,
+    kMSNhwcDomain,
+    1,
+    float,
     kArmNNExecutionProvider,
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
-    Concat<float>);
-
-ONNX_OPERATOR_KERNEL_EX(
-    Concat,
-    kOnnxDomain,
-    11,
-    kArmNNExecutionProvider,
-    KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
-    Concat<float>);
+    NHWCConcat<float>);
 
 }  // namespace armnn_ep
 }  // namespace onnxruntime

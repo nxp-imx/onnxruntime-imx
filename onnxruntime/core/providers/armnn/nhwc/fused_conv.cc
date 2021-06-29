@@ -7,35 +7,31 @@
 #endif
 
 #include "core/providers/armnn/armnn_execution_provider.h"
-#include "core/providers/armnn/nn/conv.h"
+#include "core/providers/armnn/nhwc/conv.h"
 #include "core/providers/armnn/armnn_common.h"
 #include "core/providers/armnn/armnn_fwd.h"
 #include "contrib_ops/cpu/fused_activation.h"
 
-#include "armnn/ArmNN.hpp"
-
-#include <thread>
-#include <mutex>
 
 namespace onnxruntime {
-namespace armnn_ep{
+namespace armnn_ep {
 
-class FusedConv final : public armnn_ep::Conv<float> {
-public:
-  explicit FusedConv(const OpKernelInfo& info) : armnn_ep::Conv<float>(info) {
-    ORT_ENFORCE(info.GetAttr<std::string>("activation", &(this->activation_type)).IsOK());
+class NHWCFusedConv final : public armnn_ep::NHWCConv<float> {
+ public:
+  explicit NHWCFusedConv(const OpKernelInfo& info) : NHWCConv<float>(info) {
+    ORT_ENFORCE(info.GetAttr<std::string>("activation", &(NHWCConv::activation_type)).IsOK());
     ORT_ENFORCE(GetFusedActivationAttr(info, activation_).IsOK());
   }
 };
 
 ONNX_OPERATOR_TYPED_KERNEL_EX(
     FusedConv,
-    kMSDomain,
+    kMSNhwcDomain,
     1,
     float,
     kArmNNExecutionProvider,
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),
-    FusedConv);
+    NHWCFusedConv);
 
 }  // namespace armnn_ep
 }  // namespace onnxruntime

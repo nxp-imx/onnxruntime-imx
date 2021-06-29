@@ -446,6 +446,10 @@ def parse_arguments():
         "--use_telemetry", action='store_true',
         help="Only official builds can set this flag to enable telemetry.")
     parser.add_argument(
+        "--use_cross_compile", action='store_true', help="Use corss compile.")
+    parser.add_argument(
+        "--cmake_toolchain", help="Path to cmake tool chain.")
+    parser.add_argument(
         "--enable_wcos", action='store_true',
         help="Build for Windows Core OS.")
     parser.add_argument(
@@ -456,7 +460,7 @@ def parse_arguments():
         help="Enable Link Time Optimization")
     parser.add_argument(
         "--use_acl", nargs="?", const="ACL_1905",
-        choices=["ACL_1902", "ACL_1905", "ACL_1908", "ACL_2002"],
+        choices=["ACL_1902", "ACL_1905", "ACL_1908", "ACL_2002", "ACL_2008", "ACL_2102"],
         help="Build with ACL for ARM architectures.")
     parser.add_argument(
         "--acl_home", help="Path to ACL home dir")
