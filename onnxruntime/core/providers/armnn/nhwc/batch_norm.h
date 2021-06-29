@@ -2,8 +2,6 @@
 // Copyright 2020 NXP
 // Licensed under the MIT License.
 
-#ifdef BN_ARMNN
-
 #pragma once
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/nn/batch_norm.h"
@@ -21,9 +19,9 @@ namespace armnn_ep {
 typedef std::map<OpKernel*, armnn::NetworkId>::iterator BatchNormLayersIterator;
 
 template <typename T>
-class BatchNorm final : public OpKernel {
+class NHWCBatchNorm final : public OpKernel {
  public:
-  explicit BatchNorm(const OpKernelInfo& info) : OpKernel(info) {
+  explicit NHWCBatchNorm(const OpKernelInfo& info) : OpKernel(info) {
     auto st = info.GetAttr<float>("epsilon", &epsilon_);
     ORT_ENFORCE(st.IsOK(), st.ErrorMessage());
 
@@ -31,23 +29,23 @@ class BatchNorm final : public OpKernel {
         dynamic_cast<const ArmNNExecutionProvider*>(info.GetExecutionProvider())));
   }
 
-  ~BatchNorm() {
-    BatchNormLayersIterator it = BatchNorm::rt->layers.find((OpKernel*)this);
-    if (it != BatchNorm::rt->layers.end()) {
-      BatchNorm::rt->run->UnloadNetwork(it->second);
+  ~NHWCBatchNorm() {
+    BatchNormLayersIterator it = NHWCBatchNorm::rt->layers.find((OpKernel*)this);
+    if (it != NHWCBatchNorm::rt->layers.end()) {
+      NHWCBatchNorm::rt->run->UnloadNetwork(it->second);
     }
-    BatchNorm::rt->layers.erase(this);
+    NHWCBatchNorm::rt->layers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
   static void initRuntime(){
-    if(!BatchNorm::rt) {
+    if(!NHWCBatchNorm::rt) {
       static thread_local Runtime runtime_obj;
       armnn::IRuntime::CreationOptions options;
       runtime_obj.run = std::move(armnn::IRuntime::Create(options));
 
-      BatchNorm::rt =  &runtime_obj;
+      NHWCBatchNorm::rt =  &runtime_obj;
     }
   }
 
@@ -57,8 +55,5 @@ class BatchNorm final : public OpKernel {
   ArmNNExecutionProvider* provider_;
 };
 
-
 }  // namespace armnn_ep
 }  // namespace onnxruntime
-
-#endif

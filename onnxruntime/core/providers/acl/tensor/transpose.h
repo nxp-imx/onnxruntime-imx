@@ -1,13 +1,15 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright 2019-2020 NXP
+// Copyright 2020 NXP
 // Licensed under the MIT License.
 
 #pragma once
+#include "core/common/common.h"
 #include "core/framework/op_kernel.h"
-#include "core/providers/cpu/nn/conv.h"
+#include "core/providers/cpu/tensor/transpose.h"
 #include "core/providers/acl/acl_execution_provider.h"
 
 // ACL
+#include "arm_compute/runtime/Tensor.h"
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/runtime/TensorAllocator.h"
 #include "arm_compute/runtime/Allocator.h"
@@ -16,46 +18,40 @@
 #include "arm_compute/runtime/MemoryManagerOnDemand.h"
 
 // NEON
-#include "arm_compute/runtime/NEON/functions/NEConvolutionLayer.h"
-#include "arm_compute/runtime/NEON/functions/NEDepthwiseConvolutionLayer.h"
+#include "arm_compute/runtime/NEON/functions/NEPermute.h"
 
 namespace onnxruntime {
 namespace acl {
 
 typedef struct
 {
-  std::shared_ptr<arm_compute::IFunction> layer;
+  std::shared_ptr<arm_compute::NEPermute> layer;
   std::shared_ptr<arm_compute::MemoryManagerOnDemand> mm_layer;
   std::shared_ptr<arm_compute::Tensor> in;
-  std::shared_ptr<arm_compute::Tensor> k;
-  std::shared_ptr<arm_compute::Tensor> b;
   std::shared_ptr<arm_compute::Tensor> out;
-  bool isDepthwiseCPU;
-} ACLNEConv;
+} ACLNEPermute;
 
-typedef std::map<OpKernel*, ACLNEConv>::iterator ConvLayersIterator;
+typedef std::map<OpKernel*, ACLNEPermute>::iterator permuteLayersIterator;
 
 template <typename T>
-class Conv : public onnxruntime::Conv<T> {
+class Transpose : public onnxruntime::Transpose {
  public:
-  explicit Conv(const OpKernelInfo& info) : onnxruntime::Conv<T>(info), conv_attrs_(info) {
+  explicit Transpose(const OpKernelInfo& info) : onnxruntime::Transpose(info) {
+
     provider_ = (const_cast<ACLExecutionProvider*>(
         static_cast<const ACLExecutionProvider*>(info.GetExecutionProvider())));
   }
 
-  ~Conv() {
-    Conv::convLayers.erase(this);
+  ~Transpose() {
+    Transpose::permuteLayers.erase(this);
   }
 
   Status Compute(OpKernelContext* context) const override;
 
- protected:
-  static thread_local std::map<OpKernel*, ACLNEConv> convLayers;
-  ConvAttributes conv_attrs_;
+ private:
+  static thread_local std::map<OpKernel*, ACLNEPermute> permuteLayers;
   ACLExecutionProvider* provider_;
-  std::string activation_type;
-
-  arm_compute::TensorShape ACLReshapeWeightsDepthwise(arm_compute::Tensor* kernel) const;
 };
+
 }  // namespace acl
 }  // namespace onnxruntime

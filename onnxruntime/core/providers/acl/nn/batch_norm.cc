@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2020, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2020 NXP
 // Licensed under the MIT License.
 
 #include "core/common/common.h"
@@ -29,6 +29,8 @@
 
 // NEON
 #include "arm_compute/runtime/NEON/functions/NEBatchNormalizationLayer.h"
+
+#define PREF_DIM 4
 
 namespace onnxruntime {
 namespace acl {
@@ -72,7 +74,7 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
 
     auto layer = std::make_shared<arm_compute::NEBatchNormalizationLayer>();
 
-    tbatch_norm.in->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(X->Shape()), arm_compute::Format::F32));
+    tbatch_norm.in->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(X->Shape(), PREF_DIM), arm_compute::Format::F32));
     tbatch_norm.out->allocator()->init(arm_compute::TensorInfo(tbatch_norm.in->info()->tensor_shape(), arm_compute::Format::F32));
 
     tbatch_norm.scale->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(S->Shape()), arm_compute::Format::F32));

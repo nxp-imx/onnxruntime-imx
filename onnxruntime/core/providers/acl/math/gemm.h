@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2019-2020, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2019-2020 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -7,8 +7,8 @@
 #include "core/framework/op_kernel.h"
 #include "core/util/math.h"
 #include "core/util/math_cpuonly.h"
-#include "core/providers/cpu/math/gemm.h"
 #include "core/providers/cpu/math/gemm_helper.h"
+#include "core/providers/cpu/math/gemm.h"
 #include "core/providers/acl/acl_execution_provider.h"
 
 // ACL

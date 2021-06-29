@@ -2,13 +2,11 @@
 // Copyright 2020 NXP
 // Licensed under the MIT License.
 
-#ifdef BN_ARMNN
-
 #include "core/common/common.h"
 #include "core/util/math.h"
 #include "core/util/math_cpuonly.h"
 
-#include "core/providers/armnn/nn/batch_norm.h"
+#include "core/providers/armnn/nhwc/batch_norm.h"
 #include "core/providers/armnn/armnn_fwd.h"
 
 #include <thread>
@@ -20,12 +18,12 @@ namespace onnxruntime {
 namespace armnn_ep {
 
 template <typename T>
-thread_local Runtime* BatchNorm<T>::rt = nullptr;
+thread_local Runtime* NHWCBatchNorm<T>::rt = nullptr;
 
 template <typename T>
-Status BatchNorm<T>::Compute(OpKernelContext* context) const {
+Status NHWCBatchNorm<T>::Compute(OpKernelContext* context) const {
 
-  BatchNorm<T>::initRuntime();
+  NHWCBatchNorm<T>::initRuntime();
 
   const Tensor* X = context->Input<Tensor>(0);
   const Tensor* S = context->Input<Tensor>(1);//scale
@@ -35,11 +33,6 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
 
   ORT_RETURN_IF_ERROR(BatchNormHelper::ValidateInputs(X, S, B, M, V));
 
-  LOGS_DEFAULT(VERBOSE) << "BatchNorm ArmNN:";
-  LOGS_DEFAULT(VERBOSE) << "X " << X->Shape().ToString().c_str();
-  LOGS_DEFAULT(VERBOSE) << "params " << S->Shape().ToString().c_str();
-  LOGS_DEFAULT(VERBOSE) << std::endl;
-
   const T* x_data = X->template Data<T>();
 
   Tensor* Y = context->Output(0, X->Shape());
@@ -47,8 +40,8 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
   T* y_data = Y->template MutableData<T>();
 
   armnn::NetworkId* pNetworkId;
-  BatchNormLayersIterator it = BatchNorm::rt->layers.find((OpKernel*)this);
-  if (it == BatchNorm::rt->layers.end()) {
+  BatchNormLayersIterator it = NHWCBatchNorm::rt->layers.find((OpKernel*)this);
+  if (it == NHWCBatchNorm::rt->layers.end()) {
     
     armnn::NetworkId networkId;
     armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
@@ -56,9 +49,19 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
     armnn::TensorShape inputShape = ArmNNTensorShape(X->Shape());
     armnn::TensorShape outputShape = ArmNNTensorShape(Y->Shape());
 
+    inputShape = { inputShape[0],
+                   inputShape[2],
+                   inputShape[3],
+                   inputShape[1] };
+
+    outputShape = { outputShape[0],
+                    outputShape[2],
+                    outputShape[3],
+                    outputShape[1] };
+
     armnn::BatchNormalizationDescriptor desc;
     desc.m_Eps = epsilon_;
-    desc.m_DataLayout  = armnn::DataLayout::NCHW;
+    desc.m_DataLayout  = armnn::DataLayout::NHWC;
 
     const T* mean_data = M->template Data<T>();
     const T* var_data = V->template Data<T>();
@@ -90,37 +93,38 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
     layer->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
     // Optimise ArmNN network
-    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, BatchNorm::rt->run->GetDeviceSpec());
+    armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, NHWCBatchNorm::rt->run->GetDeviceSpec());
 
     if (optNet == nullptr) {
       ORT_NOT_IMPLEMENTED("Something went wrong when creating the layer");
     }
 
     // Load graph into runtime
-    BatchNorm::rt->run->LoadNetwork(networkId, std::move(optNet));
+    NHWCBatchNorm::rt->run->LoadNetwork(networkId, std::move(optNet));
 
     std::pair<BatchNormLayersIterator, bool> ret;
-    ret = BatchNorm::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+    ret = NHWCBatchNorm::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
     pNetworkId = &ret.first->second;
 
   } else {
     pNetworkId = &it->second;
   }
 
-  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(BatchNorm::rt->run->GetInputTensorInfo(*pNetworkId, 0),
+  armnn::InputTensors inputTensors{{0, armnn::ConstTensor(NHWCBatchNorm::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           x_data)}};
-  armnn::OutputTensors outputTensors{{0, armnn::Tensor(BatchNorm::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
+  armnn::OutputTensors outputTensors{{0, armnn::Tensor(NHWCBatchNorm::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                        y_data)}};
 
-  BatchNorm::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+  NHWCBatchNorm::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
   return Status::OK();
 }
 
-ONNX_OPERATOR_VERSIONED_KERNEL_EX(
+ONNX_OPERATOR_TYPED_KERNEL_EX(
     BatchNormalization,
-    kOnnxDomain,
-    7, 9,
+    kMSNhwcDomain,
+    1,
+    float,
     kArmNNExecutionProvider,
     KernelDefBuilder()
       .TypeConstraint("X", DataTypeImpl::GetTensorType<float>())
@@ -128,9 +132,7 @@ ONNX_OPERATOR_VERSIONED_KERNEL_EX(
       .TypeConstraint("B", DataTypeImpl::GetTensorType<float>())
       .TypeConstraint("mean", DataTypeImpl::GetTensorType<float>())
       .TypeConstraint("var", DataTypeImpl::GetTensorType<float>()),
-    BatchNorm<float>);
+    NHWCBatchNorm<float>);
 
 }  // namespace armnn_ep
 }  // namespace onnxruntime
-
-#endif
