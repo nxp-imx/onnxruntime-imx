@@ -396,6 +396,10 @@ endif()
 
 set (onnxruntime_test_providers_dependencies ${onnxruntime_EXTERNAL_DEPENDENCIES})
 
+if(onnxruntime_USE_VSI_NPU)
+  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_vsi_npu)
+endif()
+
 if(onnxruntime_USE_NNAPI_BUILTIN)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_nnapi)
 endif()
@@ -457,6 +461,7 @@ set(ONNXRUNTIME_TEST_LIBS
     # CUDA, TENSORRT, DNNL, and OpenVINO are dynamically loaded at runtime
     ${PROVIDERS_MIGRAPHX}
     ${PROVIDERS_NUPHAR}
+    ${PROVIDERS_VSI_NPU}
     ${PROVIDERS_NNAPI}
     ${PROVIDERS_RKNPU}
     ${PROVIDERS_DML}
@@ -537,6 +542,10 @@ if (onnxruntime_USE_NCCL)
   target_include_directories(onnxruntime_test_utils PRIVATE ${NCCL_INCLUDE_DIRS})
 endif()
 onnxruntime_add_include_to_target(onnxruntime_test_utils onnxruntime_common onnxruntime_framework onnxruntime_session GTest::gtest GTest::gmock onnx onnx_proto flatbuffers)
+
+if (onnxruntime_USE_VSI_NPU)
+  target_compile_definitions(onnxruntime_test_utils PUBLIC USE_VSI_NPU=1)
+endif()
 
 
 if (onnxruntime_USE_DML)

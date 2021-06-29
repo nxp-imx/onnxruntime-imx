@@ -825,6 +825,7 @@ void OpTester::Run(
     // Run the model
     static const std::string all_provider_types[] = {
         kCpuExecutionProvider,
+        kVsiNpuExecutionProvider,
         kCudaExecutionProvider,
         kDnnlExecutionProvider,
         kNupharExecutionProvider,
@@ -906,6 +907,8 @@ void OpTester::Run(
         std::unique_ptr<IExecutionProvider> execution_provider;
         if (provider_type == onnxruntime::kCpuExecutionProvider)
           execution_provider = DefaultCpuExecutionProvider();
+        else if (provider_type == onnxruntime::kVsiNpuExecutionProvider)
+          execution_provider = DefaultVsiNpuExecutionProvider();
         else if (provider_type == onnxruntime::kCudaExecutionProvider)
           execution_provider = DefaultCudaExecutionProvider();
         else if (provider_type == onnxruntime::kDnnlExecutionProvider)
@@ -944,6 +947,7 @@ void OpTester::Run(
           if (provider_type == onnxruntime::kOpenVINOExecutionProvider ||
               provider_type == onnxruntime::kTensorrtExecutionProvider ||
               provider_type == onnxruntime::kNupharExecutionProvider ||
+              provider_type == onnxruntime::kVsiNpuExecutionProvider ||
               provider_type == onnxruntime::kNnapiExecutionProvider ||
               provider_type == onnxruntime::kCoreMLExecutionProvider)
             continue;
