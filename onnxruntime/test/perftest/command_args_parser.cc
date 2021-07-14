@@ -170,6 +170,8 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
           test_config.machine_config.provider_type_name = onnxruntime::kDmlExecutionProvider;
         } else if (!CompareCString(optarg, ORT_TSTR("acl"))) {
           test_config.machine_config.provider_type_name = onnxruntime::kAclExecutionProvider;
+        } else if (!CompareCString(optarg, ORT_TSTR("vsi_npu"))) {
+          test_config.machine_config.provider_type_name = onnxruntime::kVsiNpuExecutionProvider;
         } else if (!CompareCString(optarg, ORT_TSTR("armnn"))) {
           test_config.machine_config.provider_type_name = onnxruntime::kArmNNExecutionProvider;
         } else {

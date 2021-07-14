@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2019-2020, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2019-2020 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -57,5 +57,5 @@ class Conv : public onnxruntime::Conv<T> {
 
   arm_compute::TensorShape ACLReshapeWeightsDepthwise(arm_compute::Tensor* kernel) const;
 };
-}  // namespace mkl_dnn
+}  // namespace acl
 }  // namespace onnxruntime

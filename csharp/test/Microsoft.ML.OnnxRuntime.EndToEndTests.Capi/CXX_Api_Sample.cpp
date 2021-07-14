@@ -21,6 +21,9 @@ int main(int argc, char* argv[]) {
   // #include "cuda_provider_factory.h"
   // OrtSessionOptionsAppendExecutionProvider_CUDA(session_options, 1);
 
+  // Enable VsiNpu EP to run on GPU
+  Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(session_options, 0));
+
   // Sets graph optimization level
   // Available levels are
   // ORT_DISABLE_ALL -> To disable all optimizations
