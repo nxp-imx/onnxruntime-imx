@@ -653,6 +653,8 @@ def use_dev_mode(args):
         return 'OFF'
     if args.use_armnn:
         return 'OFF'
+    if args.use_vsi_npu:
+        return 'OFF'
     if args.ios and is_macOS():
         return 'OFF'
     return 'ON'
@@ -2071,7 +2073,7 @@ def main():
             if (args.arm or args.arm64):
                 path_to_protoc_exe = build_protoc_for_host(
                     cmake_path, source_dir, build_dir, args)
-            if not is_docker() and not args.use_acl and not args.use_armnn:
+            if not is_docker() and not args.use_acl and not args.use_armnn and not args.use_vsi_npu:
                 install_python_deps()
         if args.enable_pybind and is_windows():
             install_python_deps(args.numpy_version)

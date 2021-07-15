@@ -125,7 +125,6 @@ TEST(CApiTensorTest, load_float_tensor_with_external_data) {
 }
 
 #if defined(__amd64__) || defined(_M_X64)
-#ifndef __ANDROID__
 #ifdef NDEBUG
 TEST(CApiTensorTest, load_huge_tensor_with_external_data) {
   FILE* fp;
@@ -169,7 +168,6 @@ TEST(CApiTensorTest, load_huge_tensor_with_external_data) {
   }
   g_ort->ReleaseStatus(ort_st);
 }
-#endif
 #endif
 #endif
 }  // namespace test
