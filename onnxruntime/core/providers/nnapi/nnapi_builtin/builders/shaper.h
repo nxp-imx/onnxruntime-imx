@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
-
 #pragma once
 
 #include <string>
@@ -60,17 +57,8 @@ class Shaper {
   Status Concat(const std::vector<std::string>& input_names, const int32_t axis, const std::string& output_name)
       ORT_MUST_USE_RESULT;
 
-  Status Squeeze(const std::string& input_name, const std::vector<int32_t>& axes, const std::string& output_name)
+  Status Squeeze(const std::string& input, const std::vector<int32_t>& axes, const std::string& output)
       ORT_MUST_USE_RESULT;
-
-  Status ResizeUsingScales(const std::string& input_name,
-                           const float scale_h, const float scale_w,
-                           bool nchw,
-                           const std::string& output_name) ORT_MUST_USE_RESULT;
-  Status ResizeUsingOutputSizes(const std::string& input_name,
-                                const uint32_t output_h, const uint32_t output_w,
-                                bool nchw,
-                                const std::string& output_name) ORT_MUST_USE_RESULT;
 
   // If the shape of certain input is dynamic
   // Use the following 2 functions to update the particular shape
@@ -116,20 +104,14 @@ class Shaper {
       ORT_MUST_USE_RESULT;
   Status ConcatImpl(const std::vector<std::string>& input_names, const int32_t axis, const std::string& output_name)
       ORT_MUST_USE_RESULT;
-  Status SqueezeImpl(const std::string& input_names, const std::vector<int32_t>& axes, const std::string& output_name)
+  Status SqueezeImpl(const std::string& input, const std::vector<int32_t>& axes, const std::string& output)
       ORT_MUST_USE_RESULT;
-  Status ResizeUsingScalesImpl(const std::string& input_name,
-                               const float scale_h, const float scale_w,
-                               bool nchw,
-                               const std::string& output_name) ORT_MUST_USE_RESULT;
-  Status ResizeUsingOutputSizesImpl(const std::string& input_name,
-                                    const uint32_t output_h, const uint32_t output_w,
-                                    bool nchw,
-                                    const std::string& output_name) ORT_MUST_USE_RESULT;
 
   std::unordered_map<std::string, Shape> shape_map_;
   std::vector<std::function<Status(Shaper&)>> shape_ops_;
 };
+
+std::string Shape2String(const Shaper::Shape& shape);
 
 }  // namespace nnapi
 }  // namespace onnxruntime
