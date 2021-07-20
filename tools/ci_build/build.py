@@ -740,6 +740,8 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
         "-Donnxruntime_USE_ACL_1905=" + ("ON" if args.use_acl == "ACL_1905" else "OFF"),
         "-Donnxruntime_USE_ACL_1908=" + ("ON" if args.use_acl == "ACL_1908" else "OFF"),
         "-Donnxruntime_USE_ACL_2002=" + ("ON" if args.use_acl == "ACL_2002" else "OFF"),
+        "-Donnxruntime_USE_ACL_2008=" + ("ON" if args.use_acl == "ACL_2008" else "OFF"),
+        "-Donnxruntime_USE_ACL_2102=" + ("ON" if args.use_acl == "ACL_2102" else "OFF"),
         "-Donnxruntime_USE_ARMNN=" + ("ON" if args.use_armnn else "OFF"),
         "-Donnxruntime_ARMNN_RELU_USE_CPU=" + ("OFF" if args.armnn_relu else "ON"),
         "-Donnxruntime_ARMNN_BN_USE_CPU=" + ("OFF" if args.armnn_bn else "ON"),
