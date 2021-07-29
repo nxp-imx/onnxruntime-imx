@@ -649,15 +649,8 @@ def setup_test_data(build_dir, configs):
 
 
 def use_dev_mode(args):
-    if args.use_acl:
-        return 'OFF'
-    if args.use_armnn:
-        return 'OFF'
-    if args.use_vsi_npu:
-        return 'OFF'
-    if args.ios and is_macOS():
-        return 'OFF'
-    return 'ON'
+    # always use switch off dev mode to disable warnings being treated as error
+    return 'OFF'
 
 
 def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home, rocm_home,
@@ -740,6 +733,8 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
         "-Donnxruntime_USE_ACL_1905=" + ("ON" if args.use_acl == "ACL_1905" else "OFF"),
         "-Donnxruntime_USE_ACL_1908=" + ("ON" if args.use_acl == "ACL_1908" else "OFF"),
         "-Donnxruntime_USE_ACL_2002=" + ("ON" if args.use_acl == "ACL_2002" else "OFF"),
+        "-Donnxruntime_USE_ACL_2008=" + ("ON" if args.use_acl == "ACL_2008" else "OFF"),
+        "-Donnxruntime_USE_ACL_2102=" + ("ON" if args.use_acl == "ACL_2102" else "OFF"),
         "-Donnxruntime_USE_ARMNN=" + ("ON" if args.use_armnn else "OFF"),
         "-Donnxruntime_ARMNN_RELU_USE_CPU=" + ("OFF" if args.armnn_relu else "ON"),
         "-Donnxruntime_ARMNN_BN_USE_CPU=" + ("OFF" if args.armnn_bn else "ON"),
@@ -2073,8 +2068,6 @@ def main():
             if (args.arm or args.arm64):
                 path_to_protoc_exe = build_protoc_for_host(
                     cmake_path, source_dir, build_dir, args)
-            if not is_docker() and not args.use_acl and not args.use_armnn and not args.use_vsi_npu:
-                install_python_deps()
         if args.enable_pybind and is_windows():
             install_python_deps(args.numpy_version)
         if args.enable_onnx_tests:
