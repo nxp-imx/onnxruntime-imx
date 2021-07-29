@@ -24,6 +24,7 @@
 
 #pragma once
 #include "nnrt/execution.hpp"
+#include "nnrt/compilation.hpp"
 #include "nnrt/types.hpp"
 #include "vsi_npu_util.h"
 
