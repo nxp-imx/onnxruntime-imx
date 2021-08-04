@@ -32,6 +32,7 @@
 #include "core/optimizer/matmul_scale_fusion.h"
 #include "core/optimizer/nchwc_transformer.h"
 #include "core/optimizer/nhwc_transformer.h"
+#include "core/optimizer/nhwc_transformer2.h"
 #include "core/optimizer/noop_elimination.h"
 #include "core/optimizer/not_where_fusion.h"
 #include "core/optimizer/relu_clip_fusion.h"
@@ -132,7 +133,8 @@ std::vector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
     TransformerLevel level,
     const SessionOptions& session_options,
     const IExecutionProvider& execution_provider, /*required by constant folding*/
-    const std::unordered_set<std::string>& rules_and_transformers_to_disable) {
+    const std::unordered_set<std::string>& rules_and_transformers_to_disable,
+	__attribute__ ((unused)) const std::vector<std::string>& registered_execution_providers) {
   std::vector<std::unique_ptr<GraphTransformer>> transformers;
   std::unique_ptr<RuleBasedGraphTransformer> rule_transformer = nullptr;
   bool disable_quant_qdq = session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsDisableQuantQDQ, "0") == "1";
@@ -216,6 +218,10 @@ std::vector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
         transformers.emplace_back(std::make_unique<NchwcTransformer>());
       }
 
+#if defined(USE_ACL) || defined(USE_ARMNN)
+       transformers.emplace_back(std::make_unique<NhwcTransformer2>(registered_execution_providers));
+#endif	  
+	  
       transformers.emplace_back(std::make_unique<NhwcTransformer>());
 #endif
     } break;

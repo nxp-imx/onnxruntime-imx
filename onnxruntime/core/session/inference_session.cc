@@ -2109,7 +2109,8 @@ void InferenceSession::AddPredefinedTransformers(GraphTransformerManager& transf
     if (graph_optimization_level >= level) {
       // Generate and register transformers for level
       auto transformers_to_register = optimizer_utils::GenerateTransformers(level, session_options_, cpu_ep,
-                                                                            optimizers_to_disable_);
+                                                                            optimizers_to_disable_,
+																			GetRegisteredProviderTypes());
       for (auto& entry : transformers_to_register) {
         transformer_manager.Register(std::move(entry), level);
       }
