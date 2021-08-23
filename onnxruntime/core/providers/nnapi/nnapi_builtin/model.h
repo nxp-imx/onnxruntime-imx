@@ -10,7 +10,10 @@
 namespace onnxruntime {
 namespace nnapi {
 
+#ifdef __ANDROID__
+// do not use sharedmem impl on non-Android platforms
 #define USENNAPISHAREDMEM 1
+#endif // __ANDROID__
 
 class Execution;
 
