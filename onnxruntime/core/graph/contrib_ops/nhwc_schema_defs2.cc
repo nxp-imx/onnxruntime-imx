@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2021, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 #include "core/framework/tensorprotoutils.h"
