@@ -30,6 +30,9 @@ class Gemm : public onnxruntime::Gemm<T> {
 
     ORT_ENFORCE(info.GetAttr<float>("alpha", &alpha_).IsOK());
     ORT_ENFORCE(info.GetAttr<float>("beta", &beta_).IsOK());
+
+    provider_ = (const_cast<ArmNNExecutionProvider*>(
+        static_cast<const ArmNNExecutionProvider*>(info.GetExecutionProvider())));
   }
 
   Status Compute(OpKernelContext* context) const override {
@@ -63,9 +66,9 @@ class Gemm : public onnxruntime::Gemm<T> {
 
     int64_t K = helper.K();
     LOGS_DEFAULT(VERBOSE) << "Gemm ArmNN:";
-    if (X) LOGS_DEFAULT(VERBOSE) << "X " << X->Shape().ToString().c_str();
-    if (W) LOGS_DEFAULT(VERBOSE) << "W " << W->Shape().ToString().c_str();
-    if (B) LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
+    LOGS_DEFAULT(VERBOSE) << "X " << X->Shape().ToString().c_str();
+    LOGS_DEFAULT(VERBOSE) << "W " << W->Shape().ToString().c_str();
+    if (B != nullptr) LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "Y " << Y->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "M " << (int)M << ", N " << (int)N << ", K " << (int)K;
     LOGS_DEFAULT(VERBOSE) << "Alfa " << alpha_ << ", Beta " << beta_;
