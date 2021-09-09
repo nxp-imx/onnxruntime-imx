@@ -80,9 +80,6 @@ class ReorderOutput : public OpKernel {
   ReorderOutput(const OpKernelInfo& info) : OpKernel(info) {}
 
   Status Compute(OpKernelContext* context) const override;
-
- private:
-  int64_t channels_;
 };
 
 typedef std::map<OpKernel*, ACLNEConv>::iterator ConvLayersIterator;
@@ -117,6 +114,9 @@ class NhwcPoolBase : public PoolBase {
   NhwcPoolBase(const OpKernelInfo& info) : PoolBase(info) {
     if (!pool_attrs_.global_pooling)
       ORT_ENFORCE(pool_attrs_.kernel_shape.size() == 2, "kernel_shape num_dims is not compatible with X num_dims.");
+
+    provider_ = (const_cast<ACLExecutionProvider*>(
+        dynamic_cast<const ACLExecutionProvider*>(info.GetExecutionProvider())));
   }
 
   Status NhwcPool(OpKernelContext* context, MLAS_POOLING_KIND kind) const;

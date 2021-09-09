@@ -30,9 +30,6 @@ class ReorderOutput : public ::onnxruntime::acl::ReorderOutput<T> {
   ReorderOutput(const OpKernelInfo& info) : onnxruntime::acl::ReorderOutput<T>(info) {}
 
   Status Compute(OpKernelContext* context) const override;
-
- private:
-  int64_t channels_;
 };
 
 }  // namespace armnn_ep

@@ -86,15 +86,21 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
       tbatch_norm.mean.get(), tbatch_norm.var.get(), B != nullptr ? tbatch_norm.b.get() : nullptr, S != nullptr ? tbatch_norm.scale.get() : nullptr,
       epsilon_);//no activation in onnx
 
-    const T* scale_data = S->template Data<T>();
-    const T* b_data = B->template Data<T>();
     const T* mean_data = M->template Data<T>();
     const T* var_data = V->template Data<T>();
 
     ACLImportMemory(tbatch_norm.mean->allocator(), (void*)mean_data, M->Shape().Size() * 4);
     ACLImportMemory(tbatch_norm.var->allocator(), (void*)var_data, V->Shape().Size() * 4);
-    ACLImportMemory(tbatch_norm.b->allocator(), (void*)b_data, B->Shape().Size() * 4);
-    ACLImportMemory(tbatch_norm.scale->allocator(), (void*)scale_data, S->Shape().Size() * 4);
+
+    if (B != nullptr) {
+        const T* b_data = B->template Data<T>();
+        ACLImportMemory(tbatch_norm.b->allocator(), (void*)b_data, B->Shape().Size() * 4);
+    }
+
+    if (S != nullptr) {
+        const T* scale_data = S->template Data<T>();
+        ACLImportMemory(tbatch_norm.scale->allocator(), (void*)scale_data, S->Shape().Size() * 4);
+    }
 
     // allocate space for input tensor to accomodate paddings and strides
     tbatch_norm.in->allocator()->allocate();
