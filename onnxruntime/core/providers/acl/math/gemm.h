@@ -53,7 +53,8 @@ class Gemm : public onnxruntime::Gemm<T> {
     const auto B = context->Input<Tensor>(1);
     const auto C = context->Input<Tensor>(2);
 
-    GemmHelper helper(A->Shape(), trans_A_ != CblasNoTrans, B->Shape(), trans_B_ != CblasNoTrans, C->Shape());
+    GemmHelper helper(A->Shape(), trans_A_ != CblasNoTrans, B->Shape(), trans_B_ != CblasNoTrans,
+                    C != nullptr ? C->Shape() : TensorShape({}));
 
     if (!helper.State().IsOK())
       return helper.State();
@@ -94,9 +95,9 @@ class Gemm : public onnxruntime::Gemm<T> {
     }
 
     int64_t K = helper.K();
-    if (A) LOGS_DEFAULT(VERBOSE) << "A " << A->Shape().ToString().c_str();
-    if (B) LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
-    if (C) LOGS_DEFAULT(VERBOSE) << "C " << C->Shape().ToString().c_str();
+    LOGS_DEFAULT(VERBOSE) << "A " << A->Shape().ToString().c_str();
+    LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
+    if (C != nullptr) LOGS_DEFAULT(VERBOSE) << "C " << C->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "D " << D->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "M " << (int)M << ", N " << (int)N << ", K " << (int)K;
     LOGS_DEFAULT(VERBOSE) << "Alfa " << alpha_ << ", Beta " << beta_;

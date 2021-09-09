@@ -46,6 +46,7 @@ class NhwcTransformerImpl2 {
   bool SuportsReplacementNHWC(Node& node);
   bool RequiresWeightsPermutation(Node& node);
   bool isNot9x9(Node& node);
+  bool isNotGroupConvolution(Node& node);
   bool isDepthwise(Node& node);
 
   std::map<NodeIndex, bool> nodes_layout;
@@ -71,6 +72,17 @@ bool NhwcTransformerImpl2::isNot9x9(Node& node) {
     return true;
   } 
   
+}
+
+bool NhwcTransformerImpl2::isNotGroupConvolution(Node& node) {
+  auto& input_defs = node.MutableInputDefs();
+  const ONNX_NAMESPACE::TensorProto* conv_X_tensor_proto = nullptr;
+  int64_t channel = static_cast<int64_t>((&(node.GetAttributes().find("group")->second))->i());
+  return !(channel > 1 &&
+	(!graph_.GetInitializedTensor(input_defs[0]->Name(), conv_X_tensor_proto) ||
+	      (conv_X_tensor_proto->data_type() != ONNX_NAMESPACE::TensorProto_DataType_FLOAT) ||
+	      (conv_X_tensor_proto->dims_size() != 4) ||
+	      (conv_X_tensor_proto->dims(1) != channel)));
 }
 
 bool NhwcTransformerImpl2::isDepthwise(Node& node) {
@@ -261,8 +273,8 @@ bool NhwcTransformerImpl2::SuportsReplacementNHWC(Node& node) {
    return
           ((node.GetExecutionProviderType() == kAclExecutionProvider ||
             node.GetExecutionProviderType() == kArmNNExecutionProvider) &&
-           ((node.OpType() == "Conv" && isNot9x9(node)) ||
-            (node.OpType() == "FusedConv" && isNot9x9(node)) ||
+           ((node.OpType() == "Conv" && isNot9x9(node) && isNotGroupConvolution(node)) ||
+            (node.OpType() == "FusedConv" && isNot9x9(node) && isNotGroupConvolution(node)) ||
             node.OpType() == "MaxPool" ||
             node.OpType() == "AveragePool" ||
             node.OpType() == "GlobalMaxPool" ||
