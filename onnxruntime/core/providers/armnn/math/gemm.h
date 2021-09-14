@@ -106,7 +106,7 @@ class Gemm : public onnxruntime::Gemm<T> {
         armnn::TensorShape biasShape = ArmNNTensorShape(B->Shape());
         if(B->Shape().NumDimensions() == 2){
           if(B->Shape().GetDims()[0] == 1 && B->Shape().GetDims()[1] > 1) {
-            biasShape = {B->Shape().GetDims()[1]};
+            biasShape = {(unsigned int)(B->Shape().GetDims()[1])};
             LOGS_DEFAULT(VERBOSE) << "Bias reshaped to: {" << B->Shape().GetDims()[1] << "}";
           }
         }
