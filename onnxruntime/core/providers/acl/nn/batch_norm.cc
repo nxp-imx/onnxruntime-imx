@@ -109,7 +109,7 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
 
     std::pair<BatchNormLayersIterator, bool> ret;
     ret = batchNormLayers.insert(std::pair<OpKernel*, ACLNEBatchNorm>((OpKernel*)this, tbatch_norm));
-    pBatchNorm = &tbatch_norm;
+    pBatchNorm = &ret.first->second;
 
   } else {
     pBatchNorm = &it->second;

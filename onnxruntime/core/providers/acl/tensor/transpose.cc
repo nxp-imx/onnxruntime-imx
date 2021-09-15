@@ -98,7 +98,7 @@ Status Transpose<T>::Compute(OpKernelContext* ctx) const {
 
     std::pair<permuteLayersIterator, bool> ret;
     ret = permuteLayers.insert(std::pair<OpKernel*, ACLNEPermute>((OpKernel*)this, tperm));
-    pPerm = &tperm;
+    pPerm = &ret.first->second;
 
   } else {
     pPerm = &it->second;

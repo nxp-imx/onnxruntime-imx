@@ -592,7 +592,7 @@ Status NhwcBatchNorm<T>::Compute(OpKernelContext* context) const {
 
     std::pair<BatchNormLayersIterator, bool> ret;
     ret = NhwcBatchNorm::batchNormLayers.insert(std::pair<OpKernel*, ACLNEBatchNorm>((OpKernel*)this, tbatch_norm));
-    pBatchNorm = &tbatch_norm;
+    pBatchNorm = &ret.first->second;
 
   } else {
   pBatchNorm = &it->second;
