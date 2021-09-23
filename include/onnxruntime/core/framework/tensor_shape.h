@@ -54,6 +54,12 @@ class TensorShape : private std::vector<int64_t> {
   bool operator==(const TensorShape& other) const noexcept {
     auto thisVector = static_cast<const std::vector<int64_t>*>(this);
     auto otherVector = static_cast<const std::vector<int64_t>*>(&other);
+    if (thisVector->size() == 0 && otherVector->size() == 1 && (*otherVector)[0] == 1) {
+       return true;
+    }
+    if (thisVector->size() == 1 && (*thisVector)[0] == 1 && otherVector->size() == 0) {
+       return true;
+    }
     return *thisVector == *otherVector;
   }
 

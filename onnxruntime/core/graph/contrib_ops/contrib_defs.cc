@@ -2318,6 +2318,10 @@ Example 4:
 
   RegisterNhwcSchemas();
 
+#if defined(USE_ACL) || defined(USE_ARMNN)
+  RegisterNhwcSchemas2();
+#endif
+
   static const char* Gelu_ver1_doc =
       R"DOC(Gaussian Error Linear Unit.
 A high-performing neural network activation function.The GELU nonlinearity is

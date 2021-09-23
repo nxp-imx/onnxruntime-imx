@@ -11,11 +11,7 @@
 #include "core/session/allocator_impl.h"
 #include "core/common/logging/logging.h"
 #include "core/framework/provider_shutdown.h"
-#ifdef __ANDROID__
-#include "core/platform/android/logging/android_log_sink.h"
-#else
 #include "core/common/logging/sinks/clog_sink.h"
-#endif
 
 using namespace onnxruntime;
 using namespace onnxruntime::logging;

@@ -37,7 +37,8 @@ std::vector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
     TransformerLevel level,
     const SessionOptions& session_options,
     const IExecutionProvider& execution_provider /*required by constant folding*/,
-    const std::unordered_set<std::string>& rules_and_transformers_to_disable = {});
+    const std::unordered_set<std::string>& rules_and_transformers_to_disable = {},
+    const std::vector<std::string>& registered_execution_providers = {});
 
 }  // namespace optimizer_utils
 }  // namespace onnxruntime

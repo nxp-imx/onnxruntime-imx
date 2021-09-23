@@ -51,7 +51,7 @@ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_VITISA
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ACL(int use_arena);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_ArmNN(int use_arena);
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_DML(int device_id);
-std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Nnapi(uint32_t flags);
+std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Nnapi();
 std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Rknpu();
 
 constexpr const char* kExecutionProviderSharedLibraryPath = "shared_lib_path";
@@ -601,10 +601,7 @@ static void RegisterExecutionProviders(InferenceSession* sess, const std::vector
 #endif
     } else if (type == kNnapiExecutionProvider) {
 #if defined(USE_NNAPI)
-#if !defined(__ANDROID__)
-      LOGS_DEFAULT(WARNING) << "NNAPI execution provider can only be used to generate ORT format model in this build.";
-#endif
-      RegisterExecutionProvider(sess, *onnxruntime::CreateExecutionProviderFactory_Nnapi(0));
+      RegisterExecutionProvider(sess, *onnxruntime::CreateExecutionProviderFactory_Nnapi());
 #endif
     } else if (type == kRknpuExecutionProvider) {
 #ifdef USE_RKNPU
