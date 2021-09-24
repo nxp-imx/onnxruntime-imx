@@ -11,6 +11,9 @@ The version number of the current stable release can be found
 ## Release cadence
 See [Release Management](ReleaseManagement.md)
 
+## Releases for NXP Yocto BSP
+See [NXP Release Notes](NXPReleaseNotes.md)
+
 # Compatibility
 
 ## Backwards compatibility
