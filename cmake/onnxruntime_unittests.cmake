@@ -785,6 +785,8 @@ if (onnxruntime_USE_TVM)
   endif()
 endif()
 
+set(CMAKE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR}/onnxruntime-${ORT_VERSION})
+
 install(TARGETS onnx_test_runner
         ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
         LIBRARY  DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -1161,5 +1163,18 @@ if (NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_EXTENDED_MINIMAL_BUILD
     message(FATAL_ERROR "test_execution_provider unknown platform, need to specify shared library exports for it")
   endif()
 endif()
+
+install(TARGETS
+            onnxruntime_test_all
+            onnxruntime_perf_test
+            onnxruntime_mlas_test
+            onnxruntime_global_thread_pools_test
+            onnxruntime_shared_lib_test
+            onnxruntime_api_tests_without_env
+            custom_op_library
+        LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}/tests
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/tests)
+
+install(DIRECTORY ${REPO_ROOT}/onnxruntime/test/testdata DESTINATION ${CMAKE_INSTALL_BINDIR}/tests)
 
 include(onnxruntime_fuzz_test.cmake)
