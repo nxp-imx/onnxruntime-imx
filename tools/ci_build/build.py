@@ -467,7 +467,7 @@ def parse_arguments():
         help="Enable Link Time Optimization")
     parser.add_argument(
         "--use_acl", nargs="?", const="ACL_1905",
-        choices=["ACL_1902", "ACL_1905", "ACL_1908", "ACL_2002", "ACL_2008", "ACL_2102"],
+        choices=["ACL_1902", "ACL_1905", "ACL_1908", "ACL_2002", "ACL_2008", "ACL_2102", "ACL_2108"],
         help="Build with ACL for ARM architectures.")
     parser.add_argument(
         "--acl_home", help="Path to ACL home dir")
@@ -733,6 +733,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
         "-Donnxruntime_USE_ACL_2002=" + ("ON" if args.use_acl == "ACL_2002" else "OFF"),
         "-Donnxruntime_USE_ACL_2008=" + ("ON" if args.use_acl == "ACL_2008" else "OFF"),
         "-Donnxruntime_USE_ACL_2102=" + ("ON" if args.use_acl == "ACL_2102" else "OFF"),
+        "-Donnxruntime_USE_ACL_2108=" + ("ON" if args.use_acl == "ACL_2108" else "OFF"),
         "-Donnxruntime_USE_ARMNN=" + ("ON" if args.use_armnn else "OFF"),
         "-Donnxruntime_ARMNN_RELU_USE_CPU=" + ("OFF" if args.armnn_relu else "ON"),
         "-Donnxruntime_ARMNN_BN_USE_CPU=" + ("OFF" if args.armnn_bn else "ON"),

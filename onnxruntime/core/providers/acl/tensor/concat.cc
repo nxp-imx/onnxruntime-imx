@@ -59,7 +59,7 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
   }
 
   if(output_dims.size() > 4 || axis_ > 3) {
-    LOGS_DEFAULT(WARNING) << "ArmNN does not have support for tensors with 4 or more dimensions; defaulting to cpu implementation";
+    LOGS_DEFAULT(WARNING) << "ACL does not have support for tensors with 4 or more dimensions; defaulting to cpu implementation";
     return onnxruntime::Concat::Compute(ctx);
   }
 
@@ -82,7 +82,7 @@ Status Concat<T>::Compute(OpKernelContext* ctx) const {
   }
 
   arm_compute::NEConcatenateLayer layer;
-#if defined(ACL_2008) || defined(ACL_2102)
+#if defined(ACL_2008) || defined(ACL_2102) || defined(ACL_2108)
   layer.configure(const_inputs_vector, &output, 3 - axis_);
 #else
   layer.configure(inputs_vector, &output, 3 - axis_);
