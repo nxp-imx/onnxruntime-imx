@@ -61,7 +61,7 @@ ACLNEPool PoolOperation(onnxruntime::OpKernelContext* context,
     tpool.out->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(Y->Shape(), PREF_DIM), arm_compute::Format::F32));
 
     if (pool_attrs.global_pooling) {
-#if defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
+#if defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102) || defined(ACL_2108)
       layer->configure(tpool.in.get(), tpool.out.get(), arm_compute::PoolingLayerInfo(pool_type, arm_compute::DataLayout::NCHW));
 #else
       layer->configure(tpool.in.get(), tpool.out.get(), arm_compute::PoolingLayerInfo(pool_type));
@@ -108,7 +108,7 @@ ACLNEPool PoolOperation(onnxruntime::OpKernelContext* context,
       LOGS_DEFAULT(VERBOSE) << "strides: {" << aclStrides[0] << "," << aclStrides[1] << "}";
       LOGS_DEFAULT(VERBOSE) << "excludePadding: " << excludePadding;
 
-#if defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
+#if defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102) || defined(ACL_2108)
       arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, arm_compute::DataLayout::NCHW, aclPadStride, excludePadding);
 #else
       arm_compute::PoolingLayerInfo pool_info(pool_type, aclSize, aclPadStride, excludePadding);
@@ -159,13 +159,13 @@ Status Pool<T, PoolType>::Compute(OpKernelContext* context) const {
   aclDilations[1] = (!dilations.empty()) ? dilations[0] : 1;
 
   if (X->Shape().NumDimensions() != PREF_DIM) {
-    LOGS_DEFAULT(WARNING) << "ArmNN does not have support for tensors with 4 or more dimensions; defaulting to cpu implementation";
+    LOGS_DEFAULT(WARNING) << "ACL does not have support for tensors with 4 or more dimensions; defaulting to cpu implementation";
     Status s = onnxruntime::Pool<T, PoolType>::Compute(context);
     return s;
   }
 
   if (aclDilations[0] * aclDilations[1] > 1) {
-    LOGS_DEFAULT(WARNING) << "ArmNN does not have support for dilation; defaulting to cpu implementation";
+    LOGS_DEFAULT(WARNING) << "ACL does not have support for dilation; defaulting to cpu implementation";
     Status s = onnxruntime::Pool<T, PoolType>::Compute(context);
     return s;
   }
@@ -205,13 +205,13 @@ Status MaxPoolV8<T>::Compute(OpKernelContext* context) const {
   aclDilations[1] = (!dilations.empty()) ? dilations[0] : 1;
 
   if (X->Shape().NumDimensions() != PREF_DIM) {
-    LOGS_DEFAULT(WARNING) << "ArmNN does not have support for tensors with 4 or more dimensions; defaulting to cpu implementation";
+    LOGS_DEFAULT(WARNING) << "ACL does not have support for tensors with 4 or more dimensions; defaulting to cpu implementation";
     Status s = onnxruntime::MaxPoolV8::Compute(context);
     return s;
   }
 
   if (aclDilations[0] * aclDilations[1] > 1) {
-    LOGS_DEFAULT(WARNING) << "ArmNN does not have support for dilation; defaulting to cpu implementation";
+    LOGS_DEFAULT(WARNING) << "ACL does not have support for dilation; defaulting to cpu implementation";
     Status s = onnxruntime::MaxPoolV8::Compute(context);
     return s;
   }

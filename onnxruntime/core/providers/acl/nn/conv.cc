@@ -335,7 +335,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
                                                 aclPadStride,
                                                 1 /* depth multiplier */,
                                                 arm_compute::Size2D(aclDilation0, dilations[0]));
-#elif defined(ACL_2102)
+#elif defined(ACL_2102) || defined(ACL_2108)
       bool optimizable = bool(arm_compute::NEDepthwiseConvolutionLayer::validate(tconv.in->info(),
                                                                            tconv.k->info(),
                                                                            (B != nullptr) ? tconv.b->info() : nullptr,
@@ -354,7 +354,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer3x3>();
 #elif defined(ACL_1908)
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayerOptimized>();
-#elif defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
+#elif defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102) || defined(ACL_2108)
         auto layer = std::make_shared<arm_compute::NEDepthwiseConvolutionLayer>();
 #endif
 
@@ -362,7 +362,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
         layer->configure(tconv.in.get(), tconv.k.get(), (B != nullptr) ? tconv.b.get() : nullptr, tconv.out.get(),
                          aclPadStride, 1 /* depth multiplier */,
                          acl_activ_enabled ? arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) : arm_compute::ActivationLayerInfo());
-#elif defined(ACL_1905) || defined(ACL_1908) || defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102)
+#elif defined(ACL_1905) || defined(ACL_1908) || defined(ACL_2002) || defined(ACL_2008) || defined(ACL_2102) || defined(ACL_2108)
         layer->configure(tconv.in.get(), tconv.k.get(), (B != nullptr) ? tconv.b.get() : nullptr, tconv.out.get(),
                          aclPadStride, 1 /* depth multiplier */,
                          acl_activ_enabled ? arm_compute::ActivationLayerInfo(acl_activ_func, conv_attrs_.alpha) : arm_compute::ActivationLayerInfo(),
