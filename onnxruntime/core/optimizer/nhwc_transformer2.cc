@@ -273,8 +273,8 @@ bool NhwcTransformerImpl2::SuportsReplacementNHWC(Node& node) {
    return
           ((node.GetExecutionProviderType() == kAclExecutionProvider ||
             node.GetExecutionProviderType() == kArmNNExecutionProvider) &&
-           ((node.OpType() == "Conv" && isNot9x9(node) && isNotGroupConvolution(node)) ||
-            (node.OpType() == "FusedConv" && isNot9x9(node) && isNotGroupConvolution(node)) ||
+           ((node.OpType() == "Conv" && isNot9x9(node) && isNotGroupConvolution(node) && node.GetExecutionProviderType() != kAclExecutionProvider) ||
+            (node.OpType() == "FusedConv" && isNot9x9(node) && isNotGroupConvolution(node) && node.GetExecutionProviderType() != kAclExecutionProvider) ||
             node.OpType() == "MaxPool" ||
             node.OpType() == "AveragePool" ||
             node.OpType() == "GlobalMaxPool" ||
