@@ -170,6 +170,13 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
 
     if (conv_attrs_.group > 1) {
       if (conv_attrs_.group == inputShape[1]) {
+
+#if defined(ACL_2108)
+        // depthwise convolution
+        LOGS_DEFAULT(WARNING) << "ArmNN depthwise delegated to CPU";
+        Status s = onnxruntime::Conv<T>::Compute(context);
+        return s;
+#else
         LOGS_DEFAULT(VERBOSE) << "ArmNN depthwise convolution";
         armnn::DepthwiseConvolution2dDescriptor depthwiseDescriptor = createDepthwiseDescriptor(convolutionDescriptor);
 
@@ -191,6 +198,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
                                                                         armnn::EmptyOptional(),
                                                                         "depthwise_convolution_armnn");
         }
+#endif
       } else {
         // NCHWc convolution
         LOGS_DEFAULT(WARNING) << "ArmNN does not have support for NCHWc convolution; defaulting to cpu implementation";

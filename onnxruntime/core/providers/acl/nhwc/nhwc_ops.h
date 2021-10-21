@@ -16,6 +16,7 @@
 #include "core/providers/acl/acl_execution_provider.h"
 
 // ACL
+#include "arm_compute/runtime/Tensor.h"
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/runtime/TensorAllocator.h"
 #include "arm_compute/runtime/Allocator.h"
