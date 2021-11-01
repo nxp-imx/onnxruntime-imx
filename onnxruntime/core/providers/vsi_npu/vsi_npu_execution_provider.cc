@@ -153,14 +153,14 @@ static std::vector<NodeIndex> GetUnsupportedNodeIndices(
         std::string reason = "";
         if (IsNodeSupported(graph_viewer, node, reason)) {
             // Collect inputs that are initializers
-            LOGS_DEFAULT(WARNING) << "node:" << node->OpType();
+            LOGS_DEFAULT(VERBOSE) << "node:" << node->OpType();
             node->ForEachDef(
                 [&vsi_npu_required_initializers, &graph_viewer](
                     const onnxruntime::NodeArg& node_arg, bool is_input) {
                     if (is_input &&
                         graph_viewer.GetAllInitializedTensors().count(node_arg.Name())) {
                         vsi_npu_required_initializers.insert(node_arg.Name());
-                        LOGS_DEFAULT(WARNING) << "input tensor:" << vsi_npu::PrintNode(node_arg);
+                        LOGS_DEFAULT(VERBOSE) << "input tensor:" << vsi_npu::PrintNode(node_arg);
                     }
                 },
                 true);
@@ -315,7 +315,7 @@ std::vector<std::unique_ptr<ComputeCapability>> VsiNpuExecutionProvider::GetCapa
     // Need access to model_path_
     for (const auto& tensor : graph_viewer.GetAllInitializedTensors()) {
         if (tensor.second->has_data_location()) {
-            LOGS_DEFAULT(WARNING) << "location:" << tensor.second->data_location();
+            LOGS_DEFAULT(VERBOSE) << "location:" << tensor.second->data_location();
             if (tensor.second->data_location() ==
                 ONNX_NAMESPACE::TensorProto_DataLocation_EXTERNAL) {
                 LOGS_DEFAULT(WARNING) << "VsiNpu: Initializers with external data location are not "
@@ -388,9 +388,9 @@ void SetupNNRTGraph(const Node* node,
                     const onnxruntime::GraphViewer* graph_viewer) {
     node->ForEachDef([](const onnxruntime::NodeArg& node_arg, bool is_input) {
         if (is_input) {
-            LOGS_DEFAULT(WARNING) << "node input tensor:" << vsi_npu::PrintNode(node_arg);
+            LOGS_DEFAULT(VERBOSE) << "node input tensor:" << vsi_npu::PrintNode(node_arg);
         } else {
-            LOGS_DEFAULT(WARNING) << "node output tensor:" << vsi_npu::PrintNode(node_arg);
+            LOGS_DEFAULT(VERBOSE) << "node output tensor:" << vsi_npu::PrintNode(node_arg);
         }
     });
     if (VsiSupported(node->OpType())) {
@@ -411,9 +411,9 @@ Status ComputeStateFunc(FunctionState state,
 
     {
         auto input_num = ort.KernelContext_GetInputCount(context);
-        LOGS_DEFAULT(WARNING) << "input_num:" << input_num;
+        LOGS_DEFAULT(VERBOSE) << "input_num:" << input_num;
         auto output_num = ort.KernelContext_GetOutputCount(context);
-        LOGS_DEFAULT(WARNING) << "output_num:" << output_num;
+        LOGS_DEFAULT(VERBOSE) << "output_num:" << output_num;
     }
 
     const auto* func_body = fused_node->GetFunctionBody();
@@ -458,7 +458,7 @@ Status ComputeStateFunc(FunctionState state,
             const OrtValue* input_tensor = ort.KernelContext_GetInput(context, i);
             const auto tensor_info = ort.GetTensorTypeAndShape(input_tensor);
             const auto& tensor_shape = ort.GetTensorShape(tensor_info);
-            LOGS_DEFAULT(WARNING) << "TensorBytes:" << vsi_npu::GetTensorBytes(ort, tensor_info);
+            LOGS_DEFAULT(VERBOSE) << "TensorBytes:" << vsi_npu::GetTensorBytes(ort, tensor_info);
             model->SetInput(j,
                             nullptr,
                             ort.GetTensorData<void>(input_tensor),
@@ -489,7 +489,7 @@ Status VsiNpuExecutionProvider::Compile(const std::vector<onnxruntime::Node*>& f
                                         std::vector<NodeComputeInfo>& node_compute_funcs) {
     for (const auto& fused_node : fused_nodes) {
         NodeComputeInfo compute_info;
-        LOGS_DEFAULT(WARNING) << "fused_node:" << fused_node->OpType();
+        LOGS_DEFAULT(VERBOSE) << "fused_node:" << fused_node->OpType();
 
         const auto* func_body = fused_node->GetFunctionBody();
         if (!func_body) {
@@ -502,7 +502,7 @@ Status VsiNpuExecutionProvider::Compile(const std::vector<onnxruntime::Node*>& f
         model_list_.push_back(model);
 
         for (auto tensor : graph_viewer.GetInputsIncludingInitializers()) {
-            LOGS_DEFAULT(WARNING) << "fused_node input init:" << vsi_npu::PrintNode(*tensor) << "#"
+            LOGS_DEFAULT(VERBOSE) << "fused_node input init:" << vsi_npu::PrintNode(*tensor) << "#"
                                   << graph_viewer.IsConstantInitializer(tensor->Name(), true) << "#"
                                   << graph_utils::IsInitializer(graph_body, tensor->Name(), true);
             auto input = std::make_shared<VsiGraphTensorInfo>();
@@ -515,7 +515,7 @@ Status VsiNpuExecutionProvider::Compile(const std::vector<onnxruntime::Node*>& f
             model->GetGraphInputs().push_back(input);
         }
         for (auto tensor : graph_viewer.GetOutputs()) {
-            LOGS_DEFAULT(WARNING) << "fused_node output:" << vsi_npu::PrintNode(*tensor);
+            LOGS_DEFAULT(VERBOSE) << "fused_node output:" << vsi_npu::PrintNode(*tensor);
             auto output = std::make_shared<VsiGraphTensorInfo>();
             output->name = tensor->Name();
             output->is_initializer = false;
@@ -524,7 +524,7 @@ Status VsiNpuExecutionProvider::Compile(const std::vector<onnxruntime::Node*>& f
 
         for (const auto& node_index : graph_viewer.GetNodesInTopologicalOrder()) {
             auto node = graph_viewer.GetNode(node_index);
-            LOGS_DEFAULT(WARNING) << "sub node:" << node->OpType();
+            LOGS_DEFAULT(VERBOSE) << "sub node:" << node->OpType();
             SetupNNRTGraph(node, model, &graph_viewer);
         }
 
