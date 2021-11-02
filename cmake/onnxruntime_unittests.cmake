@@ -959,6 +959,11 @@ if (onnxruntime_USE_TVM)
   endif()
 endif()
 
+install(TARGETS
+            onnxruntime_perf_test
+        LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # shared lib
 if (onnxruntime_BUILD_SHARED_LIB)
   onnxruntime_add_static_library(onnxruntime_mocked_allocator ${TEST_SRC_DIR}/util/test_allocator.cc)
@@ -1166,7 +1171,6 @@ endif()
 
 install(TARGETS
             onnxruntime_test_all
-            onnxruntime_perf_test
             onnxruntime_mlas_test
             onnxruntime_global_thread_pools_test
             onnxruntime_shared_lib_test
