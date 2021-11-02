@@ -135,6 +135,7 @@ Status PerformanceRunner::Run() {
   std::cout << "Session creation time cost: " << session_create_duration.count() << " s\n"
             << "Total inference time cost: " << performance_result_.total_time_cost << " s\n"  // sum of time taken by each request
             << "Total inference requests: " << performance_result_.time_costs.size() << "\n"
+            << "Warm-up inference time cost: " << performance_result_.warmup_time_cost * 1000 << " ms\n"
             << "Average inference time cost: " << performance_result_.total_time_cost / performance_result_.time_costs.size() * 1000 << " ms\n"
             // Time between start and end of run. Less than Total time cost when running requests in parallel.
             << "Total inference run time: " << inference_duration.count() << " s\n"

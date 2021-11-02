@@ -35,6 +35,7 @@ struct PerformanceResult {
   double total_time_cost{0};
   std::vector<double> time_costs;
   std::string model_name;
+  double warmup_time_cost{0};
 
   void DumpToFile(const std::basic_string<ORTCHAR_T>& path, bool f_include_statistics = false) const;
 };
@@ -72,15 +73,21 @@ class PerformanceRunner {
     }
     ORT_RETURN_IF_ERROR(status);
 
+    std::lock_guard<OrtMutex> guard(results_mutex_);
     if (!isWarmup) {
-      std::lock_guard<OrtMutex> guard(results_mutex_);
       performance_result_.time_costs.emplace_back(duration_seconds.count());
       performance_result_.total_time_cost += duration_seconds.count();
       if (performance_test_config_.run_config.f_verbose) {
         std::cout << "iteration:" << performance_result_.time_costs.size() << ","
                   << "time_cost:" << performance_result_.time_costs.back() << std::endl;
       }
+    } else {
+      performance_result_.warmup_time_cost = duration_seconds.count();
+      if (performance_test_config_.run_config.f_verbose) {
+        std::cout << "warm-up time_cost:" << performance_result_.warmup_time_cost << std::endl;
+      }
     }
+
     return Status::OK();
   }
 
