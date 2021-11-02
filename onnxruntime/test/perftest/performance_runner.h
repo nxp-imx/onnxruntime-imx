@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -36,8 +37,6 @@ struct PerformanceResult {
   std::vector<double> time_costs;
   std::string model_name;
   double warmup_time_cost{0};
-
-  void DumpToFile(const std::basic_string<ORTCHAR_T>& path, bool f_include_statistics = false) const;
 };
 
 class PerformanceRunner {
@@ -49,10 +48,6 @@ class PerformanceRunner {
 
   inline const PerformanceResult& GetResult() const { return performance_result_; }
 
-  inline void SerializeResult() const {
-    performance_result_.DumpToFile(performance_test_config_.model_info.result_file_path,
-                                   performance_test_config_.run_config.f_dump_statistics);
-  }
   ORT_DISALLOW_COPY_ASSIGNMENT_AND_MOVE(PerformanceRunner);
 
  private:
@@ -74,18 +69,15 @@ class PerformanceRunner {
     ORT_RETURN_IF_ERROR(status);
 
     std::lock_guard<OrtMutex> guard(results_mutex_);
-    if (!isWarmup) {
-      performance_result_.time_costs.emplace_back(duration_seconds.count());
-      performance_result_.total_time_cost += duration_seconds.count();
-      if (performance_test_config_.run_config.f_verbose) {
-        std::cout << "iteration:" << performance_result_.time_costs.size() << ","
-                  << "time_cost:" << performance_result_.time_costs.back() << std::endl;
+    
+    performance_result_.time_costs.emplace_back(duration_seconds.count());
+    performance_result_.total_time_cost += duration_seconds.count();
+    if (performance_test_config_.run_config.f_verbose) {
+      if (isWarmup) {
+        std::cout << "(Warm-up) ";
       }
-    } else {
-      performance_result_.warmup_time_cost = duration_seconds.count();
-      if (performance_test_config_.run_config.f_verbose) {
-        std::cout << "warm-up time_cost:" << performance_result_.warmup_time_cost << std::endl;
-      }
+      std::cout << "iteration: " << performance_result_.time_costs.size() << ", "
+                << "time_cost: " << performance_result_.time_costs.back() << " s" << std::endl;
     }
 
     return Status::OK();

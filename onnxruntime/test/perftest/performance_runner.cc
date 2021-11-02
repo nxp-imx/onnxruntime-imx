@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 // TODO: Remove when removing Eigen
@@ -42,63 +43,6 @@ Eigen::ThreadPoolInterface* GetDefaultThreadPool(const onnxruntime::Env& env) {
 namespace onnxruntime {
 namespace perftest {
 
-void PerformanceResult::DumpToFile(const std::basic_string<ORTCHAR_T>& path, bool f_include_statistics) const {
-  bool have_file = !path.empty();
-  std::ofstream outfile;
-
-  if (have_file) {
-    outfile.open(path, std::ofstream::out | std::ofstream::app);
-    if (!outfile.good()) {
-      // at least provide some info on the run
-      std::cerr << "failed to open result file '" << path.c_str() << "'. will dump stats to output.\n";
-      have_file = false;
-      f_include_statistics = true;
-    }
-  }
-
-  if (have_file) {
-    for (size_t runs = 0; runs < time_costs.size(); runs++) {
-      outfile << model_name << "," << time_costs[runs] << "," << peak_workingset_size << ","
-              << average_CPU_usage << "," << runs << std::endl;
-    }
-  } else {
-    // match formatting of the initial output from PerformanceRunner::Run
-    std::cout << "Avg CPU usage:" << average_CPU_usage
-              << "\nPeak working set size:" << peak_workingset_size
-              << "\nRuns:" << time_costs.size() << std::endl;
-  }
-
-  if (!time_costs.empty() && f_include_statistics) {
-    std::vector<double> sorted_time = time_costs;
-
-    size_t total = sorted_time.size();
-    size_t n50 = static_cast<size_t>(total * 0.5);
-    size_t n90 = static_cast<size_t>(total * 0.9);
-    size_t n95 = static_cast<size_t>(total * 0.95);
-    size_t n99 = static_cast<size_t>(total * 0.99);
-    size_t n999 = static_cast<size_t>(total * 0.999);
-
-    std::sort(sorted_time.begin(), sorted_time.end());
-
-    auto output_stats = [&](std::ostream& ostream) {
-      ostream << "Min Latency: " << sorted_time[0] << " s\n";
-      ostream << "Max Latency: " << sorted_time[total - 1] << " s\n";
-      ostream << "P50 Latency: " << sorted_time[n50] << " s\n";
-      ostream << "P90 Latency: " << sorted_time[n90] << " s\n";
-      ostream << "P95 Latency: " << sorted_time[n95] << " s\n";
-      ostream << "P99 Latency: " << sorted_time[n99] << " s\n";
-      ostream << "P999 Latency: " << sorted_time[n999] << " s" << std::endl;
-    };
-
-    if (have_file) {
-      outfile << std::endl;
-      output_stats(outfile);
-    }
-
-    output_stats(std::cout);
-  }
-}
-
 Status PerformanceRunner::Run() {
   if (!Initialize()) {
     return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "failed to initialize.");
@@ -132,16 +76,16 @@ Status PerformanceRunner::Run() {
   // if (!performance_test_config_.run_config.profile_file.empty()) session_object->EndProfiling();
   std::chrono::duration<double> inference_duration = performance_result_.end - performance_result_.start;
 
-  std::cout << "Session creation time cost: " << session_create_duration.count() << " s\n"
-            << "Total inference time cost: " << performance_result_.total_time_cost << " s\n"  // sum of time taken by each request
-            << "Total inference requests: " << performance_result_.time_costs.size() << "\n"
-            << "Warm-up inference time cost: " << performance_result_.warmup_time_cost * 1000 << " ms\n"
-            << "Average inference time cost: " << performance_result_.total_time_cost / performance_result_.time_costs.size() * 1000 << " ms\n"
+  std::cout << "Session creation time cost: " << session_create_duration.count() << " s" << std::endl
+            << "Total time cost (including warm-up): " << performance_result_.total_time_cost << " s" << std::endl
+            << "Total inference requests: " << performance_result_.time_costs.size() << std::endl
+            << "Warm-up inference time cost: " << performance_result_.time_costs[0] * 1000 << " ms" << std::endl
+            << "Average inference time cost (excluding warm-up): " << (performance_result_.total_time_cost - performance_result_.time_costs[0]) 
+                                                / (performance_result_.time_costs.size() - 1) * 1000 << " ms" << std::endl
             // Time between start and end of run. Less than Total time cost when running requests in parallel.
-            << "Total inference run time: " << inference_duration.count() << " s\n"
-            << "Avg CPU usage: " << performance_result_.average_CPU_usage << " %\n"
-            << "Peak working set size: " << performance_result_.peak_workingset_size << " bytes"
-            << std::endl;
+            << "Total inference run time: " << inference_duration.count() << " s" << std::endl
+            << "Avg CPU usage: " << performance_result_.average_CPU_usage << " %" << std::endl
+            << "Peak working set size: " << performance_result_.peak_workingset_size << " bytes" << std::endl;
 
   return Status::OK();
 }
