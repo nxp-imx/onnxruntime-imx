@@ -197,7 +197,6 @@ int ModelShell::Compute() {
     local_model_->relax(false);
     auto errCode = execution_ptr_->compute();
     if (0 != errCode) {
-        // assert(false);
         LOGS_DEFAULT(WARNING) << "Execution Model failed";
     }
     return errCode;
