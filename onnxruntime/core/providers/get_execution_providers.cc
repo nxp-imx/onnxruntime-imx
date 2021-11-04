@@ -106,6 +106,14 @@ constexpr ProviderInfo kProvidersInPriorityOrder[] =
 #endif
         },
         {
+            kVsiNpuExecutionProvider,
+#ifdef USE_VSI_NPU
+            true,
+#else
+            false,
+#endif
+        },
+        {
             kDmlExecutionProvider,
 #ifdef USE_DML
             true,
