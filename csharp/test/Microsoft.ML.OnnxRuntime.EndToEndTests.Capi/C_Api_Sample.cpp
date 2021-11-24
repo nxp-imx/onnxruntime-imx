@@ -1,4 +1,5 @@
 // Copyright(c) Microsoft Corporation.All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 //
 
@@ -8,6 +9,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <vector>
+// Uncomment to use the VSI NPU execution provider
+// Make sure to modify include path during build, e.g.: add -I/usr/include/onnxruntime/core/providers/vsi_npu
+//#include "vsi_npu_provider_factory.h"
 
 const OrtApi* g_ort = OrtGetApiBase()->GetApi(ORT_API_VERSION);
 
@@ -33,25 +37,22 @@ int main(int argc, char* argv[]) {
   // initialize session options if needed
   OrtSessionOptions* session_options;
   CheckStatus(g_ort->CreateSessionOptions(&session_options));
-  g_ort->SetIntraOpNumThreads(session_options, 1);
+  CheckStatus(g_ort->SetIntraOpNumThreads(session_options, 1));
 
   // Sets graph optimization level
-  g_ort->SetSessionGraphOptimizationLevel(session_options, ORT_ENABLE_BASIC);
+  CheckStatus(g_ort->SetSessionGraphOptimizationLevel(session_options, ORT_ENABLE_BASIC));
 
   // Optionally add more execution providers via session_options
-  // E.g. for CUDA include cuda_provider_factory.h and uncomment the following line:
-  // OrtSessionOptionsAppendExecutionProvider_CUDA(sessionOptions, 0);
+  // Uncomment to use the VSI NPU execution provider
+  //CheckStatus(OrtSessionOptionsAppendExecutionProvider_VsiNpu(session_options, 0));
 
   //*************************************************************************
   // create session and load model into memory
-  // using squeezenet version 1.3
+  // using squeezenet version 1.4
   // URL = https://github.com/onnx/models/tree/master/squeezenet
   OrtSession* session;
-#ifdef _WIN32
-  const wchar_t* model_path = L"squeezenet.onnx";
-#else
-  const char* model_path = "squeezenet.onnx";
-#endif
+  // Modify model_path to use a different model
+  const char* model_path = "/usr/bin/onnxruntime-1.8.2/squeezenet/model.onnx";
 
   printf("Using Onnxruntime C API\n");
   CheckStatus(g_ort->CreateSession(env, model_path, session_options, &session));
@@ -93,7 +94,7 @@ int main(int argc, char* argv[]) {
 	CheckStatus(g_ort->GetDimensionsCount(tensor_info, &num_dims));
     printf("Input %zu : num_dims=%zu\n", i, num_dims);
     input_node_dims.resize(num_dims);
-	g_ort->GetDimensions(tensor_info, (int64_t*)input_node_dims.data(), num_dims);
+	CheckStatus(g_ort->GetDimensions(tensor_info, (int64_t*)input_node_dims.data(), num_dims));
     for (size_t j = 0; j < num_dims; j++)
       printf("Input %zu : dim %zu=%jd\n", i, j, input_node_dims[j]);
 
@@ -122,6 +123,7 @@ int main(int argc, char* argv[]) {
                                              // use OrtGetTensorShapeElementCount() to get official size!
 
   std::vector<float> input_tensor_values(input_tensor_size);
+  // Modify output node name if different model from squeezenet is used
   std::vector<const char*> output_node_names = {"softmaxout_1"};
 
   // initialize input data with values in [0.0, 1.0]
@@ -147,7 +149,6 @@ int main(int argc, char* argv[]) {
   // Get pointer to output tensor float values
   float* floatarr;
   CheckStatus(g_ort->GetTensorMutableData(output_tensor, (void**)&floatarr));
-  assert(std::abs(floatarr[0] - 0.000045) < 1e-6);
 
   // score the model, and print scores for first 5 classes
   for (int i = 0; i < 5; i++)
