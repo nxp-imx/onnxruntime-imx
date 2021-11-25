@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright 2020 NXP
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -68,7 +68,9 @@ class Gemm : public onnxruntime::Gemm<T> {
     LOGS_DEFAULT(VERBOSE) << "Gemm ArmNN:";
     LOGS_DEFAULT(VERBOSE) << "X " << X->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "W " << W->Shape().ToString().c_str();
-    if (B != nullptr) LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
+    if (B != nullptr) {
+      LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
+    }
     LOGS_DEFAULT(VERBOSE) << "Y " << Y->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "M " << (int)M << ", N " << (int)N << ", K " << (int)K;
     LOGS_DEFAULT(VERBOSE) << "Alfa " << alpha_ << ", Beta " << beta_;
