@@ -237,7 +237,7 @@ Status Conv<T>::Compute(OpKernelContext* context) const {
 
     auto mm_layer = ACLCreateMemoryManager();
 
-    ACLNEConv tconv;
+    ACLNEConv tconv = {0};
     tconv.mm_layer = std::move(mm_layer);
 
     tconv.in = std::make_shared<arm_compute::Tensor>();

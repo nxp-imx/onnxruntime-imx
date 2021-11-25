@@ -175,7 +175,9 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
 
   LOGS_DEFAULT(VERBOSE) << "X " << X->Shape().ToString().c_str() << std::endl;
   LOGS_DEFAULT(VERBOSE) << "W " << W->Shape().ToString().c_str() << std::endl;
-  if (B != nullptr) LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str() << std::endl;
+  if (B != nullptr) {
+    LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str() << std::endl;
+  }
 
   if (X->Shape().NumDimensions() != PREF_DIM) {
     ORT_NOT_IMPLEMENTED("Only implemented convolution for 4D input. Number of dimensions found: ", X->Shape().NumDimensions());
@@ -231,7 +233,7 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
 
     auto mm_layer = ACLCreateMemoryManager();
 
-    ACLNEConv tconv;
+    ACLNEConv tconv = {0};
     tconv.mm_layer = std::move(mm_layer);
 
     tconv.in = std::make_shared<arm_compute::Tensor>();
@@ -335,8 +337,7 @@ Status NhwcConv<T>::Compute(OpKernelContext* context) const {
 
     tconv.out->info()->set_format(tconv.in->info()->format());
 
-    std::pair<ConvLayersIterator, bool> ret;
-    ret = NhwcConv::convLayers.insert(std::pair<OpKernel*, ACLNEConv>((OpKernel*)this, tconv));
+    std::pair<ConvLayersIterator, bool> ret = NhwcConv::convLayers.insert(std::pair<OpKernel*, ACLNEConv>((OpKernel*)this, tconv));
     pConv = &ret.first->second;
 
   } else {
