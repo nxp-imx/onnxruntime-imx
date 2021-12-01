@@ -425,6 +425,10 @@ endif()
 
 set (onnxruntime_test_providers_dependencies ${onnxruntime_EXTERNAL_DEPENDENCIES})
 
+if(onnxruntime_USE_VSI_NPU)
+  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_vsi_npu)
+endif()
+
 if(onnxruntime_USE_NNAPI_BUILTIN)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_nnapi)
 endif()
@@ -490,6 +494,7 @@ set(ONNXRUNTIME_TEST_LIBS
     # CUDA, TENSORRT, DNNL, and OpenVINO are dynamically loaded at runtime
     ${PROVIDERS_MIGRAPHX}
     ${PROVIDERS_NUPHAR}
+    ${PROVIDERS_VSI_NPU}
     ${PROVIDERS_NNAPI}
     ${PROVIDERS_RKNPU}
     ${PROVIDERS_DML}
@@ -578,6 +583,10 @@ if (onnxruntime_USE_NCCL)
   target_include_directories(onnxruntime_test_utils PRIVATE ${NCCL_INCLUDE_DIRS})
 endif()
 onnxruntime_add_include_to_target(onnxruntime_test_utils onnxruntime_common onnxruntime_framework onnxruntime_session GTest::gtest GTest::gmock onnx onnx_proto flatbuffers)
+
+if (onnxruntime_USE_VSI_NPU)
+  target_compile_definitions(onnxruntime_test_utils PUBLIC USE_VSI_NPU=1)
+endif()
 
 
 if (onnxruntime_USE_DML)
@@ -815,6 +824,8 @@ if (onnxruntime_USE_TVM)
     target_link_options(onnx_test_runner PRIVATE "/STACK:4000000")
   endif()
 endif()
+
+set(CMAKE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR}/onnxruntime-${ORT_VERSION})
 
 install(TARGETS onnx_test_runner
         ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -1211,5 +1222,17 @@ if (NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_EXTENDED_MINIMAL_BUILD
     message(FATAL_ERROR "test_execution_provider unknown platform, need to specify shared library exports for it")
   endif()
 endif()
+
+install(TARGETS
+            onnxruntime_test_all
+            onnxruntime_mlas_test
+            onnxruntime_global_thread_pools_test
+            onnxruntime_shared_lib_test
+            onnxruntime_api_tests_without_env
+            custom_op_library
+        LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}/tests
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/tests)
+
+install(DIRECTORY ${REPO_ROOT}/onnxruntime/test/testdata DESTINATION ${CMAKE_INSTALL_BINDIR}/tests)
 
 include(onnxruntime_fuzz_test.cmake)

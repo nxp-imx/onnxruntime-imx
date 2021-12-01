@@ -84,6 +84,10 @@ endif()
 if(onnxruntime_USE_MIGRAPHX)
   set(PROVIDERS_MIGRAPHX onnxruntime_providers_migraphx)
 endif()
+if(onnxruntime_USE_VSI_NPU)
+  set(PROVIDERS_VSI_NPU onnxruntime_providers_vsi_npu)
+  list(APPEND ONNXRUNTIME_PROVIDER_NAMES vsi_npu)
+endif()
 if(onnxruntime_USE_WINML)
   set(PROVIDERS_WINML onnxruntime_providers_winml)
 endif()
@@ -777,78 +781,27 @@ if (onnxruntime_USE_COREML)
 endif()
 
 if (onnxruntime_USE_NNAPI_BUILTIN)
-  if (onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_EXTENDED_MINIMAL_BUILD)
-    message(FATAL_ERROR "NNAPI can not be used in a basic minimal build. Please build with '--minimal_build extended'")
-  endif()
-
-  add_compile_definitions(USE_NNAPI=1)
-
-  # This is the minimum Android API Level required by ORT NNAPI EP to run
-  # ORT running on any host system with Android API level less than this will fall back to CPU EP
-  if(onnxruntime_NNAPI_MIN_API)
-    add_compile_definitions(ORT_NNAPI_MIN_API_LEVEL=${onnxruntime_NNAPI_MIN_API})
-  endif()
-
-  # This is the maximum Android API level supported in the ort model conversion for NNAPI EP
-  # Note: This is only for running NNAPI for ort format model conversion on non-Android system since we cannot
-  #       get the actually Android system version.
-  if(onnxruntime_NNAPI_HOST_API)
-    if(CMAKE_SYSTEM_NAME STREQUAL "Android")
-      message(FATAL_ERROR "onnxruntime_NNAPI_HOST_API should only be set for non-Android target")
-    endif()
-    add_compile_definitions(ORT_NNAPI_MAX_SUPPORTED_API_LEVEL=${onnxruntime_NNAPI_HOST_API})
-  endif()
-
+  add_definitions(-DUSE_NNAPI=1)
   file(GLOB
     onnxruntime_providers_nnapi_cc_srcs_top CONFIGURE_DEPENDS
     "${ONNXRUNTIME_ROOT}/core/providers/nnapi/*.cc"
   )
-
-  # These are shared utils,
-  # TODO, move this to a separated lib when used by EPs other than NNAPI and CoreML
-  file(GLOB_RECURSE onnxruntime_providers_shared_utils_cc_srcs CONFIGURE_DEPENDS
-    "${ONNXRUNTIME_ROOT}/core/providers/shared/utils/utils.h"
-    "${ONNXRUNTIME_ROOT}/core/providers/shared/utils/utils.cc"
+  file(GLOB_RECURSE
+    onnxruntime_providers_nnapi_cc_srcs_nested CONFIGURE_DEPENDS
+    "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/*.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/*.cc"
   )
-
-  if(CMAKE_SYSTEM_NAME STREQUAL "Android")
-    file(GLOB_RECURSE
-      onnxruntime_providers_nnapi_cc_srcs_nested CONFIGURE_DEPENDS
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/*.h"
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/*.cc"
-    )
-  else()
-    file(GLOB
-      onnxruntime_providers_nnapi_cc_srcs_nested CONFIGURE_DEPENDS
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/nnapi_execution_provider.h"
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/nnapi_execution_provider.cc"
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/builders/helper.h"
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/builders/helper.cc"
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/builders/op_support_checker.h"
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/builders/op_support_checker.cc"
-      "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/nnapi_lib/NeuralNetworksTypes.h"
-    )
-  endif()
-
-  set(onnxruntime_providers_nnapi_cc_srcs
-    ${onnxruntime_providers_nnapi_cc_srcs_top}
-    ${onnxruntime_providers_nnapi_cc_srcs_nested}
-    ${onnxruntime_providers_shared_utils_cc_srcs}
-  )
-
+  set(onnxruntime_providers_nnapi_cc_srcs ${onnxruntime_providers_nnapi_cc_srcs_top} ${onnxruntime_providers_nnapi_cc_srcs_nested})
   source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_nnapi_cc_srcs})
-  onnxruntime_add_static_library(onnxruntime_providers_nnapi ${onnxruntime_providers_nnapi_cc_srcs})
+  add_library(onnxruntime_providers_nnapi ${onnxruntime_providers_nnapi_cc_srcs})
   onnxruntime_add_include_to_target(onnxruntime_providers_nnapi onnxruntime_common onnxruntime_framework onnx onnx_proto protobuf::libprotobuf-lite flatbuffers)
   target_link_libraries(onnxruntime_providers_nnapi)
   add_dependencies(onnxruntime_providers_nnapi onnx ${onnxruntime_EXTERNAL_DEPENDENCIES})
   set_target_properties(onnxruntime_providers_nnapi PROPERTIES CXX_STANDARD_REQUIRED ON)
   set_target_properties(onnxruntime_providers_nnapi PROPERTIES FOLDER "ONNXRuntime")
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/../include/onnxruntime/core/providers/nnapi  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core/providers)
   target_include_directories(onnxruntime_providers_nnapi PRIVATE ${ONNXRUNTIME_ROOT} ${nnapi_INCLUDE_DIRS})
   set_target_properties(onnxruntime_providers_nnapi PROPERTIES LINKER_LANGUAGE CXX)
-  # ignore the warning unknown-pragmas on "pragma region"
-  if(NOT MSVC)
-    target_compile_options(onnxruntime_providers_nnapi PRIVATE "-Wno-unknown-pragmas")
-  endif()
 endif()
 
 if (onnxruntime_USE_RKNPU)
@@ -975,7 +928,7 @@ if (onnxruntime_USE_ACL)
 
   source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_acl_cc_srcs})
   onnxruntime_add_static_library(onnxruntime_providers_acl ${onnxruntime_providers_acl_cc_srcs})
-  onnxruntime_add_include_to_target(onnxruntime_providers_acl onnxruntime_common onnxruntime_framework onnx onnx_proto ${PROTOBUF_LIB} flatbuffers)
+  onnxruntime_add_include_to_target(onnxruntime_providers_acl onnxruntime_common onnxruntime_framework onnx onnx_proto protobuf::libprotobuf flatbuffers)
   target_link_libraries(onnxruntime_providers_acl -L$ENV{LD_LIBRARY_PATH})
   add_dependencies(onnxruntime_providers_acl ${onnxruntime_EXTERNAL_DEPENDENCIES})
   set_target_properties(onnxruntime_providers_acl PROPERTIES FOLDER "ONNXRuntime")
@@ -1125,4 +1078,24 @@ if (onnxruntime_USE_ROCM)
   add_dependencies(onnxruntime_providers_rocm ${onnxruntime_EXTERNAL_DEPENDENCIES})
   install(DIRECTORY ${PROJECT_SOURCE_DIR}/../include/onnxruntime/core/providers/hip  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core/providers)
   set_target_properties(onnxruntime_providers_rocm PROPERTIES LINKER_LANGUAGE CXX)
+endif()
+
+if (onnxruntime_USE_VSI_NPU)
+  add_definitions(-DUSE_VSI_NPU=1)
+  file(GLOB_RECURSE onnxruntime_providers_vsi_npu_cc_srcs
+    "${ONNXRUNTIME_ROOT}/core/providers/vsi_npu/*.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/vsi_npu/*.cc"
+  )
+  set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
+  source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_vsi_npu_cc_srcs})
+  add_library(onnxruntime_providers_vsi_npu ${onnxruntime_providers_vsi_npu_cc_srcs})
+  onnxruntime_add_include_to_target(onnxruntime_providers_vsi_npu onnxruntime_common onnxruntime_framework onnx onnx_proto protobuf::libprotobuf)
+  add_dependencies(onnxruntime_providers_vsi_npu ${onnxruntime_EXTERNAL_DEPENDENCIES})
+  set_target_properties(onnxruntime_providers_vsi_npu PROPERTIES FOLDER "ONNXRuntime")
+  target_include_directories(onnxruntime_providers_vsi_npu PRIVATE ${ONNXRUNTIME_ROOT} ${onnxruntime_OVXLIB_INCLUDE})
+  install(DIRECTORY ${PROJECT_SOURCE_DIR}/../include/onnxruntime/core/providers/vsi_npu  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core/providers)
+  set_target_properties(onnxruntime_providers_vsi_npu PROPERTIES LINKER_LANGUAGE CXX)
+  if (onnxruntime_VSI_NPU_LIBS)
+    link_directories(onnxruntime_providers_vsi_npu  ${onnxruntime_VSI_NPU_LIBS})
+  endif()
 endif()

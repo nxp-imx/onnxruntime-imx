@@ -21,7 +21,7 @@ IExecutionProvider* TestRocmExecutionProvider() {
 
 #ifdef USE_NNAPI
 IExecutionProvider* TestNnapiExecutionProvider() {
-  static NnapiExecutionProvider nnapi_provider(0);
+  static NnapiExecutionProvider nnapi_provider;
   return &nnapi_provider;
 }
 #endif

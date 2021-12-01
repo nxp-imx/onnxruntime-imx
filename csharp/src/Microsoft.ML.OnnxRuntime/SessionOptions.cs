@@ -251,7 +251,7 @@ namespace Microsoft.ML.OnnxRuntime
         /// <param name="nnapi_flags">nnapi specific flag mask</param>
         public void AppendExecutionProvider_Nnapi(uint nnapi_flags = 0)
         {
-            NativeApiStatus.VerifySuccess(NativeMethods.OrtSessionOptionsAppendExecutionProvider_Nnapi(handle, nnapi_flags));
+            NativeApiStatus.VerifySuccess(NativeMethods.OrtSessionOptionsAppendExecutionProvider_Nnapi(handle));
         }
 
         /// <summary>

@@ -652,7 +652,7 @@ export class CoordsGlslLib extends GlslLib {
 
     if (inRank === 1 && !isInputScalar && !isOutputScalar) {
       output = `
-        return vec4(outputValue.xy, outputValue.xy);
+        return vec4(outputValue.xx, outputValue.yy);
       `;
     } else if (isInputScalar && !isOutputScalar) {
       if (outRank === 1) {

@@ -11,7 +11,7 @@
 #include "core/session/allocator_adapters.h"
 #include "core/common/logging/logging.h"
 #include "core/framework/provider_shutdown.h"
-#include "core/platform/logging/make_platform_default_log_sink.h"
+#include "core/platform/android/logging/android_log_sink.h"
 
 using namespace onnxruntime;
 using namespace onnxruntime::logging;

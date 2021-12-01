@@ -3,18 +3,17 @@
 
 #pragma once
 
-#include <unordered_set>
-
 #include "builders/shaper.h"
 #include "core/platform/ort_mutex.h"
 #include "nnapi_lib/NeuralNetworksWrapper.h"
 
-struct NnApi;
-
 namespace onnxruntime {
 namespace nnapi {
 
+#ifdef __ANDROID__
+// do not use sharedmem impl on non-Android platforms
 #define USENNAPISHAREDMEM 1
+#endif // __ANDROID__
 
 class Execution;
 
@@ -36,7 +35,7 @@ class Model {
    private:
     // NnApi instance to use. Not owned by this object.
     const NnApi* nnapi_{nullptr};
-    int fd_{-1};
+    int fd_{0};
     size_t byte_size_{0};
     uint8_t* data_ptr_{nullptr};
     ANeuralNetworksMemory* nn_memory_handle_{nullptr};
@@ -85,11 +84,11 @@ class Model {
   bool SupportsDynamicOutputShape() const;
 
   // Set and Get the number of elements in the buffer for a dynamic output
-  // If the buffer is not big enough, ANEURALNETWORKS_OUTPUT_INSUFFICIENT_SIZE will be returned by execution
+  // If the buffer is not big enough, ANEURALNETWORKS_OUTPUT_INSUFFICIENT_SIZE will be returned by exection
   // Note: this will return number of elements of the buffer not the byte size of the buffer
   //       and each output will have its separated buffer
   // TODO:
-  // 1. Consider an adaptive approach to automatically increase the buffer size if the execution reports
+  // 1. Consider an adaptive aproach to automatically increase the buffer size if the execution reports
   //    insufficient size
   // 2. Experiment with bigger initial buffer size (currently 1024)
   size_t GetDynamicOutputBufferSize() const { return dynamic_output_buffer_size_; }
@@ -97,11 +96,6 @@ class Model {
 
   // Mutex for exclusive lock to this model object
   OrtMutex& GetMutex() { return mutex_; }
-
-  // If the given output is a scalar output
-  // Since NNAPI does not support tensor with empty shape (scalar), we use {1} tensor for scalar in NNAPI
-  // this output may need special handling
-  bool IsScalarOutput(const std::string& output_name) const;
 
   Status PrepareForExecution(std::unique_ptr<Execution>& execution) ORT_MUST_USE_RESULT;
 
@@ -119,7 +113,6 @@ class Model {
   std::vector<std::string> input_names_;
   std::vector<std::string> output_names_;
   std::unordered_map<std::string, android::nn::wrapper::OperandType> operand_types_;
-  std::unordered_set<std::string> scalar_outputs_;
 
   Shaper shaper_;
 
@@ -140,8 +133,6 @@ class Model {
   void AddOutput(const std::string& onnx_output_name,
                  const std::string& nnapi_output_name,
                  const android::nn::wrapper::OperandType& operand_type);
-
-  void AddScalarOutput(const std::string& output_name);
 
   void SetShaper(const Shaper shaper) { shaper_ = shaper; }
 

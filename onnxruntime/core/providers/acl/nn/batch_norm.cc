@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2020, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2020 NXP
 // Licensed under the MIT License.
 
 #include "core/common/common.h"
@@ -29,6 +29,8 @@
 
 // NEON
 #include "arm_compute/runtime/NEON/functions/NEBatchNormalizationLayer.h"
+
+#define PREF_DIM 4
 
 namespace onnxruntime {
 namespace acl {
@@ -72,7 +74,7 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
 
     auto layer = std::make_shared<arm_compute::NEBatchNormalizationLayer>();
 
-    tbatch_norm.in->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(X->Shape()), arm_compute::Format::F32));
+    tbatch_norm.in->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(X->Shape(), PREF_DIM), arm_compute::Format::F32));
     tbatch_norm.out->allocator()->init(arm_compute::TensorInfo(tbatch_norm.in->info()->tensor_shape(), arm_compute::Format::F32));
 
     tbatch_norm.scale->allocator()->init(arm_compute::TensorInfo(ACLTensorShape(S->Shape()), arm_compute::Format::F32));
@@ -84,15 +86,21 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
       tbatch_norm.mean.get(), tbatch_norm.var.get(), B != nullptr ? tbatch_norm.b.get() : nullptr, S != nullptr ? tbatch_norm.scale.get() : nullptr,
       epsilon_);//no activation in onnx
 
-    const T* scale_data = S->template Data<T>();
-    const T* b_data = B->template Data<T>();
     const T* mean_data = M->template Data<T>();
     const T* var_data = V->template Data<T>();
 
     ACLImportMemory(tbatch_norm.mean->allocator(), (void*)mean_data, M->Shape().Size() * 4);
     ACLImportMemory(tbatch_norm.var->allocator(), (void*)var_data, V->Shape().Size() * 4);
-    ACLImportMemory(tbatch_norm.b->allocator(), (void*)b_data, B->Shape().Size() * 4);
-    ACLImportMemory(tbatch_norm.scale->allocator(), (void*)scale_data, S->Shape().Size() * 4);
+
+    if (B != nullptr) {
+        const T* b_data = B->template Data<T>();
+        ACLImportMemory(tbatch_norm.b->allocator(), (void*)b_data, B->Shape().Size() * 4);
+    }
+
+    if (S != nullptr) {
+        const T* scale_data = S->template Data<T>();
+        ACLImportMemory(tbatch_norm.scale->allocator(), (void*)scale_data, S->Shape().Size() * 4);
+    }
 
     // allocate space for input tensor to accomodate paddings and strides
     tbatch_norm.in->allocator()->allocate();
@@ -101,7 +109,7 @@ Status BatchNorm<T>::Compute(OpKernelContext* context) const {
 
     std::pair<BatchNormLayersIterator, bool> ret;
     ret = batchNormLayers.insert(std::pair<OpKernel*, ACLNEBatchNorm>((OpKernel*)this, tbatch_norm));
-    pBatchNorm = &tbatch_norm;
+    pBatchNorm = &ret.first->second;
 
   } else {
     pBatchNorm = &it->second;
