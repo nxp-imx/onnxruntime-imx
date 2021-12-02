@@ -136,7 +136,7 @@ class Model {
 
   void SetShaper(const Shaper shaper) { shaper_ = shaper; }
 
-  int32_t GetNNAPIFeatureLevel() const;
+  int32_t GetAndroidSdkVer() const;
 };
 
 class Execution {

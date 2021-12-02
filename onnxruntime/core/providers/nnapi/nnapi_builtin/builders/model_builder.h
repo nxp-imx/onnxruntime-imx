@@ -35,7 +35,7 @@ class ModelBuilder {
 
   Status Compile(std::unique_ptr<Model>& model) ORT_MUST_USE_RESULT;
 
-  int32_t GetNNAPIFeatureLevel() const;
+  int32_t GetAndroidSdkVer() const;
 
   // Add an NNAPI operation (operator)
   Status AddOperation(int op, const std::vector<uint32_t>& input_indices,
