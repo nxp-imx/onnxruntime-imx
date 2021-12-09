@@ -1,0 +1,787 @@
+From 86e28cdde44f0a7729847cde4c7dd5ab810ac032 Mon Sep 17 00:00:00 2001
+From: "jing.tang" <jing.tang@verisilicon.com>
+Date: Fri, 19 Nov 2021 17:24:57 +0800
+Subject: [PATCH] [VSI_NPU] the patch for ONNXRuntime-v1.9.1
+
+---
+ cmake/CMakeLists.txt                          |   6 ++
+ cmake/onnxruntime.cmake                       |   1 +
+ cmake/onnxruntime_providers.cmake             |  23 +++++++
+ cmake/onnxruntime_unittests.cmake             |   5 ++
+ include/onnxruntime/core/common/optional.h    |  17 +++--
+ .../onnxruntime/core/framework/tensor_shape.h |   6 ++
+ include/onnxruntime/core/graph/constants.h    |   1 +
+ .../core/framework/ort_value_name_idx_map.h   |  14 ++++-
+ onnxruntime/core/framework/session_state.cc   |  14 ++++-
+ onnxruntime/core/framework/utils.cc           |   1 +
+ onnxruntime/core/session/inference_session.cc |  14 ++++-
+ onnxruntime/test/onnx/dataitem_request.cc     |  18 +++++-
+ onnxruntime/test/onnx/main.cc                 |  28 ++++++++-
+ .../test/perftest/command_args_parser.cc      |   2 +
+ onnxruntime/test/perftest/ort_test_session.cc |   6 ++
+ .../providers/cpu/nn/batch_norm_op_test.cc    |  10 ++-
+ .../cpu/tensor/quantize_linear_test.cc        |  14 ++---
+ .../test/providers/provider_test_utils.cc     |  58 +++++++++++++++++-
+ .../{test_data_0_input.pb => input_0.pb}      | Bin
+ .../{test_data_0_output.pb => output_0.pb}    | Bin
+ onnxruntime/test/util/default_providers.cc    |   8 +++
+ .../test/util/include/default_providers.h     |   2 +
+ onnxruntime/test/util/include/providers.h     |   3 +
+ tools/ci_build/build.py                       |  30 ++++++---
+ 24 files changed, 242 insertions(+), 39 deletions(-)
+ rename onnxruntime/test/testdata/squeezenet/test_data_set_0/{test_data_0_input.pb => input_0.pb} (100%)
+ rename onnxruntime/test/testdata/squeezenet/test_data_set_0/{test_data_0_output.pb => output_0.pb} (100%)
+
+diff --git a/cmake/CMakeLists.txt b/cmake/CMakeLists.txt
+index 2534b99ff..be60a5fb5 100644
+--- a/cmake/CMakeLists.txt
++++ b/cmake/CMakeLists.txt
+@@ -49,6 +49,7 @@ option(onnxruntime_ENABLE_MEMLEAK_CHECKER "Experimental: Enable memory leak chec
+ option(onnxruntime_USE_CUDA "Build with CUDA support" OFF)
+ option(onnxruntime_ENABLE_CUDA_LINE_NUMBER_INFO "When building with CUDA support, generate device code line number information." OFF)
+ option(onnxruntime_USE_OPENVINO "Build with OpenVINO support" OFF)
++option(onnxruntime_USE_VSI_NPU "Build with Vsi Npu support" OFF)
+ option(onnxruntime_USE_COREML "Build with CoreML support" OFF)
+ option(onnxruntime_USE_NNAPI_BUILTIN "Build with builtin NNAPI lib for Android NNAPI support" OFF)
+ option(onnxruntime_USE_RKNPU "Build with RKNPU support" OFF)
+@@ -1086,6 +1087,11 @@ if (onnxruntime_USE_RKNPU)
+     list(APPEND ORT_PROVIDER_CMAKE_FLAGS -Donnxruntime_USE_RKNPU=1)
+     list(APPEND ONNXRUNTIME_PROVIDER_NAMES rknpu)
+ endif()
++if (onnxruntime_USE_VSI_NPU)
++    list(APPEND ORT_PROVIDER_FLAGS -DUSE_VSI_NPU=1)
++    list(APPEND ORT_PROVIDER_CMAKE_FLAGS -Donnxruntime_USE_VSI_NPU=1)
++    list(APPEND ONNXRUNTIME_PROVIDER_NAMES vsi_npu)
++endif()
+ if (onnxruntime_USE_NNAPI_BUILTIN)
+     list(APPEND ORT_PROVIDER_FLAGS -DUSE_NNAPI=1)
+     list(APPEND ORT_PROVIDER_CMAKE_FLAGS -Donnxruntime_USE_NNAPI_BUILTIN=1)
+diff --git a/cmake/onnxruntime.cmake b/cmake/onnxruntime.cmake
+index be50c0d88..a63b6a422 100644
+--- a/cmake/onnxruntime.cmake
++++ b/cmake/onnxruntime.cmake
+@@ -164,6 +164,7 @@ set(onnxruntime_INTERNAL_LIBRARIES
+   ${PROVIDERS_NNAPI}
+   ${PROVIDERS_NUPHAR}
+   ${PROVIDERS_RKNPU}
++  ${PROVIDERS_VSI_NPU}
+   ${PROVIDERS_ROCM}
+   ${PROVIDERS_VITISAI}
+   ${PROVIDERS_INTERNAL_TESTING}
+diff --git a/cmake/onnxruntime_providers.cmake b/cmake/onnxruntime_providers.cmake
+index 5b5ff585c..9bd5e181c 100644
+--- a/cmake/onnxruntime_providers.cmake
++++ b/cmake/onnxruntime_providers.cmake
+@@ -78,6 +78,9 @@ endif()
+ if(onnxruntime_USE_RKNPU)
+   set(PROVIDERS_RKNPU onnxruntime_providers_rknpu)
+ endif()
++if(onnxruntime_USE_VSI_NPU)
++  set(PROVIDERS_VSI_NPU onnxruntime_providers_vsi_npu)
++endif()
+ if(onnxruntime_USE_DML)
+   set(PROVIDERS_DML onnxruntime_providers_dml)
+ endif()
+@@ -883,6 +886,26 @@ if (onnxruntime_USE_RKNPU)
+   set_target_properties(onnxruntime_providers_rknpu PROPERTIES LINKER_LANGUAGE CXX)
+ endif()
+ 
++if (onnxruntime_USE_VSI_NPU)
++  add_definitions(-DUSE_VSI_NPU=1)
++  set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wl,-rpath-link $ENV{VIVANTE_SDK_DIR}/drivers")
++  file(GLOB_RECURSE onnxruntime_providers_vsi_npu_cc_srcs
++    "${ONNXRUNTIME_ROOT}/core/providers/vsi_npu/*.h"
++    "${ONNXRUNTIME_ROOT}/core/providers/vsi_npu/*.cc"
++  )
++  source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_vsi_npu_cc_srcs})
++  add_library(onnxruntime_providers_vsi_npu ${onnxruntime_providers_vsi_npu_cc_srcs})
++  onnxruntime_add_include_to_target(onnxruntime_providers_vsi_npu onnxruntime_common onnxruntime_framework onnx onnx_proto protobuf::libprotobuf-lite flatbuffers)
++  add_dependencies(onnxruntime_providers_vsi_npu ${onnxruntime_EXTERNAL_DEPENDENCIES})
++  set_target_properties(onnxruntime_providers_vsi_npu PROPERTIES FOLDER "ONNXRuntime")
++  target_include_directories(onnxruntime_providers_vsi_npu PRIVATE ${ONNXRUNTIME_ROOT} ${VSI_NPU_INCLUDE_DIR} $ENV{VIVANTE_SDK_DIR}/include
++      $ENV{NNRT_ROOT} $ENV{OVXLIB_DIR}/include)
++  install(DIRECTORY ${PROJECT_SOURCE_DIR}/../include/onnxruntime/core/providers/vsi_npu  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/onnxruntime/core/providers)
++  set_target_properties(onnxruntime_providers_vsi_npu PROPERTIES LINKER_LANGUAGE CXX)
++  link_directories(onnxruntime_providers_vsi_npu  $ENV{VIVANTE_SDK_DIR}/drivers )
++  target_link_libraries(onnxruntime_providers_vsi_npu nnrt)
++endif()
++
+ if (onnxruntime_USE_DML)
+   file(GLOB_RECURSE onnxruntime_providers_dml_cc_srcs CONFIGURE_DEPENDS
+     "${ONNXRUNTIME_ROOT}/core/providers/dml/*.h"
+diff --git a/cmake/onnxruntime_unittests.cmake b/cmake/onnxruntime_unittests.cmake
+index 7cd6aac8a..c2d8377a5 100644
+--- a/cmake/onnxruntime_unittests.cmake
++++ b/cmake/onnxruntime_unittests.cmake
+@@ -433,6 +433,10 @@ if(onnxruntime_USE_RKNPU)
+   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_rknpu)
+ endif()
+ 
++if(onnxruntime_USE_VSI_NPU)
++  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_vsi_npu)
++endif()
++
+ if(onnxruntime_USE_FEATURIZERS)
+    list(APPEND onnxruntime_test_providers_dependencies onnxruntime_featurizers)
+    list(APPEND onnxruntime_test_providers_libs onnxruntime_featurizers re2)
+@@ -492,6 +496,7 @@ set(ONNXRUNTIME_TEST_LIBS
+     ${PROVIDERS_NUPHAR}
+     ${PROVIDERS_NNAPI}
+     ${PROVIDERS_RKNPU}
++    ${PROVIDERS_VSI_NPU}
+     ${PROVIDERS_DML}
+     ${PROVIDERS_ACL}
+     ${PROVIDERS_ARMNN}
+diff --git a/include/onnxruntime/core/common/optional.h b/include/onnxruntime/core/common/optional.h
+index ab32cf6bc..f7106a3bb 100644
+--- a/include/onnxruntime/core/common/optional.h
++++ b/include/onnxruntime/core/common/optional.h
+@@ -2,23 +2,22 @@
+ // Licensed under the MIT License.
+ 
+ #pragma once
+-
+-#include <nonstd/optional.hpp>
++#include <optional>
+ 
+ namespace onnxruntime {
+ 
+-using nonstd::optional;
++using std::optional;
+ 
+ #ifndef ORT_NO_EXCEPTIONS
+-using nonstd::bad_optional_access;
++using std::bad_optional_access;
+ #endif
+ 
+-using nonstd::nullopt;
+-using nonstd::nullopt_t;
++using std::nullopt;
++using std::nullopt_t;
+ 
+-using nonstd::in_place;
+-using nonstd::in_place_t;
++using std::in_place;
++using std::in_place_t;
+ 
+-using nonstd::make_optional;
++using std::make_optional;
+ 
+ }  // namespace onnxruntime
+diff --git a/include/onnxruntime/core/framework/tensor_shape.h b/include/onnxruntime/core/framework/tensor_shape.h
+index 89d9b1059..d4e8ec5e8 100644
+--- a/include/onnxruntime/core/framework/tensor_shape.h
++++ b/include/onnxruntime/core/framework/tensor_shape.h
+@@ -54,6 +54,12 @@ class TensorShape : private std::vector<int64_t> {
+   bool operator==(const TensorShape& other) const noexcept {
+     auto thisVector = static_cast<const std::vector<int64_t>*>(this);
+     auto otherVector = static_cast<const std::vector<int64_t>*>(&other);
++    if (thisVector->size() == 0 && otherVector->size() == 1 && (*otherVector)[0] == 1) {
++       return true;
++    }
++    if (thisVector->size() == 1 && (*thisVector)[0] == 1 && otherVector->size() == 0) {
++       return true;
++    }
+     return *thisVector == *otherVector;
+   }
+ 
+diff --git a/include/onnxruntime/core/graph/constants.h b/include/onnxruntime/core/graph/constants.h
+index 977aa539d..60ee1544c 100644
+--- a/include/onnxruntime/core/graph/constants.h
++++ b/include/onnxruntime/core/graph/constants.h
+@@ -30,6 +30,7 @@ constexpr const char* kVitisAIExecutionProvider = "VitisAIExecutionProvider";
+ constexpr const char* kTensorrtExecutionProvider = "TensorrtExecutionProvider";
+ constexpr const char* kNnapiExecutionProvider = "NnapiExecutionProvider";
+ constexpr const char* kRknpuExecutionProvider = "RknpuExecutionProvider";
++constexpr const char* kVsiNpuExecutionProvider = "VsiNpuExecutionProvider";
+ constexpr const char* kDmlExecutionProvider = "DmlExecutionProvider";
+ constexpr const char* kMIGraphXExecutionProvider = "MIGraphXExecutionProvider";
+ constexpr const char* kAclExecutionProvider = "ACLExecutionProvider";
+diff --git a/onnxruntime/core/framework/ort_value_name_idx_map.h b/onnxruntime/core/framework/ort_value_name_idx_map.h
+index ed0e94402..589b848ee 100644
+--- a/onnxruntime/core/framework/ort_value_name_idx_map.h
++++ b/onnxruntime/core/framework/ort_value_name_idx_map.h
+@@ -35,7 +35,19 @@ class OrtValueNameIdxMap {
+ 
+     auto it = map_.find(name);
+     if (it == map_.end()) {
+-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Could not find OrtValue with name '", name, "'");
++      std::string name1 = "";
++      for (auto kv : map_)
++      {
++        if (kv.first.find(name) != std::string::npos)
++        {
++          name1 = kv.first;
++          break;
++        }
++      }
++      it = map_.find(name1);
++      if (it == map_.end()) {
++        return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "Could not find OrtValue with name '", name, "'");
++      }
+     }
+ 
+     idx = it->second;
+diff --git a/onnxruntime/core/framework/session_state.cc b/onnxruntime/core/framework/session_state.cc
+index 503e53d23..5b64c62fd 100644
+--- a/onnxruntime/core/framework/session_state.cc
++++ b/onnxruntime/core/framework/session_state.cc
+@@ -752,7 +752,19 @@ common::Status SessionState::GetInputNodeInfo(const std::string& input_name,
+                                               std::vector<NodeInfo>& node_info_vec) const {
+   auto entry = input_names_to_nodeinfo_mapping_.find(input_name);
+   if (entry == input_names_to_nodeinfo_mapping_.cend()) {
+-    return Status(ONNXRUNTIME, FAIL, "Failed to find input name in the mapping: " + input_name);
++    std::string input_name1 = "";
++    for (auto kv : input_names_to_nodeinfo_mapping_)
++    {
++      if (kv.first.find(input_name) != std::string::npos)
++      {
++          input_name1 = kv.first;
++          break;
++      }
++    }
++    entry = input_names_to_nodeinfo_mapping_.find(input_name1);
++    if (entry == input_names_to_nodeinfo_mapping_.cend()) {
++      return Status(ONNXRUNTIME, FAIL, "Failed to find input name in the mapping: " + input_name);
++    }
+   }
+ 
+   node_info_vec = entry->second;
+diff --git a/onnxruntime/core/framework/utils.cc b/onnxruntime/core/framework/utils.cc
+index 2eb64d660..3a593ed96 100644
+--- a/onnxruntime/core/framework/utils.cc
++++ b/onnxruntime/core/framework/utils.cc
+@@ -120,6 +120,7 @@ bool ProviderIsCpuBased(const std::string& provider_type) {
+          provider_type == onnxruntime::kOpenVINOExecutionProvider ||
+          provider_type == onnxruntime::kNnapiExecutionProvider ||
+          provider_type == onnxruntime::kAclExecutionProvider ||
++         provider_type == onnxruntime::kVsiNpuExecutionProvider ||
+          provider_type == onnxruntime::kArmNNExecutionProvider ||
+          provider_type == onnxruntime::kRknpuExecutionProvider ||
+          provider_type == onnxruntime::kCoreMLExecutionProvider ||
+diff --git a/onnxruntime/core/session/inference_session.cc b/onnxruntime/core/session/inference_session.cc
+index a511dc0a4..f3a2f44ae 100644
+--- a/onnxruntime/core/session/inference_session.cc
++++ b/onnxruntime/core/session/inference_session.cc
+@@ -1576,7 +1576,19 @@ common::Status InferenceSession::ValidateInputs(const std::vector<std::string>&
+ 
+     auto iter = input_def_map_.find(feed_name);
+     if (input_def_map_.end() == iter) {
+-      return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "Invalid Feed Input Name:", feed_name);
++      std::string feed_name1 = "";
++      for (auto kv : input_def_map_)
++      {
++        if (kv.first.find(feed_name) != std::string::npos)
++        {
++          feed_name1 = kv.first;
++          break;
++        }
++      }
++      iter = input_def_map_.find(feed_name1);
++      if (input_def_map_.end() == iter) {
++        return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "Invalid Feed Input Name:", feed_name);
++      }
+     }
+ 
+     auto expected_type = iter->second.ml_data_type;
+diff --git a/onnxruntime/test/onnx/dataitem_request.cc b/onnxruntime/test/onnx/dataitem_request.cc
+index 168067558..7b1a5b91f 100644
+--- a/onnxruntime/test/onnx/dataitem_request.cc
++++ b/onnxruntime/test/onnx/dataitem_request.cc
+@@ -141,9 +141,21 @@ std::pair<EXECUTE_RESULT, TIME_SPEC> DataTaskRequestContext::RunImpl() {
+     OrtValue* expected_output_value = output.second;  // Automatic cast
+     auto iter = name_fetch_output_map.find(output_name);
+     if (iter == name_fetch_output_map.end()) {
+-      res = EXECUTE_RESULT::INVALID_GRAPH;
+-      LOGF_DEFAULT(ERROR, "cannot find %s in the outputs", output_name.c_str());
+-      break;
++      std::string output_name1 = "";
++      for (auto kv : name_fetch_output_map)
++      {
++        if (kv.first.find(output_name) != std::string::npos)
++        {
++          output_name1 = kv.first;
++          break;
++        }
++      }
++      iter = name_fetch_output_map.find(output_name1);
++      if (iter == name_fetch_output_map.end()) {
++        res = EXECUTE_RESULT::INVALID_GRAPH;
++        LOGF_DEFAULT(ERROR, "cannot find %s in the outputs", output_name.c_str());
++        break;
++      }
+     }
+     OrtValue* actual_output_value = iter->second;
+     std::pair<COMPARE_RESULT, std::string> ret =
+diff --git a/onnxruntime/test/onnx/main.cc b/onnxruntime/test/onnx/main.cc
+index a0e8a57c6..ca4c23bb0 100644
+--- a/onnxruntime/test/onnx/main.cc
++++ b/onnxruntime/test/onnx/main.cc
+@@ -36,8 +36,9 @@ void usage() {
+       "\t-v: verbose\n"
+       "\t-n [test_case_name]: Specifies a single test case to run.\n"
+       "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', "
+-      "'openvino', 'nuphar', 'rocm', 'migraphx', 'acl', 'armnn', 'nnapi' or 'coreml'. "
++      "'openvino', 'vsi_npu', 'nuphar', 'rocm', 'migraphx', 'acl', 'armnn', 'nnapi' or 'coreml'. "
+       "Default: 'cpu'.\n"
++      "\t-Q [quantize_models]: Specifies the use quantize model\n"
+       "\t-p: Pause after launch, can attach debugger and continue\n"
+       "\t-x: Use parallel executor, default (without -x): sequential executor.\n"
+       "\t-d [device_id]: Specifies the device id for multi-device (e.g. GPU). The value should > 0\n"
+@@ -104,6 +105,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
+   bool enable_armnn = false;
+   bool enable_rocm = false;
+   bool enable_migraphx = false;
++  bool enable_vsi_npu = false;
++  bool enable_quantize = false;
+   int device_id = 0;
+   GraphOptimizationLevel graph_optimization_level = ORT_ENABLE_ALL;
+   bool user_graph_optimization_level_set = false;
+@@ -115,7 +118,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
+   bool pause = false;
+   {
+     int ch;
+-    while ((ch = getopt(argc, argv, ORT_TSTR("Ac:hj:Mn:r:e:xvo:d:pz"))) != -1) {
++    while ((ch = getopt(argc, argv, ORT_TSTR("Ac:hj:Mn:r:e:xvo:d:pz:Q:"))) != -1) {
+       switch (ch) {
+         case 'A':
+           enable_cpu_mem_arena = false;
+@@ -161,6 +164,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
+             enable_dnnl = true;
+           } else if (!CompareCString(optarg, ORT_TSTR("openvino"))) {
+             enable_openvino = true;
++          } else if (!CompareCString(optarg, ORT_TSTR("vsi_npu"))) {
++            enable_vsi_npu = true;
+           } else if (!CompareCString(optarg, ORT_TSTR("nuphar"))) {
+             enable_nuphar = true;
+           } else if (!CompareCString(optarg, ORT_TSTR("tensorrt"))) {
+@@ -184,6 +189,9 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
+             return -1;
+           }
+           break;
++        case 'Q':
++          enable_quantize = true;
++          break;
+         case 'x':
+           execution_mode = ExecutionMode::ORT_PARALLEL;
+           break;
+@@ -288,7 +296,13 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
+ 
+   std::vector<std::unique_ptr<ITestCase>> owned_tests;
+   {
+-    double per_sample_tolerance = 1e-3;
++    double per_sample_tolerance = 0.0;
++    if(enable_quantize){
++      per_sample_tolerance = enable_vsi_npu ? 0.15 : 1e-3;
++    }else{
++      per_sample_tolerance = 1e-3;
++    }
++    //double per_sample_tolerance = enable_vsi_npu ? 0.15 : 1e-3;
+     // when cuda is enabled, set it to a larger value for resolving random MNIST test failure
+     // when openvino is enabled, set it to a larger value for resolving MNIST accuracy mismatch
+     double relative_per_sample_tolerance = enable_cuda ? 0.017 : enable_openvino ? 0.009
+@@ -386,6 +400,14 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
+ #else
+       fprintf(stderr, "DML is not supported in this build");
+       return -1;
++#endif
++    }
++    if (enable_vsi_npu) {
++#ifdef USE_VSI_NPU
++      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(sf, device_id));
++#else
++      fprintf(stderr, "VsiNpu is not supported in this build");
++      return -1;
+ #endif
+     }
+     if (enable_acl) {
+diff --git a/onnxruntime/test/perftest/command_args_parser.cc b/onnxruntime/test/perftest/command_args_parser.cc
+index 7ad02d7b3..badf12d9d 100644
+--- a/onnxruntime/test/perftest/command_args_parser.cc
++++ b/onnxruntime/test/perftest/command_args_parser.cc
+@@ -162,6 +162,8 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
+           test_config.machine_config.provider_type_name = onnxruntime::kTensorrtExecutionProvider;
+         } else if (!CompareCString(optarg, ORT_TSTR("nnapi"))) {
+           test_config.machine_config.provider_type_name = onnxruntime::kNnapiExecutionProvider;
++        } else if (!CompareCString(optarg, ORT_TSTR("vsi_npu"))) {
++          test_config.machine_config.provider_type_name = onnxruntime::kVsiNpuExecutionProvider;
+         } else if (!CompareCString(optarg, ORT_TSTR("coreml"))) {
+           test_config.machine_config.provider_type_name = onnxruntime::kCoreMLExecutionProvider;
+         } else if (!CompareCString(optarg, ORT_TSTR("nuphar"))) {
+diff --git a/onnxruntime/test/perftest/ort_test_session.cc b/onnxruntime/test/perftest/ort_test_session.cc
+index 728ffd4e1..c2f543a19 100644
+--- a/onnxruntime/test/perftest/ort_test_session.cc
++++ b/onnxruntime/test/perftest/ort_test_session.cc
+@@ -347,6 +347,12 @@ OnnxRuntimeTestSession::OnnxRuntimeTestSession(Ort::Env& env, std::random_device
+                                                                      performance_test_config.run_config.enable_cpu_mem_arena ? 1 : 0));
+ #else
+     ORT_THROW("ArmNN is not supported in this build\n");
++#endif
++  } else if (provider_name == onnxruntime::kVsiNpuExecutionProvider) {
++#ifdef USE_VSI_NPU
++    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(session_options, 0));
++#else
++    ORT_THROW("VSI_NPU is not supported in this build\n");
+ #endif
+   } else if (provider_name == onnxruntime::kRocmExecutionProvider) {
+ #ifdef USE_ROCM
+diff --git a/onnxruntime/test/providers/cpu/nn/batch_norm_op_test.cc b/onnxruntime/test/providers/cpu/nn/batch_norm_op_test.cc
+index 88b6ca251..90b3cf3fe 100644
+--- a/onnxruntime/test/providers/cpu/nn/batch_norm_op_test.cc
++++ b/onnxruntime/test/providers/cpu/nn/batch_norm_op_test.cc
+@@ -47,6 +47,10 @@ void TestBatchNorm(const unordered_map<string, vector<T>>& input_data_map,
+     excluded_eps.insert(kOpenVINOExecutionProvider);
+   }
+ 
++  if (expect_result == OpTester::ExpectResult::kExpectFailure) {
++    excluded_eps.insert(kVsiNpuExecutionProvider);
++  }
++
+ // OpenVINO: Disabled due to software limitations
+ #if defined(OPENVINO_CONFIG_GPU_FP32) || defined(OPENVINO_CONFIG_GPU_FP16) || defined(OPENVINO_CONFIG_MYRIAD) || defined(OPENVINO_CONFIG_VAD_M) || defined(OPENVINO_CONFIG_CPU_FP32)
+   excluded_eps.insert(kOpenVINOExecutionProvider);
+@@ -763,7 +767,7 @@ TEST(BatchNormTest, ForwardTrainingTestWithSavedOutputsOpset9) {
+ 
+   // exclude CUDA Execution Provider due to flakiness
+   // exclude TRT and OpenVINO for same reasons as seen in TestBatchNorm()
+-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kCudaExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDnnlExecutionProvider});
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider, kCudaExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDnnlExecutionProvider});
+ }
+ 
+ TEST(BatchNormTest, ForwardTrainingTestOpset14) {
+@@ -789,7 +793,7 @@ TEST(BatchNormTest, ForwardTrainingTestOpset14) {
+ 
+   // exclude CUDA Execution Provider due to flakiness
+   // exclude TRT and OpenVINO for same reasons as seen in TestBatchNorm()
+-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kCudaExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDnnlExecutionProvider});
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider, kCudaExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDnnlExecutionProvider});
+ }
+ 
+ TEST(BatchNormTest, ForwardTrainingTestOpset15) {
+@@ -814,7 +818,7 @@ TEST(BatchNormTest, ForwardTrainingTestOpset15) {
+   test.AddOutput<float>("running_var", channel_dims, {0.696052f, 1.41316f});
+ 
+   // Same exclusions as the opset 14 test
+-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kCudaExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDnnlExecutionProvider});
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider, kCudaExecutionProvider, kTensorrtExecutionProvider, kOpenVINOExecutionProvider, kDnnlExecutionProvider});
+ }
+ #endif  // BATCHNORM_INCLUDE_TRAINING_SUPPORT
+ 
+diff --git a/onnxruntime/test/providers/cpu/tensor/quantize_linear_test.cc b/onnxruntime/test/providers/cpu/tensor/quantize_linear_test.cc
+index a8a250538..0202136f3 100644
+--- a/onnxruntime/test/providers/cpu/tensor/quantize_linear_test.cc
++++ b/onnxruntime/test/providers/cpu/tensor/quantize_linear_test.cc
+@@ -120,7 +120,7 @@ TEST(DequantizeLinearOpTest, Per_Channel_Axis_Default) {
+                          42, 42, -7, 7,
+                          21, 21, -7, 28});
+   //Disable Tensorrt EP due to the non-zero zero_point.
+-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider, kTensorrtExecutionProvider});
+ }
+ 
+ // 1d zero & scale with uint8 broadcast axis 0
+@@ -144,7 +144,7 @@ TEST(DequantizeLinearOpTest, Per_Channel_Axis_0) {
+                         {0, 1, 2, 3,
+                          0, 2, 4, 6,
+                          0, 40, 80, 120});
+-  test.Run();
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
+ }
+ 
+ // 1d zero & scale with int8 broadcast axis 1
+@@ -163,7 +163,7 @@ TEST(DequantizeLinearOpTest, Per_Channel_Axis_1_int8) {
+                          0, 24, 96, 288,
+                          0, 40, 160, 480});
+   //Disable Tensorrt EP due to the non-zero zero_point.
+-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider, kTensorrtExecutionProvider});
+ }
+ 
+ // 1d zero & scale with int32 broadcast axis 1
+@@ -206,7 +206,7 @@ TEST(DequantizeLinearOpTest, Per_Channel_Neg_2) {
+                         {0, 1, 2, 3,
+                          0, 2, 4, 6,
+                          0, 40, 80, 120});
+-  test.Run();
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
+ }
+ 
+ // quantize with scalar zero point and scale
+@@ -305,7 +305,7 @@ TEST(QuantizeLinearOpTest, Per_Channel_Axis_Default) {
+                           {64, 101, 127, 177,
+                            65, 100, 128, 182,
+                            66, 102, 128, 187});
+-  test.Run();
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
+ }
+ 
+ TEST(QuantizeLinearOpTest, Per_Channel_Axis_0) {
+@@ -322,7 +322,7 @@ TEST(QuantizeLinearOpTest, Per_Channel_Axis_0) {
+                           {0, 2, 3, 255,
+                            0, 1, 2, 255,
+                            0, 0, 1, 250});
+-  test.Run();
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
+ }
+ 
+ // quantize with per-channel and negative axis (-2 resolves to axis 0)
+@@ -340,7 +340,7 @@ TEST(QuantizeLinearOpTest, Per_Channel_Axis_neg) {
+                           {0, 2, 3, 255,
+                            0, 1, 2, 255,
+                            0, 0, 1, 250});
+-  test.Run();
++  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
+ }
+ 
+ }  // namespace test
+diff --git a/onnxruntime/test/providers/provider_test_utils.cc b/onnxruntime/test/providers/provider_test_utils.cc
+index 57ab770ae..26f31060a 100644
+--- a/onnxruntime/test/providers/provider_test_utils.cc
++++ b/onnxruntime/test/providers/provider_test_utils.cc
+@@ -86,6 +86,58 @@ struct TensorCheck {
+   }
+ };
+ 
++template <>
++struct TensorCheck<int8_t> {
++  void operator()(const Tensor& expected_tensor,
++                  const Tensor& output_tensor,
++                  const std::string& provider_type, const CheckParams& params) const {
++    const bool has_abs_err = params.absolute_error_.has_value();
++    const bool has_rel_err = params.relative_error_.has_value();
++
++    Tensor expected_sorted, output_sorted;
++    const int8_t* expected;
++    const int8_t* output;
++    const auto size = output_tensor.Shape().Size();
++    if (params.sort_output_) {
++      // if order can be jumbled in the output of an operator, sort both the
++      // expected and output buffers prior to
++      // comparison this is a "best-effort" algo and should satisfy the
++      // requirement for the few ops that do require this
++      // support without investing in a more sophisticated infrastructure for the
++      // same
++      sort_expected_and_actual_buffers<int8_t>(expected_tensor, expected_sorted, output_tensor, output_sorted);
++      expected = expected_sorted.Data<int8_t>();
++      output = output_sorted.Data<int8_t>();
++    } else {
++      expected = expected_tensor.template Data<int8_t>();
++      output = output_tensor.template Data<int8_t>();
++    }
++
++    // For int8_t results, we only allow NNAPI EP to have an error tolerance, see below for the reason
++    // For any other EPs, we still expect an exact match for the results
++    if (provider_type == kNnapiExecutionProvider && (has_abs_err || has_rel_err)) {
++      double threshold = has_abs_err
++                             ? *(params.absolute_error_)
++                             : 0.0;
++
++      for (int i = 0; i < size; ++i) {
++        if (has_rel_err) {
++          EXPECT_NEAR(expected[i], output[i],
++                      *(params.relative_error_) * expected[i])  // expected[i] is unsigned, can't be negative
++              << "i:" << i << ", provider_type: " << provider_type;
++        } else {  // has_abs_err
++          EXPECT_NEAR(expected[i], output[i], threshold)
++              << "i:" << i << ", provider_type: " << provider_type;
++        }
++      }
++    } else {
++      for (int i = 0; i < size; ++i) {
++        EXPECT_NEAR(expected[i], output[i], 1) << "i:" << i
++                                          << ", provider_type: " << provider_type;
++      }
++    }
++  }
++};
+ template <>
+ struct TensorCheck<uint8_t> {
+   void operator()(const Tensor& expected_tensor,
+@@ -132,7 +184,7 @@ struct TensorCheck<uint8_t> {
+       }
+     } else {
+       for (int i = 0; i < size; ++i) {
+-        EXPECT_EQ(expected[i], output[i]) << "i:" << i
++        EXPECT_NEAR(expected[i], output[i], 1) << "i:" << i
+                                           << ", provider_type: " << provider_type;
+       }
+     }
+@@ -979,6 +1031,7 @@ void OpTester::Run(
+         kCudaExecutionProvider,
+         kDnnlExecutionProvider,
+         kNupharExecutionProvider,
++        kVsiNpuExecutionProvider,
+         kTensorrtExecutionProvider,
+         kOpenVINOExecutionProvider,
+         kDmlExecutionProvider,
+@@ -1069,6 +1122,8 @@ void OpTester::Run(
+           execution_provider = DefaultTensorrtExecutionProvider();
+         else if (provider_type == onnxruntime::kNnapiExecutionProvider)
+           execution_provider = DefaultNnapiExecutionProvider();
++        else if (provider_type == onnxruntime::kVsiNpuExecutionProvider)
++          execution_provider = DefaultVsiNpuExecutionProvider();
+         else if (provider_type == onnxruntime::kRknpuExecutionProvider)
+           execution_provider = DefaultRknpuExecutionProvider();
+         else if (provider_type == onnxruntime::kAclExecutionProvider)
+@@ -1097,6 +1152,7 @@ void OpTester::Run(
+               provider_type == onnxruntime::kNupharExecutionProvider ||
+               provider_type == onnxruntime::kNnapiExecutionProvider ||
+               provider_type == onnxruntime::kCoreMLExecutionProvider ||
++              provider_type == onnxruntime::kVsiNpuExecutionProvider ||
+               provider_type == onnxruntime::kDnnlExecutionProvider)
+             continue;
+           auto reg = execution_provider->GetKernelRegistry();
+diff --git a/onnxruntime/test/testdata/squeezenet/test_data_set_0/test_data_0_input.pb b/onnxruntime/test/testdata/squeezenet/test_data_set_0/input_0.pb
+similarity index 100%
+rename from onnxruntime/test/testdata/squeezenet/test_data_set_0/test_data_0_input.pb
+rename to onnxruntime/test/testdata/squeezenet/test_data_set_0/input_0.pb
+diff --git a/onnxruntime/test/testdata/squeezenet/test_data_set_0/test_data_0_output.pb b/onnxruntime/test/testdata/squeezenet/test_data_set_0/output_0.pb
+similarity index 100%
+rename from onnxruntime/test/testdata/squeezenet/test_data_set_0/test_data_0_output.pb
+rename to onnxruntime/test/testdata/squeezenet/test_data_set_0/output_0.pb
+diff --git a/onnxruntime/test/util/default_providers.cc b/onnxruntime/test/util/default_providers.cc
+index efd6aacfe..1142e1485 100644
+--- a/onnxruntime/test/util/default_providers.cc
++++ b/onnxruntime/test/util/default_providers.cc
+@@ -55,6 +55,14 @@ std::unique_ptr<IExecutionProvider> DefaultMIGraphXExecutionProvider() {
+ #endif
+ }
+ 
++std::unique_ptr<IExecutionProvider> DefaultVsiNpuExecutionProvider() {
++#ifdef USE_VSI_NPU
++  return CreateExecutionProviderFactory_VsiNpu(0)->CreateProvider();
++#else
++  return nullptr;
++#endif
++}
++
+ std::unique_ptr<IExecutionProvider> DefaultOpenVINOExecutionProvider() {
+ #ifdef USE_OPENVINO
+   OrtOpenVINOProviderOptions params;
+diff --git a/onnxruntime/test/util/include/default_providers.h b/onnxruntime/test/util/include/default_providers.h
+index 45c86f0b9..e1d8d0be4 100644
+--- a/onnxruntime/test/util/include/default_providers.h
++++ b/onnxruntime/test/util/include/default_providers.h
+@@ -13,6 +13,7 @@ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_CoreML
+ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Cuda(const OrtCUDAProviderOptions* provider_options);
+ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Dnnl(int use_arena);
+ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_MIGraphX(int device_id);
++std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_VsiNpu(int device_id);
+ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Nnapi(
+     uint32_t flags, const optional<std::string>& partitioning_stop_ops_list);
+ std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory_Nuphar(bool, const char*);
+@@ -35,6 +36,7 @@ std::unique_ptr<IExecutionProvider> DefaultNupharExecutionProvider(bool allow_un
+ std::unique_ptr<IExecutionProvider> DefaultTensorrtExecutionProvider();
+ std::unique_ptr<IExecutionProvider> DefaultMIGraphXExecutionProvider();
+ std::unique_ptr<IExecutionProvider> DefaultOpenVINOExecutionProvider();
++std::unique_ptr<IExecutionProvider> DefaultVsiNpuExecutionProvider();
+ std::unique_ptr<IExecutionProvider> DefaultNnapiExecutionProvider();
+ std::unique_ptr<IExecutionProvider> DefaultRknpuExecutionProvider();
+ std::unique_ptr<IExecutionProvider> DefaultAclExecutionProvider(bool enable_arena = true);
+diff --git a/onnxruntime/test/util/include/providers.h b/onnxruntime/test/util/include/providers.h
+index de74c8f79..0320c4597 100644
+--- a/onnxruntime/test/util/include/providers.h
++++ b/onnxruntime/test/util/include/providers.h
+@@ -19,6 +19,9 @@
+ #ifdef USE_NNAPI
+ #include "core/providers/nnapi/nnapi_provider_factory.h"
+ #endif
++#ifdef USE_VSI_NPU
++#include "core/providers/vsi_npu/vsi_npu_provider_factory.h"
++#endif
+ #ifdef USE_COREML
+ #include "core/providers/coreml/coreml_provider_factory.h"
+ #endif
+diff --git a/tools/ci_build/build.py b/tools/ci_build/build.py
+index f6236f7a4..9a5c5d8cc 100644
+--- a/tools/ci_build/build.py
++++ b/tools/ci_build/build.py
+@@ -415,6 +415,8 @@ def parse_arguments():
+     parser.add_argument("--eigen_path", help="Path to pre-installed Eigen.")
+     parser.add_argument(
+         "--use_openmp", action='store_true', help="Build with OpenMP")
++    parser.add_argument(
++        "--use_vsi_npu", action='store_true', help="Build with VSI NPU.")
+     parser.add_argument(
+         "--enable_msinternal", action="store_true",
+         help="Enable for Microsoft internal builds only.")
+@@ -501,6 +503,10 @@ def parse_arguments():
+     parser.add_argument(
+         "--build_micro_benchmarks", action='store_true',
+         help="Build ONNXRuntime micro-benchmarks.")
++    parser.add_argument(
++        "--use_cross_compile", action='store_true', help="Use corss compile.")
++    parser.add_argument(
++        "--cmake_toolchain", help="Path to cmake tool chain.")
+ 
+     # options to reduce binary size
+     parser.add_argument("--minimal_build", default=None, nargs='*', type=str.lower,
+@@ -589,7 +595,8 @@ def get_linux_distro():
+ 
+ def is_ubuntu_1604():
+     dist, ver = get_linux_distro()
+-    return dist == 'Ubuntu' and ver.startswith('16.04')
++    # return dist == 'Ubuntu' and ver.startswith('16.04')
++    return True
+ 
+ 
+ def get_config_build_dir(build_dir, config):
+@@ -646,7 +653,7 @@ def install_python_deps(numpy_version=""):
+     dep_packages.append('sympy>=1.1')
+     dep_packages.append('packaging')
+     dep_packages.append('cerberus')
+-    run_subprocess([sys.executable, '-m', 'pip', 'install'] + dep_packages)
++    # run_subprocess([sys.executable, '-m', 'pip', 'install'] + dep_packages)
+ 
+ 
+ def setup_test_data(build_dir, configs):
+@@ -732,6 +739,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
+         "-Donnxruntime_DNNL_OPENCL_ROOT=" + (args.dnnl_opencl_root if args.use_dnnl else ""),
+         "-Donnxruntime_USE_NNAPI_BUILTIN=" + ("ON" if args.use_nnapi else "OFF"),
+         "-Donnxruntime_USE_RKNPU=" + ("ON" if args.use_rknpu else "OFF"),
++        "-Donnxruntime_USE_VSI_NPU=" + ("ON" if args.use_vsi_npu else "OFF"),
+         "-Donnxruntime_USE_OPENMP=" + (
+             "ON" if args.use_openmp and not (
+                 args.use_nnapi or
+@@ -850,6 +858,9 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
+             log.warning("mpi_home is supplied but use_mpi is set to false."
+                         " Build will continue without linking MPI libraries.")
+ 
++    if args.use_cross_compile:
++        cmake_args += ["-DCMAKE_TOOLCHAIN_FILE=" + args.cmake_toolchain]
++
+     if nccl_home and os.path.exists(nccl_home):
+         cmake_args += ["-Donnxruntime_NCCL_HOME=" + nccl_home]
+ 
+@@ -1842,11 +1853,11 @@ def is_cross_compiling_on_apple(args):
+ 
+ 
+ def build_protoc_for_host(cmake_path, source_dir, build_dir, args):
+-    if (args.arm or args.arm64 or args.arm64ec or args.enable_windows_store) and \
+-            not (is_windows() or is_cross_compiling_on_apple(args)):
+-        raise BuildError(
+-            'Currently only support building protoc for Windows host while '
+-            'cross-compiling for ARM/ARM64/Store and linux cross-compiling iOS')
++    # if (args.arm or args.arm64 or args.arm64ec or args.enable_windows_store) and \
++    #         not (is_windows() or is_cross_compiling_on_apple(args)):
++    #     raise BuildError(
++    #         'Currently only support building protoc for Windows host while '
++    #         'cross-compiling for ARM/ARM64/Store and linux cross-compiling iOS')
+ 
+     log.info(
+         "Building protoc for host to be used in cross-compiled build process")
+@@ -2153,9 +2164,8 @@ def main():
+ 
+         if is_ubuntu_1604():
+             if (args.arm or args.arm64):
+-                raise BuildError(
+-                    "Only Windows ARM(64) cross-compiled builds supported "
+-                    "currently through this script")
++                path_to_protoc_exe = build_protoc_for_host(
++                    cmake_path, source_dir, build_dir, args)
+             if not is_docker() and not args.use_acl and not args.use_armnn:
+                 install_python_deps()
+ 
+-- 
+2.25.1
+
