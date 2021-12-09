@@ -36,8 +36,9 @@ void usage() {
       "\t-v: verbose\n"
       "\t-n [test_case_name]: Specifies a single test case to run.\n"
       "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', "
-      "'openvino', 'nuphar', 'rocm', 'migraphx', 'acl', 'armnn', 'nnapi' or 'coreml'. "
+      "'openvino', 'vsi_npu', 'nuphar', 'rocm', 'migraphx', 'acl', 'armnn', 'nnapi' or 'coreml'. "
       "Default: 'cpu'.\n"
+      "\t-Q [quantize_models]: Specifies the use quantize model\n"
       "\t-p: Pause after launch, can attach debugger and continue\n"
       "\t-x: Use parallel executor, default (without -x): sequential executor.\n"
       "\t-d [device_id]: Specifies the device id for multi-device (e.g. GPU). The value should > 0\n"
@@ -104,6 +105,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_armnn = false;
   bool enable_rocm = false;
   bool enable_migraphx = false;
+  bool enable_vsi_npu = false;
+  bool enable_quantize = false;
   int device_id = 0;
   GraphOptimizationLevel graph_optimization_level = ORT_ENABLE_ALL;
   bool user_graph_optimization_level_set = false;
@@ -115,7 +118,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool pause = false;
   {
     int ch;
-    while ((ch = getopt(argc, argv, ORT_TSTR("Ac:hj:Mn:r:e:xvo:d:pz"))) != -1) {
+    while ((ch = getopt(argc, argv, ORT_TSTR("Ac:hj:Mn:r:e:xvo:d:pz:Q:"))) != -1) {
       switch (ch) {
         case 'A':
           enable_cpu_mem_arena = false;
@@ -161,6 +164,8 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             enable_dnnl = true;
           } else if (!CompareCString(optarg, ORT_TSTR("openvino"))) {
             enable_openvino = true;
+          } else if (!CompareCString(optarg, ORT_TSTR("vsi_npu"))) {
+            enable_vsi_npu = true;
           } else if (!CompareCString(optarg, ORT_TSTR("nuphar"))) {
             enable_nuphar = true;
           } else if (!CompareCString(optarg, ORT_TSTR("tensorrt"))) {
@@ -183,6 +188,9 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             usage();
             return -1;
           }
+          break;
+        case 'Q':
+          enable_quantize = true;
           break;
         case 'x':
           execution_mode = ExecutionMode::ORT_PARALLEL;
@@ -288,7 +296,13 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
 
   std::vector<std::unique_ptr<ITestCase>> owned_tests;
   {
-    double per_sample_tolerance = 1e-3;
+    double per_sample_tolerance = 0.0;
+    if(enable_quantize){
+      per_sample_tolerance = enable_vsi_npu ? 0.15 : 1e-3;
+    }else{
+      per_sample_tolerance = 1e-3;
+    }
+    //double per_sample_tolerance = enable_vsi_npu ? 0.15 : 1e-3;
     // when cuda is enabled, set it to a larger value for resolving random MNIST test failure
     // when openvino is enabled, set it to a larger value for resolving MNIST accuracy mismatch
     double relative_per_sample_tolerance = enable_cuda ? 0.017 : enable_openvino ? 0.009
@@ -384,6 +398,14 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
       Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_DML(sf, device_id));
 #else
       fprintf(stderr, "DML is not supported in this build");
+      return -1;
+#endif
+    }
+    if (enable_vsi_npu) {
+#ifdef USE_VSI_NPU
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(sf, device_id));
+#else
+      fprintf(stderr, "VsiNpu is not supported in this build");
       return -1;
 #endif
     }

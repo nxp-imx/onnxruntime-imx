@@ -162,6 +162,8 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
           test_config.machine_config.provider_type_name = onnxruntime::kTensorrtExecutionProvider;
         } else if (!CompareCString(optarg, ORT_TSTR("nnapi"))) {
           test_config.machine_config.provider_type_name = onnxruntime::kNnapiExecutionProvider;
+        } else if (!CompareCString(optarg, ORT_TSTR("vsi_npu"))) {
+          test_config.machine_config.provider_type_name = onnxruntime::kVsiNpuExecutionProvider;
         } else if (!CompareCString(optarg, ORT_TSTR("coreml"))) {
           test_config.machine_config.provider_type_name = onnxruntime::kCoreMLExecutionProvider;
         } else if (!CompareCString(optarg, ORT_TSTR("nuphar"))) {

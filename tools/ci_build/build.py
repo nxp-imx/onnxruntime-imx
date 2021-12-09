@@ -419,6 +419,8 @@ def parse_arguments():
     parser.add_argument(
         "--use_openmp", action='store_true', help="Build with OpenMP")
     parser.add_argument(
+        "--use_vsi_npu", action='store_true', help="Build with VSI NPU.")
+    parser.add_argument(
         "--enable_msinternal", action="store_true",
         help="Enable for Microsoft internal builds only.")
     parser.add_argument("--llvm_path", help="Path to llvm dir")
@@ -504,6 +506,10 @@ def parse_arguments():
     parser.add_argument(
         "--build_micro_benchmarks", action='store_true',
         help="Build ONNXRuntime micro-benchmarks.")
+    parser.add_argument(
+        "--use_cross_compile", action='store_true', help="Use corss compile.")
+    parser.add_argument(
+        "--cmake_toolchain", help="Path to cmake tool chain.")
 
     # options to reduce binary size
     parser.add_argument("--minimal_build", default=None, nargs='*', type=str.lower,
@@ -603,7 +609,8 @@ def get_linux_distro():
 
 def is_ubuntu_1604():
     dist, ver = get_linux_distro()
-    return dist == 'Ubuntu' and ver.startswith('16.04')
+    # return dist == 'Ubuntu' and ver.startswith('16.04')
+    return True
 
 
 def get_config_build_dir(build_dir, config):
@@ -660,7 +667,7 @@ def install_python_deps(numpy_version=""):
     dep_packages.append('sympy>=1.1')
     dep_packages.append('packaging')
     dep_packages.append('cerberus')
-    run_subprocess([sys.executable, '-m', 'pip', 'install'] + dep_packages)
+    # run_subprocess([sys.executable, '-m', 'pip', 'install'] + dep_packages)
 
 
 def setup_test_data(build_dir, configs):
@@ -745,6 +752,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
         "-Donnxruntime_DNNL_OPENCL_ROOT=" + (args.dnnl_opencl_root if args.use_dnnl else ""),
         "-Donnxruntime_USE_NNAPI_BUILTIN=" + ("ON" if args.use_nnapi else "OFF"),
         "-Donnxruntime_USE_RKNPU=" + ("ON" if args.use_rknpu else "OFF"),
+        "-Donnxruntime_USE_VSI_NPU=" + ("ON" if args.use_vsi_npu else "OFF"),
         "-Donnxruntime_USE_OPENMP=" + (
             "ON" if args.use_openmp and not (
                 args.use_nnapi or
@@ -866,6 +874,9 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
         else:
             log.warning("mpi_home is supplied but use_mpi is set to false."
                         " Build will continue without linking MPI libraries.")
+
+    if args.use_cross_compile:
+        cmake_args += ["-DCMAKE_TOOLCHAIN_FILE=" + args.cmake_toolchain]
 
     if nccl_home and os.path.exists(nccl_home):
         cmake_args += ["-Donnxruntime_NCCL_HOME=" + nccl_home]
@@ -1881,11 +1892,11 @@ def is_cross_compiling_on_apple(args):
 
 
 def build_protoc_for_host(cmake_path, source_dir, build_dir, args):
-    if (args.arm or args.arm64 or args.arm64ec or args.enable_windows_store) and \
-            not (is_windows() or is_cross_compiling_on_apple(args)):
-        raise BuildError(
-            'Currently only support building protoc for Windows host while '
-            'cross-compiling for ARM/ARM64/Store and linux cross-compiling iOS')
+    # if (args.arm or args.arm64 or args.arm64ec or args.enable_windows_store) and \
+    #         not (is_windows() or is_cross_compiling_on_apple(args)):
+    #     raise BuildError(
+    #         'Currently only support building protoc for Windows host while '
+    #         'cross-compiling for ARM/ARM64/Store and linux cross-compiling iOS')
 
     log.info(
         "Building protoc for host to be used in cross-compiled build process")
@@ -2189,9 +2200,8 @@ def main():
 
         if is_ubuntu_1604():
             if (args.arm or args.arm64):
-                raise BuildError(
-                    "Only Windows ARM(64) cross-compiled builds supported "
-                    "currently through this script")
+                path_to_protoc_exe = build_protoc_for_host(
+                    cmake_path, source_dir, build_dir, args)
             if not is_docker() and not args.use_acl and not args.use_armnn:
                 install_python_deps()
 

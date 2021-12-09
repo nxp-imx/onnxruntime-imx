@@ -19,6 +19,9 @@
 #ifdef USE_NNAPI
 #include "core/providers/nnapi/nnapi_provider_factory.h"
 #endif
+#ifdef USE_VSI_NPU
+#include "core/providers/vsi_npu/vsi_npu_provider_factory.h"
+#endif
 #ifdef USE_COREML
 #include "core/providers/coreml/coreml_provider_factory.h"
 #endif
