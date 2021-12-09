@@ -95,6 +95,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_cuda = false;
   bool enable_dnnl = false;
   bool enable_openvino = false;
+  bool enable_vsi_npu = false;
   bool enable_nuphar = false;
   bool enable_tensorrt = false;
   bool enable_mem_pattern = true;
@@ -102,6 +103,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_coreml = false;
   bool enable_dml = false;
   bool enable_acl = false;
+  bool enable_quantize = false;
   bool enable_armnn = false;
   bool enable_rocm = false;
   bool enable_migraphx = false;
@@ -345,6 +347,14 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
       return -1;
 #endif
     }
+    if (enable_vsi_npu) {
+#ifdef USE_VSI_NPU
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(sf, device_id));
+#else
+      fprintf(stderr, "VsiNpu is not supported in this build");
+      return -1;
+#endif
+    }
     if (enable_cuda) {
 #ifdef USE_CUDA
       OrtCUDAProviderOptions cuda_options;
@@ -374,7 +384,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
     }
     if (enable_nnapi) {
 #ifdef USE_NNAPI
-      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Nnapi(sf, 0));
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Nnapi(sf));
 #else
       fprintf(stderr, "NNAPI is not supported in this build");
       return -1;

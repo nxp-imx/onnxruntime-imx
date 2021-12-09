@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <string>
 #include <cstring>
-#include <gsl/gsl>
 #include "onnxruntime_config.h"
 
 namespace onnxruntime {
@@ -17,47 +16,66 @@ namespace onnxruntime {
 #pragma GCC diagnostic ignored "-Wnull-dereference"
 #endif
 #endif
-class TensorShape {
+class TensorShape : private std::vector<int64_t> {
+  // TODO - Use a custom STL allocator to avoid heap allocations in the common case.
   // We use negative numbers for unknown symbolic dimension. Each negative
   // number represents a unique symbolic dimension.
+  // Private inheritance is used to prevent ambiguity of element versus dimension size
  public:
   TensorShape() = default;
 
-  TensorShape(const TensorShape& other) : TensorShape(other.GetDims()) {}
-  TensorShape& operator=(const TensorShape& other);
+  TensorShape(const TensorShape& /*other*/) = default;
+  TensorShape& operator=(const TensorShape& /*other*/) = default;
 
-  TensorShape(TensorShape&& other) noexcept { operator=(std::move(other)); }
-  TensorShape& operator=(TensorShape&& other) noexcept;
+  TensorShape(TensorShape&& /*other*/) = default;
+  TensorShape& operator=(TensorShape&& /*other*/) = default;
 
-  TensorShape(gsl::span<const int64_t> dims);
-  TensorShape(const std::vector<int64_t>& dims) : TensorShape(gsl::make_span(dims)) {}
-  TensorShape(const std::initializer_list<int64_t>& dims) : TensorShape(gsl::make_span(dims)) {}
-  TensorShape(const int64_t* dimension_sizes, size_t dimension_count) : TensorShape(gsl::span<const int64_t>(dimension_sizes, dimension_count)) {}
-  TensorShape(const std::vector<int64_t>& dims, size_t start, size_t end) : TensorShape(gsl::span<const int64_t>(&dims[start], end - start)) {}
+  TensorShape(const std::vector<int64_t>& dims) : std::vector<int64_t>(dims) {}
 
-  // Create a TensorShape that points to an existing buffer internally. As no copy is made, 'data' must remain valid for the life of the TensorShape
-  static const TensorShape FromExistingBuffer(const std::vector<int64_t>& data) {
-    return TensorShape(External{}, gsl::span<int64_t>(const_cast<int64_t*>(data.data()), data.size()));
-  }
+  TensorShape(std::vector<int64_t>&& dims) : std::vector<int64_t>(std::move(dims)) {}
+
+  TensorShape(const std::initializer_list<int64_t>& dims) : std::vector<int64_t>(dims) {}
+
+  TensorShape(const int64_t* dimension_sizes, size_t dimension_count);
+
+  TensorShape(const std::vector<int64_t>& dims, size_t start, size_t end);
 
   /**
      Return the dimension specified by <idx>.
   */
-  int64_t operator[](size_t idx) const { return values_[idx]; }
-  int64_t& operator[](size_t idx) { return values_[idx]; }
+  const int64_t& operator[](size_t idx) const {
+    return std::vector<int64_t>::operator[](static_cast<int>(idx));
+  }
 
-  bool operator==(const TensorShape& other) const noexcept { return GetDims() == other.GetDims(); }
-  bool operator!=(const TensorShape& other) const noexcept { return GetDims() != other.GetDims(); }
+  int64_t& operator[](size_t idx) {
+    return std::vector<int64_t>::operator[](static_cast<int>(idx));
+  }
+
+  bool operator==(const TensorShape& other) const noexcept {
+    auto thisVector = static_cast<const std::vector<int64_t>*>(this);
+    auto otherVector = static_cast<const std::vector<int64_t>*>(&other);
+    if (thisVector->size() == 0 && otherVector->size() == 1 && (*otherVector)[0] == 1) {
+       return true;
+    }
+    if (thisVector->size() == 1 && (*thisVector)[0] == 1 && otherVector->size() == 0) {
+       return true;
+    }
+    return *thisVector == *otherVector;
+  }
+
+  bool operator!=(const TensorShape& other) const noexcept {
+    return !(*this == other);
+  }
 
   size_t NumDimensions() const noexcept {
-    return values_.size();
+    return size();
   }
 
   /**
      Copy dims into an array with given size
   */
   void CopyDims(int64_t* dims, size_t num_dims) const {
-    memcpy(dims, values_.begin(), sizeof(int64_t) * std::min(num_dims, NumDimensions()));
+    memcpy(dims, data(), sizeof(value_type) * std::min(num_dims, NumDimensions()));
   }
 
   /**
@@ -66,14 +84,13 @@ class TensorShape {
      and this function does no checks to ensure that
   */
   void CopyDims(int64_t* dims, size_t start_dim, size_t num_dims) const {
-    memcpy(dims, values_.begin() + start_dim, sizeof(int64_t) * std::min(num_dims, NumDimensions() - start_dim));
+    memcpy(dims, data() + start_dim, sizeof(value_type) * std::min(num_dims, NumDimensions() - start_dim));
   }
 
   /**
      Return underlying vector representation.
   */
-  gsl::span<const int64_t> GetDims() const { return values_; }
-  std::vector<int64_t> GetDimsAsVector() const { return std::vector<int64_t>(values_.begin(), values_.end()); }
+  const std::vector<int64_t>& GetDims() const { return *this; }
 
   /**
    * Return the total number of elements. Returns 1 for an empty (rank 0) TensorShape.
@@ -105,7 +122,7 @@ class TensorShape {
   /**
      Return a new TensorShape of the dimensions from dimstart to end.
   */
-  TensorShape Slice(size_t dimstart) const { return Slice(dimstart, values_.size()); }
+  TensorShape Slice(size_t dimstart) const;
 
   /**
      output dimensions nicely formatted
@@ -123,22 +140,14 @@ class TensorShape {
      empty shape or 1D shape (1) is regarded as scalar tensor
   */
   bool IsScalar() const {
-    size_t len = values_.size();
-    return len == 0 || (len == 1 && values_[0] == 1);
+    size_t len = size();
+    return len == 0 || (len == 1 && operator[](0) == 1);
   }
 
- private:
-
-  struct External {};
-  TensorShape(External, gsl::span<int64_t> buffer) : values_{buffer} {}
-
-  void Allocate(size_t size);
-
-  gsl::span<int64_t> values_;
-  int64_t small_buffer_[5];
-  std::unique_ptr<int64_t[]> allocated_buffer_;
-
-  friend struct ProviderHostImpl; // So that the shared provider interface can access Allocate
+  static const TensorShape& ReinterpretBaseType(const std::vector<int64_t>& dimensions) {
+    static_assert(sizeof(TensorShape) == sizeof(std::vector<int64_t>), "Size of TensorShape prevents safe casting from vector");
+    return *static_cast<const TensorShape*>(&dimensions);
+  }
 };
 #ifdef __GNUC__
 #pragma GCC diagnostic pop

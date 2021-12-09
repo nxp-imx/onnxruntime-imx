@@ -35,6 +35,7 @@
 #include "core/optimizer/matmul_transpose_fusion.h"
 #include "core/optimizer/nchwc_transformer.h"
 #include "core/optimizer/nhwc_transformer.h"
+#include "core/optimizer/nhwc_transformer2.h"
 #include "core/optimizer/noop_elimination.h"
 #include "core/optimizer/not_where_fusion.h"
 #include "core/optimizer/qdq_transformer/qdq_propagation.h"
@@ -147,7 +148,8 @@ std::vector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
     TransformerLevel level,
     const SessionOptions& session_options,
     const IExecutionProvider& cpu_execution_provider, /*required by constant folding*/
-    const std::unordered_set<std::string>& rules_and_transformers_to_disable) {
+    const std::unordered_set<std::string>& rules_and_transformers_to_disable,
+	__attribute__ ((unused)) const std::vector<std::string>& registered_execution_providers) {
   std::vector<std::unique_ptr<GraphTransformer>> transformers;
   bool disable_quant_qdq =
       session_options.config_options.GetConfigOrDefault(kOrtSessionOptionsDisableQuantQDQ, "0") == "1";
@@ -236,7 +238,10 @@ std::vector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
       if (MlasNchwcGetBlockSize() > 1) {
         transformers.emplace_back(std::make_unique<NchwcTransformer>());
       }
-      auto cpu_allocator = cpu_execution_provider.GetAllocator(0, OrtMemTypeDefault);
+	  #if defined(USE_ACL) || defined(USE_ARMNN)
+	    transformers.emplace_back(std::make_unique<NhwcTransformer2>(registered_execution_providers));
+	  #endif
+	  auto cpu_allocator = cpu_execution_provider.GetAllocator(0, OrtMemTypeDefault);
       transformers.emplace_back(std::make_unique<NhwcTransformer>(std::move(cpu_allocator)));
 #endif
     } break;

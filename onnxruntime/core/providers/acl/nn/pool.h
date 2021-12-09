@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2019, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2019 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -68,4 +68,4 @@ class MaxPoolV8 final : public onnxruntime::MaxPoolV8 {
   ACLExecutionProvider* provider_;
 };
 }  // namespace acl
-}
+}  // namespace onnxruntime
