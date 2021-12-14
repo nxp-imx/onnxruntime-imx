@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 // onnxruntime dependencies
@@ -48,9 +49,6 @@ int real_main(int argc, char* argv[]) {
     printf("Run failed:%s\n", status.ErrorMessage().c_str());
     return -1;
   }
-
-  perf_runner.SerializeResult();
-
   return 0;
 }
 

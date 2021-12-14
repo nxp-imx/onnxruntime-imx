@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 #include "core/graph/onnx_protobuf.h"
 #include "core/framework/utils.h"
@@ -120,6 +121,7 @@ bool ProviderIsCpuBased(const std::string& provider_type) {
          provider_type == onnxruntime::kOpenVINOExecutionProvider ||
          provider_type == onnxruntime::kNnapiExecutionProvider ||
          provider_type == onnxruntime::kAclExecutionProvider ||
+         provider_type == onnxruntime::kVsiNpuExecutionProvider ||
          provider_type == onnxruntime::kArmNNExecutionProvider ||
          provider_type == onnxruntime::kRknpuExecutionProvider ||
          provider_type == onnxruntime::kCoreMLExecutionProvider ||

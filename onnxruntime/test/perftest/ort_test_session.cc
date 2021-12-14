@@ -323,7 +323,7 @@ OnnxRuntimeTestSession::OnnxRuntimeTestSession(Ort::Env& env, std::random_device
 #endif
   } else if (provider_name == onnxruntime::kNnapiExecutionProvider) {
 #ifdef USE_NNAPI
-    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Nnapi(session_options, 0));
+    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Nnapi(session_options));
 #else
     ORT_THROW("NNAPI is not supported in this build\n");
 #endif
@@ -353,6 +353,12 @@ OnnxRuntimeTestSession::OnnxRuntimeTestSession(Ort::Env& env, std::random_device
                                                                      performance_test_config.run_config.enable_cpu_mem_arena ? 1 : 0));
 #else
     ORT_THROW("ArmNN is not supported in this build\n");
+#endif
+  } else if (provider_name == onnxruntime::kVsiNpuExecutionProvider) {
+#ifdef USE_VSI_NPU
+    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(session_options, 0));
+#else
+    ORT_THROW("VSI_NPU is not supported in this build\n");
 #endif
   } else if (provider_name == onnxruntime::kRocmExecutionProvider) {
 #ifdef USE_ROCM

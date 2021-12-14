@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -15,6 +16,8 @@ constexpr const char* kMLDomain = "ai.onnx.ml";
 constexpr const char* kMSDomain = "com.microsoft";
 constexpr const char* kMSExperimentalDomain = "com.microsoft.experimental";
 constexpr const char* kMSNchwcDomain = "com.microsoft.nchwc";
+constexpr const char* kMSNhwcDomain = "com.microsoft.nhwc";
+constexpr const char* kMSFeaturizersDomain = "com.microsoft.mlfeaturizers";
 constexpr const char* kMSDmlDomain = "com.microsoft.dml";
 constexpr const char* kNGraphDomain = "com.intel.ai";
 constexpr const char* kMIGraphXDomain = "";
@@ -29,6 +32,7 @@ constexpr const char* kVitisAIExecutionProvider = "VitisAIExecutionProvider";
 constexpr const char* kTensorrtExecutionProvider = "TensorrtExecutionProvider";
 constexpr const char* kNnapiExecutionProvider = "NnapiExecutionProvider";
 constexpr const char* kRknpuExecutionProvider = "RknpuExecutionProvider";
+constexpr const char* kVsiNpuExecutionProvider = "VsiNpuExecutionProvider";
 constexpr const char* kDmlExecutionProvider = "DmlExecutionProvider";
 constexpr const char* kMIGraphXExecutionProvider = "MIGraphXExecutionProvider";
 constexpr const char* kAclExecutionProvider = "ACLExecutionProvider";

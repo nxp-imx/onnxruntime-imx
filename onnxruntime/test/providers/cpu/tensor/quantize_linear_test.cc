@@ -120,7 +120,7 @@ TEST(DequantizeLinearOpTest, Per_Channel_Axis_Default) {
                          42, 42, -7, 7,
                          21, 21, -7, 28});
   //Disable Tensorrt EP due to the non-zero zero_point.
-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider, kTensorrtExecutionProvider});
 }
 
 // 1d zero & scale with uint8 broadcast axis 0
@@ -144,7 +144,7 @@ TEST(DequantizeLinearOpTest, Per_Channel_Axis_0) {
                         {0, 1, 2, 3,
                          0, 2, 4, 6,
                          0, 40, 80, 120});
-  test.Run();
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
 }
 
 // 1d zero & scale with int8 broadcast axis 1
@@ -163,7 +163,7 @@ TEST(DequantizeLinearOpTest, Per_Channel_Axis_1_int8) {
                          0, 24, 96, 288,
                          0, 40, 160, 480});
   //Disable Tensorrt EP due to the non-zero zero_point.
-  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider});
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider, kTensorrtExecutionProvider});
 }
 
 // 1d zero & scale with int32 broadcast axis 1
@@ -206,7 +206,7 @@ TEST(DequantizeLinearOpTest, Per_Channel_Neg_2) {
                         {0, 1, 2, 3,
                          0, 2, 4, 6,
                          0, 40, 80, 120});
-  test.Run();
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
 }
 
 // quantize with scalar zero point and scale
@@ -305,7 +305,7 @@ TEST(QuantizeLinearOpTest, Per_Channel_Axis_Default) {
                           {64, 101, 127, 177,
                            65, 100, 128, 182,
                            66, 102, 128, 187});
-  test.Run();
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
 }
 
 TEST(QuantizeLinearOpTest, Per_Channel_Axis_0) {
@@ -322,7 +322,7 @@ TEST(QuantizeLinearOpTest, Per_Channel_Axis_0) {
                           {0, 2, 3, 255,
                            0, 1, 2, 255,
                            0, 0, 1, 250});
-  test.Run();
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
 }
 
 // quantize with per-channel and negative axis (-2 resolves to axis 0)
@@ -340,7 +340,7 @@ TEST(QuantizeLinearOpTest, Per_Channel_Axis_neg) {
                           {0, 2, 3, 255,
                            0, 1, 2, 255,
                            0, 0, 1, 250});
-  test.Run();
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kVsiNpuExecutionProvider});
 }
 
 }  // namespace test

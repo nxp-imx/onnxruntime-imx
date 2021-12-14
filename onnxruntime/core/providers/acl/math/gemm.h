@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2019-2020, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2019-2021 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -7,11 +7,12 @@
 #include "core/framework/op_kernel.h"
 #include "core/util/math.h"
 #include "core/util/math_cpuonly.h"
-#include "core/providers/cpu/math/gemm.h"
 #include "core/providers/cpu/math/gemm_helper.h"
+#include "core/providers/cpu/math/gemm.h"
 #include "core/providers/acl/acl_execution_provider.h"
 
 // ACL
+#include "arm_compute/runtime/Tensor.h"
 #include "arm_compute/core/TensorInfo.h"
 #include "arm_compute/runtime/TensorAllocator.h"
 #include "arm_compute/runtime/Allocator.h"
@@ -53,7 +54,8 @@ class Gemm : public onnxruntime::Gemm<T> {
     const auto B = context->Input<Tensor>(1);
     const auto C = context->Input<Tensor>(2);
 
-    GemmHelper helper(A->Shape(), trans_A_ != CblasNoTrans, B->Shape(), trans_B_ != CblasNoTrans, C->Shape());
+    GemmHelper helper(A->Shape(), trans_A_ != CblasNoTrans, B->Shape(), trans_B_ != CblasNoTrans,
+                    C != nullptr ? C->Shape() : TensorShape({}));
 
     if (!helper.State().IsOK())
       return helper.State();
@@ -94,9 +96,9 @@ class Gemm : public onnxruntime::Gemm<T> {
     }
 
     int64_t K = helper.K();
-    if (A) LOGS_DEFAULT(VERBOSE) << "A " << A->Shape().ToString().c_str();
-    if (B) LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
-    if (C) LOGS_DEFAULT(VERBOSE) << "C " << C->Shape().ToString().c_str();
+    LOGS_DEFAULT(VERBOSE) << "A " << A->Shape().ToString().c_str();
+    LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
+    if (C != nullptr) LOGS_DEFAULT(VERBOSE) << "C " << C->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "D " << D->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "M " << (int)M << ", N " << (int)N << ", K " << (int)K;
     LOGS_DEFAULT(VERBOSE) << "Alfa " << alpha_ << ", Beta " << beta_;

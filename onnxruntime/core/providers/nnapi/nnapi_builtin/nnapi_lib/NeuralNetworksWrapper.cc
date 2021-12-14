@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #include <core/common/common.h>
-#include <core/common/safeint.h>
 
 #include "NeuralNetworksWrapper.h"
 
@@ -33,22 +32,10 @@ OperandType::OperandType(Type type, const std::vector<uint32_t>& d, float scale,
   };
 }
 
-OperandType::OperandType(Type type, const std::vector<uint32_t>& d, SymmPerChannelQuantParams&& channelQuant)
-    : type(type), dimensions(d), channelQuant(std::move(channelQuant)) {
-  operandType = {
-      .type = static_cast<int32_t>(type),
-      .dimensionCount = static_cast<uint32_t>(dimensions.size()),
-      .dimensions = dimensions.size() > 0 ? dimensions.data() : nullptr,
-      .scale = 0.0f,
-      .zeroPoint = 0,
-  };
-}
-
-OperandType::OperandType(const OperandType& other)
-    : operandType(other.operandType),
-      type(other.type),
-      dimensions(other.dimensions),
-      channelQuant(other.channelQuant) {
+OperandType::OperandType(const OperandType& other) {
+  type = other.type;
+  dimensions = other.dimensions;
+  operandType = other.operandType;
   operandType.dimensions = dimensions.size() > 0 ? dimensions.data() : nullptr;
 }
 
@@ -57,7 +44,6 @@ OperandType& OperandType::operator=(const OperandType& other) {
     type = other.type;
     dimensions = other.dimensions;
     operandType = other.operandType;
-    channelQuant = other.channelQuant;
     operandType.dimensions = dimensions.size() > 0 ? dimensions.data() : nullptr;
   }
 
@@ -71,7 +57,6 @@ size_t OperandType::GetElementByteSize() const {
       element_size = 1;
       break;
     case Type::TENSOR_FLOAT16:
-    case Type::FLOAT16:
       element_size = 2;
       break;
     case Type::TENSOR_FLOAT32:
@@ -81,12 +66,15 @@ size_t OperandType::GetElementByteSize() const {
     case Type::TENSOR_INT32:
       element_size = 4;
       break;
-    case Type::TENSOR_QUANT8_ASYMM:
-    case Type::TENSOR_QUANT8_ASYMM_SIGNED:
     case Type::TENSOR_QUANT8_SYMM_PER_CHANNEL:
       element_size = 1;
       break;
+    case Type::TENSOR_QUANT8_ASYMM:
+      element_size = 1;
+      break;
     case Type::TENSOR_QUANT16_SYMM:
+      element_size = 2;
+      break;
     case Type::TENSOR_QUANT16_ASYMM:
       element_size = 2;
       break;
@@ -98,9 +86,7 @@ size_t OperandType::GetElementByteSize() const {
 }
 
 size_t OperandType::GetOperandBlobByteSize() const {
-  // use uin64_t even dimension is uint32_t to prevent overflow
-  uint64_t num_elements = std::accumulate(dimensions.begin(), dimensions.end(), 1, std::multiplies<uint64_t>());
-  return SafeInt<size_t>(num_elements) * GetElementByteSize();
+  return Product(dimensions) * GetElementByteSize();
 }
 
 void OperandType::SetDimensions(const std::vector<uint32_t>& d) {

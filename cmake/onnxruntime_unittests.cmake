@@ -1,4 +1,5 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
+# Copyright 2021 NXP
 # Licensed under the MIT License.
 if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
   find_package(XCTest REQUIRED)
@@ -426,6 +427,10 @@ if(onnxruntime_USE_RKNPU)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_rknpu)
 endif()
 
+if(onnxruntime_USE_VSI_NPU)
+  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_vsi_npu)
+endif()
+
 if(onnxruntime_USE_DML)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_dml)
 endif()
@@ -477,6 +482,7 @@ set(ONNXRUNTIME_TEST_LIBS
     # CUDA, ROCM, TENSORRT, DNNL, and OpenVINO are dynamically loaded at runtime
     ${PROVIDERS_MIGRAPHX}
     ${PROVIDERS_NUPHAR}
+    ${PROVIDERS_VSI_NPU}
     ${PROVIDERS_NNAPI}
     ${PROVIDERS_RKNPU}
     ${PROVIDERS_DML}
@@ -567,6 +573,10 @@ if (onnxruntime_USE_ROCM)
   target_include_directories(onnxruntime_test_utils PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/amdgpu/onnxruntime ${CMAKE_CURRENT_BINARY_DIR}/amdgpu/orttraining)
 endif()
 onnxruntime_add_include_to_target(onnxruntime_test_utils onnxruntime_common onnxruntime_framework onnxruntime_session GTest::gtest GTest::gmock onnx onnx_proto flatbuffers)
+
+if (onnxruntime_USE_VSI_NPU)
+  target_compile_definitions(onnxruntime_test_utils PUBLIC USE_VSI_NPU=1)
+endif()
 
 
 if (onnxruntime_USE_DML)
@@ -805,6 +815,8 @@ if (onnxruntime_USE_TVM)
     target_link_options(onnx_test_runner PRIVATE "/STACK:4000000")
   endif()
 endif()
+
+set(CMAKE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR}/onnxruntime-${ORT_VERSION})
 
 install(TARGETS onnx_test_runner
         ARCHIVE  DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -1179,8 +1191,6 @@ if (NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_EXTENDED_MINIMAL_BUILD
                                   AND NOT onnxruntime_BUILD_WEBASSEMBLY
                                   AND NOT onnxruntime_USE_ROCM)
   file(GLOB_RECURSE test_execution_provider_srcs
-    "${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/*.h"
-    "${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/*.cc"
     "${ONNXRUNTIME_ROOT}/core/providers/shared_library/*.h"
     "${ONNXRUNTIME_ROOT}/core/providers/shared_library/*.cc"
   )
@@ -1193,16 +1203,19 @@ if (NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_EXTENDED_MINIMAL_BUILD
   target_include_directories(test_execution_provider PRIVATE ${ONNXRUNTIME_ROOT} ${CMAKE_CURRENT_BINARY_DIR} ${ORTTRAINING_ROOT})
   if (onnxruntime_ENABLE_TRAINING_TORCH_INTEROP)
     target_link_libraries(test_execution_provider PRIVATE Python::Python)
-  endif()
-  if(APPLE)
-    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS "-Xlinker -exported_symbols_list ${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/exported_symbols.lst")
-  elseif(UNIX)
-    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS "-Xlinker --version-script=${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/version_script.lds -Xlinker --gc-sections -Xlinker -rpath=\\$ORIGIN")
-  elseif(WIN32)
-    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS "-DEF:${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/symbols.def")
-  else()
-    message(FATAL_ERROR "test_execution_provider unknown platform, need to specify shared library exports for it")
-  endif()
+  endif()  
 endif()
+
+install(TARGETS
+            onnxruntime_test_all
+            onnxruntime_mlas_test
+            onnxruntime_global_thread_pools_test
+            onnxruntime_shared_lib_test
+            onnxruntime_api_tests_without_env
+            custom_op_library
+        LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}/tests
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/tests)
+
+install(DIRECTORY ${REPO_ROOT}/onnxruntime/test/testdata DESTINATION ${CMAKE_INSTALL_BINDIR}/tests)
 
 include(onnxruntime_fuzz_test.cmake)

@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -32,6 +33,7 @@ namespace contrib {
 void RegisterContribSchemas();
 void RegisterNchwcSchemas();
 void RegisterNhwcSchemas();
+void RegisterNhwcSchemas2();
 void RegisterQuantizationSchemas();
 
 constexpr const float kDefaultSkipLayerNormEpsilon = 1e-12f;

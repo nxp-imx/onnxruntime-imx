@@ -1,4 +1,5 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
+# Copyright 2021 NXP
 # Licensed under the MIT License.
 
 include(pybind11)
@@ -145,6 +146,8 @@ target_link_libraries(onnxruntime_pybind11_state PRIVATE
     ${PROVIDERS_DML}
     ${PROVIDERS_ACL}
     ${PROVIDERS_ARMNN}
+    ${PROVIDERS_VSI_NPU}
+    ${PROVIDERS_ROCM}
     onnxruntime_optimizer
     onnxruntime_providers
     onnxruntime_util

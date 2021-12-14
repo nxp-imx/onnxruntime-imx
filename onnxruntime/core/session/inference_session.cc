@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 #include "core/graph/onnx_protobuf.h"
@@ -1566,7 +1567,19 @@ common::Status InferenceSession::ValidateInputs(const std::vector<std::string>& 
 
     auto iter = input_def_map_.find(feed_name);
     if (input_def_map_.end() == iter) {
-      return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "Invalid Feed Input Name:", feed_name);
+      std::string feed_name1 = "";
+      for (auto kv : input_def_map_)
+      {
+        if (kv.first.find(feed_name) != std::string::npos)
+        {
+          feed_name1 = kv.first;
+          break;
+        }
+      }
+      iter = input_def_map_.find(feed_name1);
+      if (input_def_map_.end() == iter) {
+        return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "Invalid Feed Input Name:", feed_name);
+      }
     }
 
     auto expected_type = iter->second.ml_data_type;

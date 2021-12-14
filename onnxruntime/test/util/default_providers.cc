@@ -62,6 +62,14 @@ std::unique_ptr<IExecutionProvider> DefaultMIGraphXExecutionProvider() {
 #endif
 }
 
+std::unique_ptr<IExecutionProvider> DefaultVsiNpuExecutionProvider() {
+#ifdef USE_VSI_NPU
+  return CreateExecutionProviderFactory_VsiNpu(0)->CreateProvider();
+#else
+  return nullptr;
+#endif
+}
+
 std::unique_ptr<IExecutionProvider> DefaultOpenVINOExecutionProvider() {
 #ifdef USE_OPENVINO
   OrtOpenVINOProviderOptions params;

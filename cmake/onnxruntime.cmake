@@ -1,4 +1,5 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
+# Copyright 2021 NXP
 # Licensed under the MIT License.
 
 if(UNIX)
@@ -166,6 +167,7 @@ set(onnxruntime_INTERNAL_LIBRARIES
   ${PROVIDERS_DML}
   ${PROVIDERS_MIGRAPHX}
   ${PROVIDERS_NNAPI}
+  ${PROVIDERS_VSI_NPU}
   ${PROVIDERS_NUPHAR}
   ${PROVIDERS_RKNPU}
   ${PROVIDERS_ROCM}

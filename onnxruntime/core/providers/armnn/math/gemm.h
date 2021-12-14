@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright (c) 2020, NXP Semiconductor, Inc. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -7,9 +7,10 @@
 #include "core/framework/op_kernel.h"
 #include "core/util/math.h"
 #include "core/util/math_cpuonly.h"
-#include "core/providers/cpu/math/gemm.h"
 #include "core/providers/cpu/math/gemm_helper.h"
+#include "core/providers/cpu/math/gemm.h"
 #include "core/providers/armnn/armnn_execution_provider.h"
+#include "core/providers/armnn/armnn_common.h"
 
 namespace onnxruntime {
 namespace armnn_ep {
@@ -29,10 +30,15 @@ class Gemm : public onnxruntime::Gemm<T> {
 
     ORT_ENFORCE(info.GetAttr<float>("alpha", &alpha_).IsOK());
     ORT_ENFORCE(info.GetAttr<float>("beta", &beta_).IsOK());
-    run = Gemm<T>::initRuntime();
+
+    provider_ = (const_cast<ArmNNExecutionProvider*>(
+        static_cast<const ArmNNExecutionProvider*>(info.GetExecutionProvider())));
   }
 
   Status Compute(OpKernelContext* context) const override {
+
+    Gemm<T>::initRuntime();
+
     const auto X = context->Input<Tensor>(0);
     const auto W = context->Input<Tensor>(1);
     const auto B = context->Input<Tensor>(2);
@@ -60,9 +66,11 @@ class Gemm : public onnxruntime::Gemm<T> {
 
     int64_t K = helper.K();
     LOGS_DEFAULT(VERBOSE) << "Gemm ArmNN:";
-    if (X) LOGS_DEFAULT(VERBOSE) << "X " << X->Shape().ToString().c_str();
-    if (W) LOGS_DEFAULT(VERBOSE) << "W " << W->Shape().ToString().c_str();
-    if (B) LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
+    LOGS_DEFAULT(VERBOSE) << "X " << X->Shape().ToString().c_str();
+    LOGS_DEFAULT(VERBOSE) << "W " << W->Shape().ToString().c_str();
+    if (B != nullptr) {
+      LOGS_DEFAULT(VERBOSE) << "B " << B->Shape().ToString().c_str();
+    }
     LOGS_DEFAULT(VERBOSE) << "Y " << Y->Shape().ToString().c_str();
     LOGS_DEFAULT(VERBOSE) << "M " << (int)M << ", N " << (int)N << ", K " << (int)K;
     LOGS_DEFAULT(VERBOSE) << "Alfa " << alpha_ << ", Beta " << beta_;
@@ -77,11 +85,10 @@ class Gemm : public onnxruntime::Gemm<T> {
     T* y_data = Y->template MutableData<T>();
 
     armnn::NetworkId* pNetworkId;
-    GEMMLayersIterator it = Gemm::gemmLayers.find((OpKernel*)this);
-    if (it == Gemm::gemmLayers.end()) {
+    GEMMLayersIterator it = Gemm::rt->layers.find((OpKernel*)this);
+    if (it == Gemm::rt->layers.end()) {
       
       armnn::NetworkId networkId;
-
       armnn::INetworkPtr myNetwork = armnn::INetwork::Create();
 
       armnn::TensorShape inputShape = ArmNNTensorShape(X->Shape());
@@ -101,7 +108,7 @@ class Gemm : public onnxruntime::Gemm<T> {
         armnn::TensorShape biasShape = ArmNNTensorShape(B->Shape());
         if(B->Shape().NumDimensions() == 2){
           if(B->Shape().GetDims()[0] == 1 && B->Shape().GetDims()[1] > 1) {
-            biasShape = {B->Shape().GetDims()[1]};
+            biasShape = {(unsigned int)(B->Shape().GetDims()[1])};
             LOGS_DEFAULT(VERBOSE) << "Bias reshaped to: {" << B->Shape().GetDims()[1] << "}";
           }
         }
@@ -132,7 +139,7 @@ class Gemm : public onnxruntime::Gemm<T> {
       fc_armnn->GetOutputSlot(0).SetTensorInfo(outputTensorInfo);
 
       // Optimise ArmNN network
-      armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Gemm::run->GetDeviceSpec());
+      armnn::IOptimizedNetworkPtr optNet = armnn::Optimize(*myNetwork, {armnn::Compute::CpuAcc}, Gemm::rt->run->GetDeviceSpec());
 
       if (optNet == nullptr) {
         LOGS_DEFAULT(WARNING) << "Got invalid operation; defaulting to cpu implementation";
@@ -140,22 +147,22 @@ class Gemm : public onnxruntime::Gemm<T> {
       }
 
       // Load graph into runtime
-      Gemm::run->LoadNetwork(networkId, std::move(optNet));
+      Gemm::rt->run->LoadNetwork(networkId, std::move(optNet));
 
       std::pair<GEMMLayersIterator, bool> ret;
-      ret = Gemm::gemmLayers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
+      ret = Gemm::rt->layers.insert(std::pair<OpKernel*, armnn::NetworkId>((OpKernel*)this, networkId));
       pNetworkId = &ret.first->second;
 
     } else {
       pNetworkId = &it->second;
     }
 
-    armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Gemm::run->GetInputTensorInfo(*pNetworkId, 0),
+    armnn::InputTensors inputTensors{{0, armnn::ConstTensor(Gemm::rt->run->GetInputTensorInfo(*pNetworkId, 0),
                                                           x_data)}};
-    armnn::OutputTensors outputTensors{{0, armnn::Tensor(Gemm::run->GetOutputTensorInfo(*pNetworkId, 0),
+    armnn::OutputTensors outputTensors{{0, armnn::Tensor(Gemm::rt->run->GetOutputTensorInfo(*pNetworkId, 0),
                                                          y_data)}};
 
-    Gemm::run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
+    Gemm::rt->run->EnqueueWorkload(*pNetworkId, inputTensors, outputTensors);
 
     LOGS_DEFAULT(VERBOSE) << std::endl;
 
@@ -163,20 +170,26 @@ class Gemm : public onnxruntime::Gemm<T> {
   }
 
   ~Gemm() {
-    gemmLayers.erase(this);
+    GEMMLayersIterator it = Gemm::rt->layers.find((OpKernel*)this);
+    if (it != Gemm::rt->layers.end()) {
+      Gemm::rt->run->UnloadNetwork(it->second);
+    }
+    Gemm::rt->layers.erase(this);
   }
 
-  static armnn::IRuntimePtr initRuntime(){
-    if(Gemm::run)
-      return std::move(Gemm::run);
-    armnn::IRuntime::CreationOptions options;
-    return std::move(armnn::IRuntime::Create(options));
+  static void initRuntime(){
+    if(!Gemm::rt) {
+      static thread_local Runtime runtime_obj;
+      armnn::IRuntime::CreationOptions options;
+      runtime_obj.run = std::move(armnn::IRuntime::Create(options));
+
+      Gemm::rt =  &runtime_obj;
+    }
   }
 
  private:
-  static thread_local std::map<OpKernel*, armnn::NetworkId> gemmLayers;
+  static thread_local Runtime* rt;
   ArmNNExecutionProvider* provider_;
-  static armnn::IRuntimePtr run;
 
   CBLAS_TRANSPOSE trans_A_;
   CBLAS_TRANSPOSE trans_B_;
@@ -185,10 +198,7 @@ class Gemm : public onnxruntime::Gemm<T> {
 };
 
 template <typename T>
-thread_local std::map<OpKernel*, armnn::NetworkId> onnxruntime::armnn_ep::Gemm<T>::gemmLayers;
-
-template <typename T>
-armnn::IRuntimePtr Gemm<T>::run = armnn::IRuntimePtr(nullptr, nullptr);
+thread_local Runtime* Gemm<T>::rt = nullptr;
 
 }  // namespace armnn_ep
 }  // namespace onnxruntime

@@ -87,6 +87,58 @@ struct TensorCheck {
 };
 
 template <>
+struct TensorCheck<int8_t> {
+  void operator()(const Tensor& expected_tensor,
+                  const Tensor& output_tensor,
+                  const std::string& provider_type, const CheckParams& params) const {
+    const bool has_abs_err = params.absolute_error_.has_value();
+    const bool has_rel_err = params.relative_error_.has_value();
+
+    Tensor expected_sorted, output_sorted;
+    const int8_t* expected;
+    const int8_t* output;
+    const auto size = output_tensor.Shape().Size();
+    if (params.sort_output_) {
+      // if order can be jumbled in the output of an operator, sort both the
+      // expected and output buffers prior to
+      // comparison this is a "best-effort" algo and should satisfy the
+      // requirement for the few ops that do require this
+      // support without investing in a more sophisticated infrastructure for the
+      // same
+      sort_expected_and_actual_buffers<int8_t>(expected_tensor, expected_sorted, output_tensor, output_sorted);
+      expected = expected_sorted.Data<int8_t>();
+      output = output_sorted.Data<int8_t>();
+    } else {
+      expected = expected_tensor.template Data<int8_t>();
+      output = output_tensor.template Data<int8_t>();
+    }
+
+    // For int8_t results, we only allow NNAPI EP to have an error tolerance, see below for the reason
+    // For any other EPs, we still expect an exact match for the results
+    if (provider_type == kNnapiExecutionProvider && (has_abs_err || has_rel_err)) {
+      double threshold = has_abs_err
+                             ? *(params.absolute_error_)
+                             : 0.0;
+
+      for (int i = 0; i < size; ++i) {
+        if (has_rel_err) {
+          EXPECT_NEAR(expected[i], output[i],
+                      *(params.relative_error_) * expected[i])  // expected[i] is unsigned, can't be negative
+              << "i:" << i << ", provider_type: " << provider_type;
+        } else {  // has_abs_err
+          EXPECT_NEAR(expected[i], output[i], threshold)
+              << "i:" << i << ", provider_type: " << provider_type;
+        }
+      }
+    } else {
+      for (int i = 0; i < size; ++i) {
+        EXPECT_NEAR(expected[i], output[i], 1) << "i:" << i
+                                          << ", provider_type: " << provider_type;
+      }
+    }
+  }
+};
+template <>
 struct TensorCheck<uint8_t> {
   void operator()(const Tensor& expected_tensor,
                   const Tensor& output_tensor,
@@ -132,7 +184,7 @@ struct TensorCheck<uint8_t> {
       }
     } else {
       for (int i = 0; i < size; ++i) {
-        EXPECT_EQ(expected[i], output[i]) << "i:" << i
+        EXPECT_NEAR(expected[i], output[i], 1) << "i:" << i
                                           << ", provider_type: " << provider_type;
       }
     }
@@ -993,6 +1045,7 @@ void OpTester::Run(
     // Run the model
     static const std::string all_provider_types[] = {
         kCpuExecutionProvider,
+        kVsiNpuExecutionProvider,
         kCudaExecutionProvider,
         kDnnlExecutionProvider,
         kNupharExecutionProvider,
@@ -1086,6 +1139,8 @@ void OpTester::Run(
           execution_provider = DefaultTensorrtExecutionProvider();
         else if (provider_type == onnxruntime::kNnapiExecutionProvider)
           execution_provider = DefaultNnapiExecutionProvider();
+        else if (provider_type == onnxruntime::kVsiNpuExecutionProvider)
+          execution_provider = DefaultVsiNpuExecutionProvider();
         else if (provider_type == onnxruntime::kRknpuExecutionProvider)
           execution_provider = DefaultRknpuExecutionProvider();
         else if (provider_type == onnxruntime::kAclExecutionProvider)
@@ -1112,6 +1167,7 @@ void OpTester::Run(
           if (provider_type == onnxruntime::kOpenVINOExecutionProvider ||
               provider_type == onnxruntime::kTensorrtExecutionProvider ||
               provider_type == onnxruntime::kNupharExecutionProvider ||
+              provider_type == onnxruntime::kVsiNpuExecutionProvider ||
               provider_type == onnxruntime::kNnapiExecutionProvider ||
               provider_type == onnxruntime::kCoreMLExecutionProvider ||
               provider_type == onnxruntime::kDnnlExecutionProvider)

@@ -1,4 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright 2021 NXP
 // Licensed under the MIT License.
 
 #pragma once
@@ -27,7 +28,6 @@ struct ModelInfo {
   std::string model_name;
   std::basic_string<ORTCHAR_T> model_file_path;
   std::basic_string<ORTCHAR_T> input_file_path;
-  std::basic_string<ORTCHAR_T> result_file_path;
 };
 
 struct MachineConfig {

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) Microsoft Corporation. All rights reserved.
+# Copyright 2021 NXP
 # Licensed under the MIT License.
 
 import argparse
@@ -419,6 +420,15 @@ def parse_arguments():
     parser.add_argument(
         "--use_openmp", action='store_true', help="Build with OpenMP")
     parser.add_argument(
+        "--use_vsi_npu", action='store_true',
+        help="Enable VsiNpu Execution Provider.")
+    parser.add_argument(
+        "--ovxlib_include",
+        help="Path to OVXLIB header files required by the VsiNpu EP.")
+    parser.add_argument(
+        "--vsi_npu_libs",
+        help="Path to OVXLIB and NN RT libraries required by the VsiNpu EP.")
+    parser.add_argument(
         "--enable_msinternal", action="store_true",
         help="Enable for Microsoft internal builds only.")
     parser.add_argument("--llvm_path", help="Path to llvm dir")
@@ -469,6 +479,10 @@ def parse_arguments():
         "--use_telemetry", action='store_true',
         help="Only official builds can set this flag to enable telemetry.")
     parser.add_argument(
+        "--use_cross_compile", action='store_true', help="Use cross compile.")
+    parser.add_argument(
+        "--cmake_toolchain", help="Path to cmake tool chain.")
+    parser.add_argument(
         "--enable_wcos", action='store_true',
         help="Build for Windows Core OS.")
     parser.add_argument(
@@ -482,7 +496,7 @@ def parse_arguments():
         help="Enable transformers tool test")
     parser.add_argument(
         "--use_acl", nargs="?", const="ACL_1905",
-        choices=["ACL_1902", "ACL_1905", "ACL_1908", "ACL_2002"],
+        choices=["ACL_1902", "ACL_1905", "ACL_1908", "ACL_2002", "ACL_2008", "ACL_2102", "ACL_2108"],
         help="Build with ACL for ARM architectures.")
     parser.add_argument(
         "--acl_home", help="Path to ACL home dir")
@@ -603,7 +617,8 @@ def get_linux_distro():
 
 def is_ubuntu_1604():
     dist, ver = get_linux_distro()
-    return dist == 'Ubuntu' and ver.startswith('16.04')
+    # return dist == 'Ubuntu' and ver.startswith('16.04')
+    return True
 
 
 def get_config_build_dir(build_dir, config):
@@ -660,7 +675,7 @@ def install_python_deps(numpy_version=""):
     dep_packages.append('sympy>=1.1')
     dep_packages.append('packaging')
     dep_packages.append('cerberus')
-    run_subprocess([sys.executable, '-m', 'pip', 'install'] + dep_packages)
+    # run_subprocess([sys.executable, '-m', 'pip', 'install'] + dep_packages)
 
 
 def setup_test_data(build_dir, configs):
@@ -714,7 +729,8 @@ def add_cmake_define_without_override(cmake_extra_defines, key, value):
 
 def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home, rocm_home,
                         mpi_home, nccl_home, tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs,
-                        path_to_protoc_exe, configs, cmake_extra_defines, args, cmake_extra_args):
+                        ovxlib_include, vsi_npu_libs, path_to_protoc_exe, configs, cmake_extra_defines, args,
+                        cmake_extra_args):
     log.info("Generating CMake build tree")
     cmake_dir = os.path.join(source_dir, "cmake")
     cmake_args = [
@@ -745,6 +761,7 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
         "-Donnxruntime_DNNL_OPENCL_ROOT=" + (args.dnnl_opencl_root if args.use_dnnl else ""),
         "-Donnxruntime_USE_NNAPI_BUILTIN=" + ("ON" if args.use_nnapi else "OFF"),
         "-Donnxruntime_USE_RKNPU=" + ("ON" if args.use_rknpu else "OFF"),
+        "-Donnxruntime_USE_VSI_NPU=" + ("ON" if args.use_vsi_npu else "OFF"),
         "-Donnxruntime_USE_OPENMP=" + (
             "ON" if args.use_openmp and not (
                 args.use_nnapi or
@@ -789,6 +806,9 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
         "-Donnxruntime_USE_ACL_1905=" + ("ON" if args.use_acl == "ACL_1905" else "OFF"),
         "-Donnxruntime_USE_ACL_1908=" + ("ON" if args.use_acl == "ACL_1908" else "OFF"),
         "-Donnxruntime_USE_ACL_2002=" + ("ON" if args.use_acl == "ACL_2002" else "OFF"),
+        "-Donnxruntime_USE_ACL_2008=" + ("ON" if args.use_acl == "ACL_2008" else "OFF"),
+        "-Donnxruntime_USE_ACL_2102=" + ("ON" if args.use_acl == "ACL_2102" else "OFF"),
+        "-Donnxruntime_USE_ACL_2108=" + ("ON" if args.use_acl == "ACL_2108" else "OFF"),
         "-Donnxruntime_USE_ARMNN=" + ("ON" if args.use_armnn else "OFF"),
         "-Donnxruntime_ARMNN_RELU_USE_CPU=" + ("OFF" if args.armnn_relu else "ON"),
         "-Donnxruntime_ARMNN_BN_USE_CPU=" + ("OFF" if args.armnn_bn else "ON"),
@@ -860,12 +880,21 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
     if armnn_libs and os.path.exists(armnn_libs):
         cmake_args += ["-Donnxruntime_ARMNN_LIBS=" + armnn_libs]
 
+    if ovxlib_include and os.path.exists(ovxlib_include):
+        cmake_args += ["-Donnxruntime_OVXLIB_INCLUDE=" + ovxlib_include]
+
+    if vsi_npu_libs and os.path.exists(vsi_npu_libs):
+        cmake_args += ["-Donnxruntime_VSI_NPU_LIBS=" + vsi_npu_libs]
+
     if mpi_home and os.path.exists(mpi_home):
         if args.use_mpi:
             cmake_args += ["-Donnxruntime_MPI_HOME=" + mpi_home]
         else:
             log.warning("mpi_home is supplied but use_mpi is set to false."
                         " Build will continue without linking MPI libraries.")
+
+    if args.use_cross_compile:
+        cmake_args += ["-DCMAKE_TOOLCHAIN_FILE=" + args.cmake_toolchain]
 
     if nccl_home and os.path.exists(nccl_home):
         cmake_args += ["-Donnxruntime_NCCL_HOME=" + nccl_home]
@@ -922,6 +951,9 @@ def generate_build_tree(cmake_path, source_dir, build_dir, cuda_home, cudnn_home
     if args.use_cuda and not is_windows():
         nvml_stub_path = cuda_home + "/lib64/stubs"
         cmake_args += ["-DCUDA_CUDA_LIBRARY=" + nvml_stub_path]
+
+    if args.use_cross_compile:
+        cmake_args += ["-DCMAKE_TOOLCHAIN_FILE=" + args.cmake_toolchain]
 
     if args.use_preinstalled_eigen:
         cmake_args += ["-Donnxruntime_USE_PREINSTALLED_EIGEN=ON",
@@ -1881,11 +1913,11 @@ def is_cross_compiling_on_apple(args):
 
 
 def build_protoc_for_host(cmake_path, source_dir, build_dir, args):
-    if (args.arm or args.arm64 or args.arm64ec or args.enable_windows_store) and \
-            not (is_windows() or is_cross_compiling_on_apple(args)):
-        raise BuildError(
-            'Currently only support building protoc for Windows host while '
-            'cross-compiling for ARM/ARM64/Store and linux cross-compiling iOS')
+    # if (args.arm or args.arm64 or args.arm64ec or args.enable_windows_store) and \
+    #         not (is_windows() or is_cross_compiling_on_apple(args)):
+    #     raise BuildError(
+    #         'Currently only support building protoc for Windows host while '
+    #         'cross-compiling for ARM/ARM64/Store and linux cross-compiling iOS')
 
     log.info(
         "Building protoc for host to be used in cross-compiled build process")
@@ -2090,6 +2122,9 @@ def main():
     armnn_home = args.armnn_home
     armnn_libs = args.armnn_libs
 
+    ovxlib_include = args.ovxlib_include
+    vsi_npu_libs = args.vsi_npu_libs
+
     # if using tensorrt, setup tensorrt paths
     tensorrt_home = setup_tensorrt_vars(args)
 
@@ -2189,9 +2224,8 @@ def main():
 
         if is_ubuntu_1604():
             if (args.arm or args.arm64):
-                raise BuildError(
-                    "Only Windows ARM(64) cross-compiled builds supported "
-                    "currently through this script")
+                path_to_protoc_exe = build_protoc_for_host(
+                    cmake_path, source_dir, build_dir, args)
             if not is_docker() and not args.use_acl and not args.use_armnn:
                 install_python_deps()
 
@@ -2266,7 +2300,7 @@ def main():
 
         generate_build_tree(
             cmake_path, source_dir, build_dir, cuda_home, cudnn_home, rocm_home, mpi_home, nccl_home,
-            tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs,
+            tensorrt_home, migraphx_home, acl_home, acl_libs, armnn_home, armnn_libs, ovxlib_include, vsi_npu_libs,
             path_to_protoc_exe, configs, cmake_extra_defines, args, cmake_extra_args)
 
     if args.clean:
