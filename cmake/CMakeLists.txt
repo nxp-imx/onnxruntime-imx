@@ -879,21 +879,6 @@ else()
     else()
       set(CPUINFO_SUPPORTED TRUE)
     endif()
-    if (WIN32)
-        # Exclude Windows ARM build and Windows Store
-        if (${onnxruntime_target_platform} MATCHES "^(ARM.*|arm.*)$" )
-            message(WARNING "Cpuinfo not included for compilation problems with Windows ARM.")
-            set(CPUINFO_SUPPORTED FALSE)
-        elseif (WINDOWS_STORE OR (WIN32 AND NOT CMAKE_CXX_STANDARD_LIBRARIES MATCHES kernel32.lib))
-            message(WARNING "Cpuinfo not included in Windows Store or WCOS builds")
-            set(CPUINFO_SUPPORTED FALSE)
-        endif()
-    elseif (NOT ${onnxruntime_target_platform} MATCHES "^(i[3-6]86|AMD64|x86(_64)?|armv[5-8].*|aarch64|arm64)$")
-        message(WARNING
-        "Target processor architecture \"${onnxruntime_target_platform}\" is not supported in cpuinfo. "
-        "cpuinfo not included.")
-        set(CPUINFO_SUPPORTED FALSE)
-    endif()
 endif()
 
 # TODO  do we have to add target_include_directories to each project that uses this?
@@ -1857,7 +1842,7 @@ if (WIN32)
   list(APPEND onnxruntime_EXTERNAL_LIBRARIES debug Dbghelp)
 else()
   list(APPEND onnxruntime_EXTERNAL_LIBRARIES nsync_cpp)
-  list(APPEND onnxruntime_EXTERNAL_LIBRARIES ${CMAKE_DL_LIBS} Threads::Threads)
+  list(APPEND onnxruntime_EXTERNAL_LIBRARIES ${CMAKE_DL_LIBS} Threads::Threads onnxruntime_common)
 endif()
 
 if (WIN32)

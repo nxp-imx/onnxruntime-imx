@@ -107,8 +107,6 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_armnn = false;
   bool enable_rocm = false;
   bool enable_migraphx = false;
-  bool enable_vsi_npu = false;
-  bool enable_quantize = false;
   int device_id = 0;
   GraphOptimizationLevel graph_optimization_level = ORT_ENABLE_ALL;
   bool user_graph_optimization_level_set = false;
@@ -344,14 +342,6 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
       sf.AppendExecutionProvider_OpenVINO(OrtOpenVINOProviderOptions{});
 #else
       fprintf(stderr, "OpenVINO is not supported in this build");
-      return -1;
-#endif
-    }
-    if (enable_vsi_npu) {
-#ifdef USE_VSI_NPU
-      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_VsiNpu(sf, device_id));
-#else
-      fprintf(stderr, "VsiNpu is not supported in this build");
       return -1;
 #endif
     }

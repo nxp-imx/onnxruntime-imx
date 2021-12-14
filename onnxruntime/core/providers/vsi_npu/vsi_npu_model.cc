@@ -56,7 +56,7 @@ void ModelShell::AddOperandHelper(const NodeArg* node,
         }
     }
 
-    const std::vector<int64_t>& dims = shape.GetDims();
+    const auto& dims = shape.GetDims();
     for (auto dim : dims) {
         uint32_t value = static_cast<uint32_t>(dim);
         operand->dimensions.push_back(value);

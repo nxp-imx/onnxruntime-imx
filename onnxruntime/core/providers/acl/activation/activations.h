@@ -1,4 +1,4 @@
-// Copyright 2019 NXP
+// Copyright 2019-2021 NXP
 // Licensed under the MIT License
 
 #pragma once

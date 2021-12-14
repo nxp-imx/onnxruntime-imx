@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) Microsoft Corporation. All rights reserved.
+# Copyright 2021 NXP
 # Licensed under the MIT License.
 
 import argparse
@@ -517,10 +518,6 @@ def parse_arguments():
     parser.add_argument(
         "--build_micro_benchmarks", action='store_true',
         help="Build ONNXRuntime micro-benchmarks.")
-    parser.add_argument(
-        "--use_cross_compile", action='store_true', help="Use corss compile.")
-    parser.add_argument(
-        "--cmake_toolchain", help="Path to cmake tool chain.")
 
     # options to reduce binary size
     parser.add_argument("--minimal_build", default=None, nargs='*', type=str.lower,

@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright 2019-2020 NXP
+// Copyright 2019-2021 NXP
 // Licensed under the MIT License.
 
 #ifdef _WIN32

@@ -487,7 +487,7 @@ void VsiOpCallbackInfoQLinearConv::AddBiasOperand(const onnxruntime::Node* node,
     auto input_defs = node->InputDefs();
     auto operand_b = model->GetOperand(operand_id);
     auto shape = vsi_npu::GetTensorShape(*input_defs[3]);
-    const std::vector<int64_t>& dims = shape.GetDims();
+    const auto& dims = shape.GetDims();
     operand_b->dimensions.push_back(dims[0]);
     operand_b->type = nnrt::OperandType::TENSOR_INT32;
 

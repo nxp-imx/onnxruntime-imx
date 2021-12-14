@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright 2020 NXP
+// Copyright 2020-2021 NXP
 // Licensed under the MIT License.
 
 #include "core/providers/acl/tensor/transpose.h"
@@ -57,7 +57,7 @@ Status Transpose<T>::Compute(OpKernelContext* ctx) const {
   const TensorShape& input_shape = X.Shape();
 
 
-  const std::vector<int64_t>& input_dims = input_shape.GetDims();
+  const auto& input_dims = input_shape.GetDims();
   unsigned int rank = input_dims.size();
 
   if(rank > 4) {

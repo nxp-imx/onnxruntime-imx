@@ -140,7 +140,7 @@ void VsiOpCallbackInfoInstanceNormalization::Setup(const onnxruntime::Node* node
             model->AddOperand(input_defs[0]->Name() + "@@reshape_0");
         auto operand_pre_reshape = model->GetOperand(output_pre_reshape_operand_id);
         operand_pre_reshape->type = vsi_npu::convertToOperandType(input_defs[0]->Type());
-        const std::vector<int64_t>& dims_pre_reshape = shape.GetDims();
+        const auto& dims_pre_reshape = shape.GetDims();
         for (size_t i = 0; i < 3; i++) {
             operand_pre_reshape->dimensions.push_back(static_cast<uint32_t>(dims_pre_reshape[i]));
         }
@@ -176,7 +176,7 @@ void VsiOpCallbackInfoInstanceNormalization::Setup(const onnxruntime::Node* node
         auto operand_post_reshape = model->GetOperand(input_post_reshape_operand_id);
         operand_post_reshape->type = vsi_npu::convertToOperandType(output_defs[0]->Type());
         shape = vsi_npu::GetTensorShape(*output_defs[0]);
-        const std::vector<int64_t>& dims_post_reshape = shape.GetDims();
+        const auto& dims_post_reshape = shape.GetDims();
         for (size_t i = 0; i < 3; i++) {
             operand_post_reshape->dimensions.push_back(static_cast<uint32_t>(dims_post_reshape[i]));
         }

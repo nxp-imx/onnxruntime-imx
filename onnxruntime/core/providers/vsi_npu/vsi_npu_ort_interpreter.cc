@@ -229,7 +229,7 @@ void VsiOpCallbackInfoSoftmax::AddReshapeOp(const onnxruntime::Node* node,
     model->GetGraphInputs().push_back(reshape_add_tensor_info);
 
     auto shape = vsi_npu::GetTensorShape(*input_defs[0]);
-    const std::vector<int64_t>& dims = shape.GetDims();
+    const auto& dims = shape.GetDims();
     std::vector<uint32_t> vdims;
     for (size_t i = 0; i < dims.size(); i++) {
         vdims.push_back(static_cast<uint32_t>(dims[i]));
@@ -289,7 +289,7 @@ bool VsiOpCallbackInfoSoftmax::IsNodeSupported(const onnxruntime::GraphViewer& g
         OpNodeProtoHelper<ProtoHelperNodeContext> attrs(&ctx);
         auto input_defs = node->InputDefs();
         auto shape = vsi_npu::GetTensorShape(*input_defs[0]);
-        const std::vector<int64_t>& dims = shape.GetDims();
+        const auto& dims = shape.GetDims();
         int32_t axis = 1;
         vsi_npu::GetAttr<int32_t>(attrs, "axis", &axis).IsOK();
         if (dims.size() == 3 && axis == 1) return false;
@@ -325,8 +325,8 @@ void VsiOpCallbackInfoGemm::AddMulOp(const onnxruntime::Node* node,
         mul_intput_operand_a->type = nnrt::OperandType::TENSOR_FLOAT32;
         auto intput0_shape = vsi_npu::GetTensorShape(*input_defs[0]);
         auto intput1_shape = vsi_npu::GetTensorShape(*input_defs[1]);
-        const std::vector<int64_t>& intput0_dims = intput0_shape.GetDims();
-        const std::vector<int64_t>& intput1_dims = intput1_shape.GetDims();
+        const auto& intput0_dims = intput0_shape.GetDims();
+        const auto& intput1_dims = intput1_shape.GetDims();
         mul_intput_operand_a->dimensions.push_back(static_cast<uint32_t>(intput0_dims[0]));
         mul_intput_operand_a->dimensions.push_back(static_cast<uint32_t>(intput1_dims[1]));
     }
@@ -338,8 +338,8 @@ void VsiOpCallbackInfoGemm::AddMulOp(const onnxruntime::Node* node,
         } else if (num == 0) {
             auto intput0_shape = vsi_npu::GetTensorShape(*input_defs[0]);
             auto intput1_shape = vsi_npu::GetTensorShape(*input_defs[1]);
-            const std::vector<int64_t>& intput0_dims = intput0_shape.GetDims();
-            const std::vector<int64_t>& intput1_dims = intput1_shape.GetDims();
+            const auto& intput0_dims = intput0_shape.GetDims();
+            const auto& intput1_dims = intput1_shape.GetDims();
             mul_intput_operand_b->dimensions.push_back(static_cast<uint32_t>(intput0_dims[0]));
             mul_intput_operand_b->dimensions.push_back(static_cast<uint32_t>(intput1_dims[1]));
         }
@@ -404,7 +404,7 @@ void VsiOpCallbackInfoGemm::AddTransposeOp(const onnxruntime::Node* node,
     if (trans_operand->ndim() == 0) {
         trans_operand->type = nnrt::OperandType::TENSOR_FLOAT32;
         auto shape = vsi_npu::GetTensorShape(*input_defs[1]);
-        const std::vector<int64_t>& dims = shape.GetDims();
+        const auto& dims = shape.GetDims();
         trans_operand->dimensions.push_back(static_cast<uint32_t>(dims[1]));
         trans_operand->dimensions.push_back(static_cast<uint32_t>(dims[0]));
     }
@@ -642,7 +642,7 @@ void VsiOpCallbackInfoUpsample::Setup(const Node* node,
     int32_t outputHeight = 0;
     int32_t outputWidth = 0;
     auto shape = vsi_npu::GetTensorShape(*(input_defs[0]));
-    const std::vector<int64_t>& dims = shape.GetDims();
+    const auto& dims = shape.GetDims();
     if (scales.size() == 4) {
         outputHeight = dims[2] * scales[2];
         outputWidth = dims[3] * scales[3];
@@ -751,7 +751,7 @@ void VsiOpCallbackInfoResize::Setup(const Node* node,
     int32_t outputHeight = 0;
     int32_t outputWidth = 0;
     auto shape = vsi_npu::GetTensorShape(*(input_defs[0]));
-    const std::vector<int64_t>& dims = shape.GetDims();
+    const auto& dims = shape.GetDims();
     if (scales.size() == 4) {
         outputHeight = dims[2] * scales[2];
         outputWidth = dims[3] * scales[3];

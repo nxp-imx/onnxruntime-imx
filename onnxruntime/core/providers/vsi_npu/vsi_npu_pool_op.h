@@ -118,7 +118,7 @@ class VsiOpCallbackInfoGlobalPoolOp : public VsiOpCallbackInfo {
         // add kernel_shape
         auto input_defs = node->InputDefs();
         auto shape = vsi_npu::GetTensorShape(*input_defs[0]);
-        const std::vector<int64_t>& dims = shape.GetDims();
+        const auto& dims = shape.GetDims();
         pool->ksize[0] = static_cast<int32_t>(dims[3]);
         pool->ksize[1] = static_cast<int32_t>(dims[2]);
     };

@@ -1,5 +1,5 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
-// Copyright 2020 NXP
+// Copyright 2020-2021 NXP
 // Licensed under the MIT License.
 
 #include "core/providers/armnn/nhwc/concat.h"
@@ -34,7 +34,7 @@ Status NHWCConcat<T>::Compute(OpKernelContext* ctx) const {
     input_tensors.push_back(ctx->Input<Tensor>(i));
   }
 
-  std::vector<int64_t> output_dims = input_tensors[0]->Shape().GetDims();
+  auto output_dims = input_tensors[0]->Shape().GetDimsAsVector();
 
   // 'Concat' mode
   if (!is_stack_) {

@@ -1049,7 +1049,6 @@ void OpTester::Run(
         kCudaExecutionProvider,
         kDnnlExecutionProvider,
         kNupharExecutionProvider,
-        kVsiNpuExecutionProvider,
         kTensorrtExecutionProvider,
         kOpenVINOExecutionProvider,
         kDmlExecutionProvider,
@@ -1128,8 +1127,6 @@ void OpTester::Run(
         std::unique_ptr<IExecutionProvider> execution_provider;
         if (provider_type == onnxruntime::kCpuExecutionProvider)
           execution_provider = DefaultCpuExecutionProvider();
-        else if (provider_type == onnxruntime::kVsiNpuExecutionProvider)
-          execution_provider = DefaultVsiNpuExecutionProvider();
         else if (provider_type == onnxruntime::kCudaExecutionProvider)
           execution_provider = DefaultCudaExecutionProvider();
         else if (provider_type == onnxruntime::kDnnlExecutionProvider)
@@ -1173,7 +1170,6 @@ void OpTester::Run(
               provider_type == onnxruntime::kVsiNpuExecutionProvider ||
               provider_type == onnxruntime::kNnapiExecutionProvider ||
               provider_type == onnxruntime::kCoreMLExecutionProvider ||
-              provider_type == onnxruntime::kVsiNpuExecutionProvider ||
               provider_type == onnxruntime::kDnnlExecutionProvider)
             continue;
           auto reg = execution_provider->GetKernelRegistry();
