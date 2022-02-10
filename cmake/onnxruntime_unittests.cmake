@@ -1,5 +1,5 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
-# Copyright 2021 NXP
+# Copyright 2021-2022 NXP
 # Licensed under the MIT License.
 if (${CMAKE_SYSTEM_NAME} STREQUAL "iOS")
   find_package(XCTest REQUIRED)
@@ -1205,6 +1205,11 @@ if (NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_EXTENDED_MINIMAL_BUILD
     target_link_libraries(test_execution_provider PRIVATE Python::Python)
   endif()  
 endif()
+
+install(TARGETS
+            onnxruntime_perf_test
+        LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 install(TARGETS
             onnxruntime_test_all
