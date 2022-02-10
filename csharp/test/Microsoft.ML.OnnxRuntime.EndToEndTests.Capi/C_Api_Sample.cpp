@@ -1,5 +1,5 @@
 // Copyright(c) Microsoft Corporation.All rights reserved.
-// Copyright 2021 NXP
+// Copyright 2021-2022 NXP
 // Licensed under the MIT License.
 //
 
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
   // URL = https://github.com/onnx/models/tree/master/squeezenet
   OrtSession* session;
   // Modify model_path to use a different model
-  const char* model_path = "/usr/bin/onnxruntime-1.8.2/squeezenet/model.onnx";
+  const char* model_path = "/usr/bin/onnxruntime-1.10.0/squeezenet/model.onnx";
 
   printf("Using Onnxruntime C API\n");
   CheckStatus(g_ort->CreateSession(env, model_path, session_options, &session));
