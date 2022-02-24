@@ -19,7 +19,7 @@ and inserts nodes to reorder tensors as needed.
 class NhwcTransformer2 : public GraphTransformer {
  public:
   NhwcTransformer2(const std::vector<std::string>& registered_execution_providers) noexcept :
-	GraphTransformer("NhwcTransformer"),  registered_execution_providers_(registered_execution_providers) {}
+	GraphTransformer("NhwcTransformer2"),  registered_execution_providers_(registered_execution_providers) {}
 
  private:
   Status ApplyImpl(Graph& graph, bool& modified, int graph_level, const logging::Logger& logger) const override;
