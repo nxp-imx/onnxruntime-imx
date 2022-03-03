@@ -694,13 +694,10 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
     return onnxruntime::CreateExecutionProviderFactory_DML(device_id)->CreateProvider();
 #endif
   } else if (type == kNnapiExecutionProvider) {
-#if defined(USE_NNAPI)
-#if !defined(__ANDROID__)
-    LOGS_DEFAULT(WARNING) << "NNAPI execution provider can only be used to generate ORT format model in this build.";
-#endif
+#ifdef USE_NNAPI
     const auto partitioning_stop_ops_list = session_options.config_options.GetConfigEntry(
         kOrtSessionOptionsConfigNnapiEpPartitioningStopOps);
-    return onnxruntime::CreateExecutionProviderFactory_Nnapi(0, partitioning_stop_ops_list)->CreateProvider();
+    return onnxruntime::CreateExecutionProviderFactory_Nnapi()->CreateProvider();
 #endif
   } else if (type == kRknpuExecutionProvider) {
 #ifdef USE_RKNPU
