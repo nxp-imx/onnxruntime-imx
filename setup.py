@@ -538,10 +538,5 @@ setup(
     data_files=data_files,
     install_requires=install_requires,
     keywords='onnx machine learning',
-    entry_points={
-        'console_scripts': [
-            'onnxruntime_test = onnxruntime.tools.onnxruntime_test:main',
-        ]
-    },
     classifiers=classifiers,
     )
