@@ -71,6 +71,9 @@ void addGlobalSchemaFunctions(pybind11::module& m) {
 #ifdef USE_NNAPI
             onnxruntime::CreateExecutionProviderFactory_Nnapi(),
 #endif
+#ifdef USE_VSI_NPU
+            onnxruntime::CreateExecutionProviderFactory_VsiNpu(0),
+#endif
 #ifdef USE_RKNPU
             onnxruntime::CreateExecutionProviderFactory_Rknpu(),
 #endif
