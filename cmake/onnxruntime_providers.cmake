@@ -939,6 +939,9 @@ if (onnxruntime_USE_NNAPI_BUILTIN)
   endif()
 
   add_compile_definitions(USE_NNAPI=1)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_compile_definitions(LINUX_NNAPI=1)
+  endif()
 
   # This is the minimum Android API Level required by ORT NNAPI EP to run
   # ORT running on any host system with Android API level less than this will fall back to CPU EP
@@ -974,6 +977,9 @@ if (onnxruntime_USE_NNAPI_BUILTIN)
   if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     list(APPEND onnxruntime_provider_nnapi_cc_src_patterns
          "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/nnapi_lib/nnapi_implementation.cc")
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND onnxruntime_provider_nnapi_cc_src_patterns
+            "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/nnapi_lib/nnapi_implementation.cc")
   else()
     list(APPEND onnxruntime_provider_nnapi_cc_src_patterns
          "${ONNXRUNTIME_ROOT}/core/providers/nnapi/nnapi_builtin/nnapi_lib/nnapi_implementation_stub.cc")

@@ -203,7 +203,7 @@ DataLayout NnapiExecutionProvider::GetPreferredLayout() const {
   return nnapi_flags_ & NNAPI_FLAG_USE_NCHW ? DataLayout::NCHW : DataLayout::NHWC;
 }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LINUX_NNAPI)
 static Status GetOutputBuffer(Ort::CustomOpApi& ort,
                               OrtKernelContext* context,
                               const nnapi::Model& model,
@@ -236,7 +236,7 @@ static Status GetOutputBuffer(Ort::CustomOpApi& ort,
 
   return Status::OK();
 }
-#endif  // __ANDROID__
+#endif  // __ANDROID__ or LINUX_NNAPI
 
 common::Status NnapiExecutionProvider::Compile(const std::vector<FusedNodeAndGraph>& fused_nodes_and_graphs,
                                                std::vector<NodeComputeInfo>& node_compute_funcs) {
@@ -353,7 +353,7 @@ common::Status NnapiExecutionProvider::Compile(const std::vector<FusedNodeAndGra
         ort.ReleaseTensorTypeAndShapeInfo(tensor_info);
       }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(LINUX_NNAPI)
       // From this point we will need to take the exclusive lock on the model until the Predict is
       // performed, to block other threads to perform Predict on the same model
       // TODO, investigate concurrent runs for different executions from the same model
