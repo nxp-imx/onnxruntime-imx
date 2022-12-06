@@ -21,7 +21,7 @@ Origin:                    https://github.com/microsoft/onnxruntime
 
 Package:                   protobuf
 Version:                   3.16.0 (rev 2dc747c57)
-Outgoing License:          BSD License 2.0
+Outgoing License:          BSD-3-Clause license
 License File:              cmake/external/protobuf/LICENSE
 Origin:                    https://github.com/protocolbuffers/protobuf
  
@@ -29,7 +29,7 @@ Origin:                    https://github.com/protocolbuffers/protobuf
 
 Package:                   googletest
 Version:                   rev 53495a2a
-Outgoing License:          BSD License 2.0
+Outgoing License:          BSD-3-Clause license
 License File:              cmake/external/googletest/LICENSE
 Origin:                    https://github.com/google/googletest
  
@@ -77,7 +77,7 @@ Origin:                    https://github.com/google/nsync
 
 Package:                   re2
 Version:                   2021-06-01 (rev 4244cd1)
-Outgoing License:          BSD License 2.0
+Outgoing License:          BSD-3-Clause license
 License File:              cmake/external/re2/LICENSE
 Origin:                    https://github.com/google/re2
  
@@ -117,7 +117,7 @@ Origin:                    https://github.com/microsoft/mimalloc
 
 Package:                   cub
 Version:                   v1.8.0 (rev c3cceac1)
-Outgoing License:          BSD License 2.0
+Outgoing License:          BSD-3-Clause license
 License File:              cmake/external/cub/LICENSE.TXT
 Origin:                    https://github.com/NVlabs/cub
  
@@ -181,7 +181,7 @@ Origin:                    https://github.com/boostorg/mp11
 
 Package:                   coremltools
 Version:                   4.0 (rev 523d5e0)
-Outgoing License:          BSD License 2.0
+Outgoing License:          BSD-3-Clause license
 License File:              cmake/external/coremltools/LICENSE.txt
 Origin:                    https://github.com/apple/coremltools
  
