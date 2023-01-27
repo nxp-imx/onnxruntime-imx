@@ -390,12 +390,18 @@ bool BaseOpSupportChecker::IsOpSupported(const InitializedTensorSet& initializer
 bool BaseOpSupportChecker::HasSupportedInputOutputs(const InitializedTensorSet& initializers, const NodeUnit& node_unit,
                                                     const OpSupportCheckParams& params) const {
   // We do not support unknown(null) input shape
-  auto has_supported_shape = [](const NodeArg& node_arg, const std::string& name, const std::string& op_type) {
+  auto has_supported_shape = [params](const NodeArg& node_arg, const std::string& name, const std::string& op_type) {
     const auto* shape_proto = node_arg.Shape();
     if (!shape_proto) {
       LOGS_DEFAULT(VERBOSE) << "Node [" << name << "] type [" << op_type
                             << "] Input [" << node_arg.Name() << "] has no shape";
       return false;
+    }
+
+    // Bypass
+    if (params.dyn_shape_check_bypass) {
+      LOGS_DEFAULT(VERBOSE) << "[NXP-TRACE] Dynamic shape bypassed for input: " << node_arg.Name();
+      return true;
     }
 
     // We do not support dynamic shape input for now

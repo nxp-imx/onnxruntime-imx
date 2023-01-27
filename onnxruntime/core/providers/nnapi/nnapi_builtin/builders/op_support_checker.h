@@ -12,13 +12,15 @@ class NodeUnit;
 namespace nnapi {
 
 struct OpSupportCheckParams {
-  OpSupportCheckParams(int32_t android_feature_level, bool use_nchw)
+  OpSupportCheckParams(int32_t android_feature_level, bool use_nchw, bool dyn_shape_check_bypass)
       : android_feature_level(android_feature_level),
-        use_nchw(use_nchw) {
+        use_nchw(use_nchw),
+        dyn_shape_check_bypass(dyn_shape_check_bypass) {
   }
 
   int32_t android_feature_level = 0;
   bool use_nchw = false;
+  bool dyn_shape_check_bypass = false;
 };
 
 class IOpSupportChecker {

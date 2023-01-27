@@ -79,6 +79,10 @@ class ModelBuilder {
   void SetUseNCHW(bool use_nchw) { use_nchw_ = use_nchw; }
   bool UseNCHW() const { return use_nchw_; }
 
+  // Enable byppass of dynamic shape checker
+  void SetBypassDynShapeChecker(bool bypass) { dyn_shape_check_bypass = bypass; }
+  bool GetBypassDynShapeChecker() const { return dyn_shape_check_bypass;}
+
   // Returns the preferred layout for this EP.
   DataLayout GetPreferredLayout() const;
 
@@ -124,6 +128,8 @@ class ModelBuilder {
 
   bool use_nchw_{false};
   bool use_fp16_{false};
+  bool dyn_shape_check_bypass{false};
+
   android::nn::wrapper::ExecutePreference exe_pref_{
       android::nn::wrapper::ExecutePreference::PREFER_FAST_SINGLE_ANSWER};
 

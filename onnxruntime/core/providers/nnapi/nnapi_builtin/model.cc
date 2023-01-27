@@ -192,6 +192,7 @@ Status Execution::SetOutputBuffer(const int32_t index, const OutputBuffer& outpu
 
 Status Execution::Predict(const std::vector<int32_t>& dynamic_outputs, std::vector<Shaper::Shape>& dynamic_output_shapes) {
   ANeuralNetworksEvent* event = nullptr;
+  LOGS_DEFAULT(VERBOSE) << "[NXP-TRACE] Model::Predict (Start compute & wait) ";
   RETURN_STATUS_ON_ERROR(nnapi_->ANeuralNetworksExecution_startCompute(execution_, &event));
   RETURN_STATUS_ON_ERROR(nnapi_->ANeuralNetworksEvent_wait(event));
   nnapi_->ANeuralNetworksEvent_free(event);

@@ -13,9 +13,11 @@ namespace onnxruntime {
 namespace {
 struct NnapiProviderFactory : IExecutionProviderFactory {
   NnapiProviderFactory(uint32_t nnapi_flags,
-                       const optional<std::string>& partitioning_stop_ops_list)
+                       const optional<std::string>& partitioning_stop_ops_list,
+                       const std::string& bypass_output_shape_str)
       : nnapi_flags_(nnapi_flags),
-        partitioning_stop_ops_list_(partitioning_stop_ops_list) {}
+        partitioning_stop_ops_list_(partitioning_stop_ops_list),
+        bypass_output_shape_str_(bypass_output_shape_str) {}
 
   ~NnapiProviderFactory() override {}
 
@@ -24,16 +26,19 @@ struct NnapiProviderFactory : IExecutionProviderFactory {
  private:
   const uint32_t nnapi_flags_;
   const optional<std::string> partitioning_stop_ops_list_;
+  const std::string bypass_output_shape_str_;
 };
 
 std::unique_ptr<IExecutionProvider> NnapiProviderFactory::CreateProvider() {
-  return std::make_unique<NnapiExecutionProvider>(nnapi_flags_, partitioning_stop_ops_list_);
+  return std::make_unique<NnapiExecutionProvider>(nnapi_flags_, partitioning_stop_ops_list_, bypass_output_shape_str_);
 }
 }  // namespace
 
 std::shared_ptr<IExecutionProviderFactory> NnapiProviderFactoryCreator::Create(
-    uint32_t nnapi_flags, const optional<std::string>& partitioning_stop_ops_list) {
-  return std::make_shared<NnapiProviderFactory>(nnapi_flags, partitioning_stop_ops_list);
+    uint32_t nnapi_flags,
+    const optional<std::string>& partitioning_stop_ops_list,
+    const std::string& bypass_output_shape_str) {
+  return std::make_shared<NnapiProviderFactory>(nnapi_flags, partitioning_stop_ops_list, bypass_output_shape_str);
 }
 
 }  // namespace onnxruntime
@@ -41,7 +46,11 @@ std::shared_ptr<IExecutionProviderFactory> NnapiProviderFactoryCreator::Create(
 ORT_API_STATUS_IMPL(OrtSessionOptionsAppendExecutionProvider_Nnapi, _In_ OrtSessionOptions* options, uint32_t nnapi_flags) {
   const auto partitioning_stop_ops_list = options->value.config_options.GetConfigEntry(
       kOrtSessionOptionsConfigNnapiEpPartitioningStopOps);
+
+  const auto bypass_output_shape_str = options->value.config_options.GetConfigOrDefault(
+      kOrtRunOptionsConfigNnapiEpBypassedOutputShape, "");
+
   options->provider_factories.push_back(
-      onnxruntime::NnapiProviderFactoryCreator::Create(nnapi_flags, partitioning_stop_ops_list));
+      onnxruntime::NnapiProviderFactoryCreator::Create(nnapi_flags, partitioning_stop_ops_list, bypass_output_shape_str));
   return nullptr;
 }

@@ -18,6 +18,8 @@
 #include "core/providers/shared/node_unit/node_unit.h"
 #include "core/session/onnxruntime_cxx_api.h"
 
+#include <sstream>
+
 namespace onnxruntime {
 
 namespace {
@@ -44,13 +46,31 @@ std::unordered_set<std::string> GetPartitioningStopOps(const optional<std::strin
   return stop_ops_set;
 }
 
+Shape GetBypassOutputShape(const std::string& bypass_output_shape_str) {
+  Shape shape;
+  LOGS_DEFAULT(VERBOSE) << "[NXP-TRACE] GetBypassOutputShape (string): " << bypass_output_shape_str;
+  if(bypass_output_shape_str.empty()) {
+    return shape;
+  }
+  std::istringstream iss{bypass_output_shape_str};
+  uint32_t n;
+  while (iss >> n) { shape.push_back(n); }
+  std::string shape_str(shape.begin(), shape.end());
+  return shape;
+}
+
 }  // namespace
 
 NnapiExecutionProvider::NnapiExecutionProvider(uint32_t nnapi_flags,
-                                               const optional<std::string>& partitioning_stop_ops_list)
+                                               const optional<std::string>& partitioning_stop_ops_list,
+                                               const std::string& bypass_output_shape_str)
     : IExecutionProvider{onnxruntime::kNnapiExecutionProvider, true},
       nnapi_flags_(nnapi_flags),
       partitioning_stop_ops_(GetPartitioningStopOps(partitioning_stop_ops_list)) {
+
+  bypass_output_shape_str_ = bypass_output_shape_str;
+  bypass_output_shape_ = GetBypassOutputShape(bypass_output_shape_str);
+
   AllocatorCreationInfo device_info(
       [](int) {
         return std::make_unique<CPUAllocator>(OrtMemoryInfo(NNAPI, OrtAllocatorType::OrtDeviceAllocator));
@@ -96,6 +116,7 @@ NnapiExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph_view
   const nnapi::OpSupportCheckParams params{
       android_feature_level,
       !!(nnapi_flags_ & NNAPI_FLAG_USE_NCHW),
+      !!(nnapi_flags_ & NNAPI_FLAG_DYN_SHAPE_BYPASS)
   };
 
   if (params.android_feature_level < ORT_NNAPI_MIN_API_LEVEL) {
@@ -249,6 +270,9 @@ common::Status NnapiExecutionProvider::Compile(const std::vector<FusedNodeAndGra
     builder.SetUseNCHW(nnapi_flags_ & NNAPI_FLAG_USE_NCHW);
     builder.SetUseFp16(nnapi_flags_ & NNAPI_FLAG_USE_FP16);
 
+    bool dyn_shape_bypass = nnapi_flags_ & NNAPI_FLAG_DYN_SHAPE_BYPASS;
+    builder.SetBypassDynShapeChecker(dyn_shape_bypass);
+
     bool cpu_disabled = nnapi_flags_ & NNAPI_FLAG_CPU_DISABLED;
     bool cpu_only = nnapi_flags_ & NNAPI_FLAG_CPU_ONLY;
     if (cpu_disabled && cpu_only) {
@@ -297,7 +321,7 @@ common::Status NnapiExecutionProvider::Compile(const std::vector<FusedNodeAndGra
       ORT_UNUSED_PARAMETER(state);
     };
 
-    compute_info.compute_func = [](FunctionState state, const OrtApi* api, OrtKernelContext* context) {
+    compute_info.compute_func = [this, dyn_shape_bypass](FunctionState state, const OrtApi* api, OrtKernelContext* context) {
       Ort::CustomOpApi ort{*api};
       nnapi::Model* model = reinterpret_cast<nnapi::Model*>(state);
       const size_t num_inputs = ort.KernelContext_GetInputCount(context);
@@ -372,7 +396,14 @@ common::Status NnapiExecutionProvider::Compile(const std::vector<FusedNodeAndGra
           const auto& output_name = model_outputs[i];
 
           // Below 2 need to be copied since we will modify or take ownership
-          const auto model_output_type = model->GetOutputType(output_name, *execution);
+          auto nc_model_output_type = model->GetOutputType(output_name, *execution);
+          using OpType = android::nn::wrapper::OperandType;
+          if(dyn_shape_bypass) {
+              LOGS_DEFAULT(VERBOSE) << "[NXP-TRACE] Dynamic shape checker bypassed, forcing shape to: "
+                                    << this->bypass_output_shape_str_;
+              nc_model_output_type.SetDimensions(this->bypass_output_shape_);
+          }
+          OpType& model_output_type = static_cast<OpType&>(nc_model_output_type);
           auto output_shape = model_output_type.dimensions;
 
           bool is_dynamic_shape_output = false;
@@ -390,6 +421,7 @@ common::Status NnapiExecutionProvider::Compile(const std::vector<FusedNodeAndGra
           if (!is_dynamic_shape_output) {
             // Since NNAPI use {1} tensor as scalar, if the model output should have empty shape
             // We are going to replace the {1} shape of the output back to {}
+            LOGS_DEFAULT(VERBOSE) << "[NXP-TRACE] Model contains static output";
             if (model->IsScalarOutput(output_name))
               output_shape.clear();
 
@@ -401,6 +433,7 @@ common::Status NnapiExecutionProvider::Compile(const std::vector<FusedNodeAndGra
           } else {
             // This output is dynamic (size unknown), will need allocate a buffer for the result
             // and copy the content to ORT output tensors after the execution (will know output shape after the execution)
+            LOGS_DEFAULT(VERBOSE) << "[NXP-TRACE] Model contains dynamic output";
             output_buffer_byte_size = model->GetDynamicOutputBufferSize() * model_output_type.GetElementByteSize();
             std::unique_ptr<uint8_t[]> buffer_holder(new uint8_t[output_buffer_byte_size]);
             output_buffer = buffer_holder.get();

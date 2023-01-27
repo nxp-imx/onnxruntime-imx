@@ -81,9 +81,9 @@ static const char* const kOrtSessionOptionsConfigUseORTModelBytesDirectly = "ses
 
 /// <summary>
 /// Key for using the ORT format model flatbuffer bytes directly for initializers.
-/// This avoids copying the bytes and reduces peak memory usage during model loading and initialization. 
-/// Requires `session.use_ort_model_bytes_directly` to be true. 
-/// If set, the flatbuffer bytes provided when creating the InferenceSession MUST remain valid for the entire 
+/// This avoids copying the bytes and reduces peak memory usage during model loading and initialization.
+/// Requires `session.use_ort_model_bytes_directly` to be true.
+/// If set, the flatbuffer bytes provided when creating the InferenceSession MUST remain valid for the entire
 /// duration of the InferenceSession.
 /// </summary>
 static const char* const kOrtSessionOptionsConfigUseORTModelBytesForInitializers =
@@ -142,3 +142,8 @@ static const char* const kOrtSessionOptionsConfigForceSpinningStop = "session.fo
 // "0": in some cases warnings will be logged but processing will continue. The default.
 // May be useful to expose bugs in models.
 static const char* const kOrtSessionOptionsConfigStrictShapeTypeInference = "session.strict_shape_type_inference";
+
+// Key for communicating output shape when bypassing dynamic checks (nnapi)
+// Expects a list of comma separated integers. First and last chars must be integers.
+// e.g.: "1 1048 7 7"
+static const char* const kOrtRunOptionsConfigNnapiEpBypassedOutputShape = "ep.nnapi.bypassed_output_shape";

@@ -604,6 +604,7 @@ class BaseOpBuilder : public IOpBuilder {
   OpSupportCheckParams params{
       model_builder.GetNNAPIFeatureLevel(),
       model_builder.UseNCHW(),
+      model_builder.GetBypassDynShapeChecker()
   };
 
   return IsNodeSupported(node_unit, model_builder.GetGraphViewer(), params);
