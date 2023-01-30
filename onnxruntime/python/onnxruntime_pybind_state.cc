@@ -746,7 +746,10 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
 #endif
     const auto partitioning_stop_ops_list = session_options.config_options.GetConfigEntry(
         kOrtSessionOptionsConfigNnapiEpPartitioningStopOps);
-    return onnxruntime::NnapiProviderFactoryCreator::Create(0, partitioning_stop_ops_list)->CreateProvider();
+    const auto bypass_output_shape_str = session_options.config_options.GetConfigOrDefault(
+      kOrtRunOptionsConfigNnapiEpBypassedOutputShape, "");
+
+    return onnxruntime::NnapiProviderFactoryCreator::Create(0, partitioning_stop_ops_list, bypass_output_shape_str)->CreateProvider();
 #endif
   } else if (type == kRknpuExecutionProvider) {
 #ifdef USE_RKNPU
