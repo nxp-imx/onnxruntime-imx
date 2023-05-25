@@ -1,0 +1,229 @@
+NXP Software Content Register
+
+Release - ONNX Runtime 1.13.1 for LF 6.1.22_2.0.0
+June 2023
+
+Outgoing License: MIT
+License File:     LICENSE
+
+Release branch: lf-6.1.22_2.0.0
+
+--------------------------------------------
+
+Package:                   onnxruntime-imx.git
+Version:                   1.13.1
+Outgoing License:          MIT
+License File:              LICENSE
+Description and comments:  ONNX Runtime inference engine
+Release Location:          https://source.codeaurora.org/external/imx/onnxruntime-imx.git -b lf-6.1.22_2.0.0
+Origin:                    https://github.com/microsoft/onnxruntime
+
+--------------------------------------------
+
+Package:                   protobuf
+Version:                   3.13.3 (rev a902b3927)
+Outgoing License:          BSD License 2.0
+License File:              cmake/external/protobuf/LICENSE
+Origin:                    https://github.com/protocolbuffers/protobuf
+ 
+--------------------------------------------
+
+Package:                   googletest
+Version:                   rev 53495a2a
+Outgoing License:          BSD License 2.0
+License File:              cmake/external/googletest/LICENSE
+Origin:                    https://github.com/google/googletest
+ 
+-------------------------------------------- 
+
+Package:                   googlebenchmark
+Version:                   rev 7d0d906
+Outgoing License:          Apache 2.0
+License File:              cmake/external/googlebenchmark/LICENSE
+Origin:                    https://github.com/google/benchmark
+ 
+-------------------------------------------- 
+
+Package:                   onnx
+Version:                   v1.12.0 (rev 5a5f8a59)
+Outgoing License:          Apache 2.0
+License File:              cmake/external/onnx/LICENSE
+Origin:                    https://github.com/onnx/onnx
+ 
+--------------------------------------------
+
+Package:                   date
+Version:                   2.4.1 (rev e7e1482)
+Outgoing License:          MIT
+License File:              cmake/external/date/LICENSE.txt
+Origin:                    https://github.com/HowardHinnant/date.git
+ 
+-------------------------------------------- 
+
+Package:                   nsync
+Version:                   1.23.0 (rev 4366170)
+Outgoing License:          Apache 2.0
+License File:              cmake/external/nsync/LICENSE
+Origin:                    https://github.com/google/nsync
+ 
+-------------------------------------------- 
+
+Package:                   re2
+Version:                   2021-06-01 (rev 4244cd1)
+Outgoing License:          BSD License 2.0
+License File:              cmake/external/re2/LICENSE
+Origin:                    https://github.com/google/re2
+ 
+-------------------------------------------- 
+
+Package:                   eigen
+Version:                   rev d10b27fe3
+Outgoing License:          MPL 2.0
+License File:              cmake/external/eigen/COPYING.*
+Origin:                    https://gitlab.com/libeigen/eigen
+ 
+-------------------------------------------- 
+
+Package:                   cxxopts
+Version:                   rev 3c73d91
+Outgoing License:          MIT
+License File:              cmake/external/cxxopts/LICENSE
+Origin:                    https://github.com/jarro2783/cxxopts
+ 
+-------------------------------------------- 
+
+Package:                   tensorboard
+Version:                   rev 373eb09e4
+Outgoing License:          Apache 2.0
+License File:              cmake/external/tensorboard/LICENSE
+Origin:                    https://github.com/tensorflow/tensorboard
+ 
+-------------------------------------------- 
+
+Package:                   mimalloc
+Version:                   v2.0.3 (rev f412df7)
+Outgoing License:          MIT
+License File:              cmake/external/mimalloc/LICENSE
+Origin:                    https://github.com/microsoft/mimalloc
+ 
+-------------------------------------------- 
+
+Package:                   cub
+Version:                   v1.8.0 (rev c3cceac1)
+Outgoing License:          BSD License 2.0
+License File:              cmake/external/cub/LICENSE.TXT
+Origin:                    https://github.com/NVlabs/cub
+ 
+-------------------------------------------- 
+
+Package:                   wil
+Version:                   rev e8c599b
+Outgoing License:          MIT
+License File:              cmake/external/wil/LICENSE
+Origin:                    https://github.com/microsoft/wil
+ 
+-------------------------------------------- 
+
+Package:                   json
+Version:                   v3.10.1 (rev b5364fa)
+Outgoing License:          MIT
+License File:              cmake/external/json/LICENSE.MIT
+Origin:                    https://github.com/nlohmann/json
+ 
+-------------------------------------------- 
+
+Package:                   libprotobuf-mutator
+Version:                   rev 7a2ed51
+Outgoing License:          Apache 2.0
+License File:              cmake/external/libprotobuf-mutator/LICENSE
+Origin:                    https://github.com/google/libprotobuf-mutator
+ 
+-------------------------------------------- 
+
+Package:                   flatbuffers
+Version:                   v1.12.0 (rev 6df40a24)
+Outgoing License:          Apache 2.0
+License File:              cmake/external/flatbuffers/LICENSE.txt
+Origin:                    https://github.com/google/flatbuffers
+ 
+-------------------------------------------- 
+
+Package:                   safeint
+Version:                   3.0.26 (rev ff15c6a)
+Outgoing License:          MIT
+License File:              cmake/external/SafeInt/safeint/LICENSE
+Origin:                    https://github.com/dcleblanc/SafeInt
+ 
+-------------------------------------------- 
+
+Package:                   mp11
+Version:                   boost-1.75.0 (rev 21cace4)
+Outgoing License:          Boost Software License - Version 1.0
+License File:              http://boost.org/LICENSE_1_0.txt
+Origin:                    https://github.com/boostorg/mp11
+ 
+--------------------------------------------
+
+Package:                   dlpack
+Version:                   v0.6 (rev 2775088)
+Outgoing License:          Apache 2.0
+License File:              cmake/external/dlpack/LICENSE
+Origin:                    https://github.com/dmlc/dlpack
+ 
+--------------------------------------------
+
+Package:                   emsdk
+Version:                   3.1.19 (rev c220895)
+Outgoing License:          MIT
+License File:              cmake/external/emsdk/LICENSE
+Origin:                    https://github.com/emscripten-core/emsdk
+ 
+--------------------------------------------
+
+Package:                   onnxruntime-extensions
+Version:                   rev d4b2aff
+Outgoing License:          MIT
+License File:              cmake/external/emsdk/LICENSE
+Origin:                    https://github.com/microsoft/onnxruntime-extensions.git
+ 
+--------------------------------------------
+
+Package:                   pytorch_cpuinfo
+Version:                   rev 5916273
+Outgoing License:          BSD 2-Clause "Simplified"
+License File:              cmake/external/pytorch_cpuinfo/LICENSE
+Origin:                    https://github.com/pytorch/cpuinfo.git
+ 
+--------------------------------------------
+
+Package:                   onnx-tensorrt
+Version:                   22.02 (rev 87c7a70)
+Outgoing License:          Apache 2.0
+License File:              cmake/external/onnx-tensorrt/LICENSE
+Origin:                    https://github.com/onnx/onnx-tensorrt.git
+
+--------------------------------------------
+
+Package:                   FP16
+Version:                   rev 0a92994
+Outgoing License:          MIT
+License File:              cmake/external/FP16/LICENSE
+Origin:                    https://github.com/Maratyszcza/FP16.git
+
+-------------------------------------------- 
+
+Package:                   XNNPACK
+Version:                   rev 003c580e6
+Outgoing License:          BSD License
+License File:              cmake/external/XNNPACK/LICENSE
+Origin:                    https://github.com/google/XNNPACK.git
+
+-------------------------------------------- 
+
+Package:                   pthreadpool
+Version:                   rev 1787867
+Outgoing License:          BSD-2-Clause License
+License File:              cmake/external/pthreadpool/LICENSE
+Origin:                    https://github.com/Maratyszcza/pthreadpool.git
+
+-------------------------------------------- 
