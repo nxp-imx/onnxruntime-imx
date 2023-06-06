@@ -20,6 +20,10 @@ Origin:                    https://github.com/microsoft/onnxruntime
 
 --------------------------------------------
 
+Build Dependencies:
+
+--------------------------------------------
+
 Package:                   protobuf
 Version:                   3.13.3 (rev a902b3927)
 Outgoing License:          BSD License 2.0
