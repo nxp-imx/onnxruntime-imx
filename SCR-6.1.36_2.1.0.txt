@@ -1,12 +1,12 @@
 NXP Software Content Register
 
-Release - ONNX Runtime 1.13.1 for LF 6.1.22_2.0.0
-June 2023
+Release - ONNX Runtime 1.13.1 for LF 6.1.36_2.1.0
+September 2023
 
 Outgoing License: MIT
 License File:     LICENSE
 
-Release branch: lf-6.1.22_2.0.0
+Release branch: lf-6.1.36_2.1.0
 
 --------------------------------------------
 
@@ -15,7 +15,7 @@ Version:                   1.13.1
 Outgoing License:          MIT
 License File:              LICENSE
 Description and comments:  ONNX Runtime inference engine
-Release Location:          https://source.codeaurora.org/external/imx/onnxruntime-imx.git -b lf-6.1.22_2.0.0
+Release Location:          https://source.codeaurora.org/external/imx/onnxruntime-imx.git -b lf-6.1.36_2.1.0
 Origin:                    https://github.com/microsoft/onnxruntime
 
 --------------------------------------------
