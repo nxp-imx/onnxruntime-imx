@@ -281,6 +281,11 @@ Status ScatterData(
     const FuncT& func,
     const Tensor* data_input, const std::vector<int64_t>& indices_data, const Tensor* updates_input, int64_t axis,
     Tensor* data_output) {
+
+// Rationale: avoid array-bounding checks for this function
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+
   const TensorShape& input_data_shape = data_input->Shape();
 
   const auto input_elements = input_data_shape.Size();
@@ -386,6 +391,7 @@ Status ScatterData(
     }
   }
   return Status::OK();
+#pragma GCC diagnostic pop
 }
 
 template <typename TData>

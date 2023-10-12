@@ -2,7 +2,8 @@
 # Licensed under the MIT License.
 
 # Minimum CMake required
-cmake_minimum_required(VERSION 3.26)
+# imx-onnxruntime: Lower requirement for mickledore builds
+cmake_minimum_required(VERSION 3.25)
 
 cmake_policy(SET CMP0069 NEW)
 set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
