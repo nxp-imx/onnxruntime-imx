@@ -842,7 +842,7 @@ if (HAS_SHORTEN_64_TO_32 AND NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 
 if (UNIX AND onnxruntime_USE_TENSORRT)
-    # The test_main.cc includes NvInfer.h where it has many deprecated declarations  
+    # The test_main.cc includes NvInfer.h where it has many deprecated declarations
     # simply ignore them for TensorRT EP build
     set_property(TARGET onnxruntime_test_all APPEND_STRING PROPERTY COMPILE_FLAGS "-Wno-deprecated-declarations")
 endif()
@@ -1279,7 +1279,7 @@ if (NOT onnxruntime_ENABLE_TRAINING_TORCH_INTEROP)
     endif()
 
     if (UNIX AND onnxruntime_USE_TENSORRT)
-        # The test_main.cc includes NvInfer.h where it has many deprecated declarations  
+        # The test_main.cc includes NvInfer.h where it has many deprecated declarations
         # simply ignore them for TensorRT EP build
         set_property(TARGET onnxruntime_shared_lib_test APPEND_STRING PROPERTY COMPILE_FLAGS "-Wno-deprecated-declarations")
     endif()
@@ -1562,7 +1562,7 @@ if (NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     endif()
 
     if (UNIX AND onnxruntime_USE_TENSORRT)
-        # The test_main.cc includes NvInfer.h where it has many deprecated declarations  
+        # The test_main.cc includes NvInfer.h where it has many deprecated declarations
         # simply ignore them for TensorRT EP build
         set_property(TARGET onnxruntime_customopregistration_test APPEND_STRING PROPERTY COMPILE_FLAGS "-Wno-deprecated-declarations")
     endif()
@@ -1675,8 +1675,6 @@ if (NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_EXTENDED_MINIMAL_BUILD
                                   AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten"
                                   AND NOT onnxruntime_USE_ROCM)
   file(GLOB_RECURSE test_execution_provider_srcs
-    "${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/*.h"
-    "${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/*.cc"
     "${ONNXRUNTIME_ROOT}/core/providers/shared_library/*.h"
     "${ONNXRUNTIME_ROOT}/core/providers/shared_library/*.cc"
   )
@@ -1691,11 +1689,11 @@ if (NOT onnxruntime_MINIMAL_BUILD AND NOT onnxruntime_EXTENDED_MINIMAL_BUILD
     target_link_libraries(test_execution_provider PRIVATE Python::Python)
   endif()
   if(APPLE)
-    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS "-Xlinker -exported_symbols_list ${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/exported_symbols.lst")
+    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS)
   elseif(UNIX)
-    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS "-Xlinker --version-script=${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/version_script.lds -Xlinker --gc-sections -Xlinker -rpath=\\$ORIGIN")
+    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS "-Xlinker --gc-sections -Xlinker -rpath=\\$ORIGIN")
   elseif(WIN32)
-    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS "-DEF:${REPO_ROOT}/onnxruntime/test/testdata/custom_execution_provider_library/symbols.def")
+    set_property(TARGET test_execution_provider APPEND_STRING PROPERTY LINK_FLAGS)
   else()
     message(FATAL_ERROR "test_execution_provider unknown platform, need to specify shared library exports for it")
   endif()
