@@ -41,7 +41,7 @@ jobs:
           destination: ./_site
 
       - name: Download C apidocs artifact
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v3
         with:
           name: onnxruntime-c-apidocs
           workflow: publish-c-apidocs.yml
@@ -49,7 +49,7 @@ jobs:
           path: apidocs
 
       - name: Download C# apidocs artifact
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v3
         with:
           name: onnxruntime-csharp-apidocs
           workflow: publish-csharp-apidocs.yml
@@ -57,7 +57,7 @@ jobs:
           path: apidocs
 
       - name: Download Java apidocs artifact
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v3
         with:
           name: onnxruntime-java-apidocs
           workflow: publish-java-apidocs.yml
@@ -65,7 +65,7 @@ jobs:
           path: apidocs
 
       - name: Download Python apidocs artifact
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v3
         with:
           name: onnxruntime-python-apidocs
           workflow: publish-python-apidocs.yml
