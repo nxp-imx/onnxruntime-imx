@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: '3.8.x'
           architecture: 'x64'
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: conda-incubator/setup-miniconda@v3
         with:
           activate-environment: ""
       - name: 'Install LLVM-Dev'
