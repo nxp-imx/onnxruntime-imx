@@ -69,6 +69,10 @@ class OpKernelContextInternal : public OpKernelContext {
   }
 #endif
 
+  Status ForceMLValue(int index, const OrtValue& ort_value) {
+    return OpKernelContext::ForceMLValue(index, ort_value);
+  }
+
   OrtValue* OutputMLValue(int index, const TensorShape& shape) override {
     return OpKernelContext::OutputMLValue(index, shape);
   }

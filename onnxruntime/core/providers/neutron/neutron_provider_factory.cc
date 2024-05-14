@@ -1,18 +1,20 @@
 // Copyright (c) NXP. All rights reserved.
 
+//#include "core/providers/shared_library/provider_api.h"
+
 #include "core/providers/neutron/neutron_provider_factory.h"
-#include "neutron_execution_provider.h"
-#include "neutron_provider_factory_creator.h"
+#include "core/providers/neutron/neutron_execution_provider.h"
+#include "core/providers/neutron/neutron_provider_factory_creator.h"
 #include "core/session/abi_session_options_impl.h"
 
 namespace onnxruntime {
 
 struct NeutronProviderFactory : IExecutionProviderFactory {
-  NeutronProviderFactory(uint32_t neutron_flags)
-      : neutron_flags_(neutron_flags) {}
-  ~NeutronProviderFactory() override {}
-
+  NeutronProviderFactory(uint32_t neutron_flags) : neutron_flags_(neutron_flags) {}
+  ~NeutronProviderFactory() override = default;
   std::unique_ptr<IExecutionProvider> CreateProvider() override;
+
+ private:
   uint32_t neutron_flags_;
 };
 
