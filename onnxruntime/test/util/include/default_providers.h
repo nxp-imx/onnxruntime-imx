@@ -55,6 +55,7 @@ std::unique_ptr<IExecutionProvider> DefaultVSINPUExecutionProvider();
 std::unique_ptr<IExecutionProvider> DefaultRknpuExecutionProvider();
 std::unique_ptr<IExecutionProvider> DefaultAclExecutionProvider(bool enable_fast_math = false);
 std::unique_ptr<IExecutionProvider> DefaultArmNNExecutionProvider(bool enable_arena = true);
+std::unique_ptr<IExecutionProvider> DefaultNeutronExecutionProvider(uint32_t neutron_flags = 0);
 std::unique_ptr<IExecutionProvider> DefaultRocmExecutionProvider(bool test_tunable_op = false);
 std::unique_ptr<IExecutionProvider> DefaultCoreMLExecutionProvider(bool use_mlprogram = false);
 std::unique_ptr<IExecutionProvider> DefaultSnpeExecutionProvider();

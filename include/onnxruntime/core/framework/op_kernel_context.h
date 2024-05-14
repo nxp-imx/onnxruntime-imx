@@ -186,6 +186,8 @@ class OpKernelContext {
   */
   AllocatorPtr GetAllocator(const OrtDevice& device) const;
 
+  Status ForceMLValue(int index, const OrtValue& ort_value);
+
  protected:
   OpKernelContext(concurrency::ThreadPool* threadpool, const logging::Logger& logger, Stream* stream);
 

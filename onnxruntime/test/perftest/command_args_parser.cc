@@ -264,6 +264,8 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
           test_config.machine_config.provider_type_name = onnxruntime::kVitisAIExecutionProvider;
         } else if (!CompareCString(optarg, ORT_TSTR("webgpu"))) {
           test_config.machine_config.provider_type_name = onnxruntime::kWebGpuExecutionProvider;
+        } else if (!CompareCString(optarg, ORT_TSTR("neutron"))) {
+          test_config.machine_config.provider_type_name = onnxruntime::kNeutronExecutionProvider;
         } else {
           return false;
         }

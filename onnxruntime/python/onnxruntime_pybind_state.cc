@@ -1259,6 +1259,11 @@ std::unique_ptr<IExecutionProvider> CreateExecutionProviderInstance(
                cit == provider_options_map.end() ? ProviderOptions{} : cit->second, &session_options)
         ->CreateProvider();
 #endif
+  } else if (type == kNeutronExecutionProvider) {
+#ifdef USE_NEUTRON
+    // @TODO: Leverage flags
+    return onnxruntime::NeutronProviderFactoryCreator::Create(0)->CreateProvider();
+#endif
   } else {
     // check whether it is a dynamic load EP:
     const auto it = provider_options_map.find(type);
