@@ -43,6 +43,24 @@ class QLinearMatMul : public MatMulIntegerBase {
 
   int GetAIdx() const override { return IN_A; }
   int GetBIdx() const override { return IN_B; }
+
+  // neutron parameters
+  size_t    m_handle{0};
+  uint32_t* m_header{NULL};
+  int8_t   *m_b_neutron{NULL};
+  int32_t  *m_b_bias{NULL};
+  uint32_t *m_b_factors{NULL};
+
+  //pre-packing
+  float    m_a_scale_data;
+  uint8_t  m_a_zp;
+  uint8_t  m_y_zp;
+  uint32_t m_b_rows;
+  uint32_t m_b_cols;
+  const float  *m_b_scale_data;
+  std::vector<float> m_output_scales;
+
+  bool useCPU{false};
 };
 
 
