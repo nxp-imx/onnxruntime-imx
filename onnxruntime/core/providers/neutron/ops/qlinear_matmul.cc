@@ -139,7 +139,6 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
         }
         break;
       }
-      //  return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
     }
   }
   catch (const std::bad_alloc &e) {
@@ -147,12 +146,15 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
     printf("[QLinearMatMul] Unable to alocate Neutron memory\n");
     useCPU = true;
   }
+  return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
+  /*
   (void)tensor;
   (void)input_idx;
   (void)alloc;
   (void)is_packed;
   (void)prepacked_weights;
   return Status::OK();
+  */
 }
 
 Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
@@ -160,8 +162,8 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
   const auto* a = ctx->Input<Tensor>(IN_A);
   const auto* b = packed_b_ ? nullptr : ctx->Input<Tensor>(IN_B);
 
-  printf("[QLinearMatMul] Input A ptr : %p \n", a->DataRaw());
-  printf("[QLinearMatMul] Input B ptr : %p \n", b->DataRaw());
+  //  printf("[QLinearMatMul] Input A ptr : %p \n", a->DataRaw());
+  //  printf("[QLinearMatMul] Input B ptr : %p \n", b->DataRaw());
 
   // validate offsets
   const auto* a_offset = ctx->Input<Tensor>(IN_A_ZERO_POINT);
@@ -199,7 +201,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
   }
 
   Tensor* y = ctx->Output(OUT_Y, helper.OutputShape());
-  printf("[QLinearMatMul] Output Y ptr : %p \n", y->DataRaw());
+  //  printf("[QLinearMatMul] Output Y ptr : %p \n", y->DataRaw());
   // Bail out early if the output is going to be empty
   if (y->Shape().Size() == 0)
     return Status::OK();
@@ -215,8 +217,8 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     // non-transposed b
     uint32_t neutron_a_rows = a->Shape()[1];
     uint32_t neutron_a_cols = a->Shape()[2];
-    uint32_t neutron_b_rows = b->Shape()[1];
-    uint32_t neutron_b_cols = b->Shape()[0];
+    uint32_t neutron_b_rows = b ? b->Shape()[1] : b_shape_[1];
+    uint32_t neutron_b_cols = b ? b->Shape()[0] : b_shape_[0];
     if (neutron_a_cols != neutron_b_cols) {
       printf("Neutron dimenssions do not match!\n");
     }

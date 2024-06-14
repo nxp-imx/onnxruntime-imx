@@ -37,12 +37,12 @@ size_t NeutronStackAllocator::getMemoryHandle() {
 }
 
 void* NeutronStackAllocator::Alloc(size_t size, size_t handle) {
-  printf("[NeutronStackAllocator::Alloc] Allocating %ld bytes from handle %ld\n",size,handle);
+  //  printf("[NeutronStackAllocator::Alloc] Allocating %ld bytes from handle %ld\n",size,handle);
   size = getAlignedSize(size);
   if (neutron_size_[handle] < (kReservedNeutronBufferSize + size)) {
     throw std::bad_alloc();
   }
-  printf("[NeutronStackAllocator::Alloc] Allocated %ld bytes from handle %ld\n",size,handle);
+  //  printf("[NeutronStackAllocator::Alloc] Allocated %ld bytes from handle %ld\n",size,handle);
   void* tmp = neutron_ptr_[handle];
   neutron_ptr_[handle] += size;
   neutron_size_[handle] -= size;
@@ -50,12 +50,12 @@ void* NeutronStackAllocator::Alloc(size_t size, size_t handle) {
 }  
 
 void* NeutronStackAllocator::AllocReserved(size_t size, size_t handle) {
-  printf("[NeutronStackAllocator::Alloc] Allocating %ld reserved bytes from handle %ld\n",size,handle);
+  //  printf("[NeutronStackAllocator::Alloc] Allocating %ld reserved bytes from handle %ld\n",size,handle);
   size = getAlignedSize(size);
   if (neutron_size_[handle] < size) {
     throw std::bad_alloc();
   }
-  printf("[NeutronStackAllocator::Alloc] Allocated %ld reserved bytes from handle %ld\n",size,handle);
+  //  printf("[NeutronStackAllocator::Alloc] Allocated %ld reserved bytes from handle %ld\n",size,handle);
   void* tmp = neutron_ptr_[handle];
   neutron_ptr_[handle] += size;
   neutron_size_[handle] -= size;
