@@ -11,102 +11,72 @@
 
 namespace onnxruntime {
 
-
 inline size_t getAlignedSize(uint64_t size) {
   uint64_t mod = size % kDefaultTensorAlignment;
   return mod ? (size + kDefaultTensorAlignment - mod) : size;
 }
 
-
-void* NeutronAllocator::Alloc(size_t size) {
-#if NEUTRON_AARCH64
-  NeutronError ret;
-  auto aligned_size = getAlignedSize(size);
-  if (!neutron_buffer_size_) {
-    ret = allocateBuffer((uint32_t)kFullNeutronBufferSize, (void **)&neutron_ptr_);
-    if (ret != ENONE) {
-      ORT_THROW_EX(std::bad_alloc);
-    }
-    neutron_buffer_size_ = kFullNeutronBufferSize;
-    neutron_used_size_ = aligned_size;
-    neutron_last_chunk_ = aligned_size;
-    printf("[Neutron Allocator] Initial allocation of %zu bytes in: %p \n", aligned_size, neutron_ptr_);
-    return neutron_ptr_;
-
-  } else if (neutron_used_size_ + aligned_size < neutron_buffer_size_) {
-    auto ptr = neutron_ptr_ + neutron_used_size_;
-    neutron_used_size_ += aligned_size;
-    neutron_last_chunk_ = aligned_size;
-    printf("[Neutron Allocator] Allocated %zu bytes in: %p \n", aligned_size, ptr);
-    return ptr;
-
-  } else {
-    ORT_THROW_EX(std::bad_alloc);
+NeutronStackAllocator::NeutronStackAllocator() {
+  NeutronError ret = allocateBuffer((uint32_t)kFullNeutronBufferSize, (void **)&p_);
+  if (ret != ENONE) {
+    throw std::bad_alloc();
   }
-#else
-  (void)size;
-  return NULL;
-#endif
+  neutron_ptr_[0] = p_;
+  neutron_ptr_[1] = p_ + kBoundaryNeutronBufferSize;
+  neutron_size_[0] = kBoundaryNeutronBufferSize;
+  neutron_size_[1] = kFullNeutronBufferSize - kBoundaryNeutronBufferSize;
+  printf("[NeutronStackAllocator::NeutronStackAllocator] Allocating buffers from %p of %ld and %ld Bytes\n",p_,neutron_size_[0],neutron_size_[1]);
 }
 
-
-void NeutronAllocator::Free(void* p) {
-#if NEUTRON_AARCH64
-
-  if (neutron_buffer_size_ && neutron_last_chunk_ ) {
-    printf("[Neutron Allocator] Freeing last chunk of size %zu \n", neutron_used_size_);
-    neutron_used_size_ -= neutron_used_size_;
-  } else {
-    printf("[Neutron Allocator] Releasing buffer at: %p \n", p);
-    releaseBuffer(p);
-    neutron_buffer_size_ = 0;
-    neutron_used_size_ = 0;
-    neutron_ptr_ = 0;
-  }
-
-
-#else
-  (void)p;
-#endif
+size_t NeutronStackAllocator::getMemoryHandle() {
+  size_t largest_pos = 0;
+  for (size_t i = 1; i < kNeutronNumHandles; i++)
+    if (neutron_size_[i] > neutron_size_[largest_pos])
+      largest_pos = i;
+  return largest_pos;
 }
 
-/*
-  NeutronPinned:
-    Allocate locked memory. In case copies are required,
-    we might be able to implement faster transfers (DMA goes broom).
-    This approach is used by other EPs to manage memory transfers (CUDA).
-    Locking requires page size, not really optimal.
-
-    Note: proper pinned memory might be implemented in Neutron driver,
-    using MAP_FIXED and explicit addresses
-*/
-
-void* NeutronPinnedAllocator::Alloc(size_t size) {
-  void* p = nullptr;
-
-  if (allocated_) {
-    ORT_THROW_EX(std::bad_alloc);
+void* NeutronStackAllocator::Alloc(size_t size, size_t handle) {
+  printf("[NeutronStackAllocator::Alloc] Allocating %ld bytes from handle %ld\n",size,handle);
+  size = getAlignedSize(size);
+  if (neutron_size_[handle] < (kReservedNeutronBufferSize + size)) {
+    throw std::bad_alloc();
   }
-  p = mmap(NULL, size,
-      PROT_READ | PROT_WRITE,
-      MAP_SHARED | MAP_ANONYMOUS | MAP_LOCKED,
-      -1, 0);
+  printf("[NeutronStackAllocator::Alloc] Allocated %ld bytes from handle %ld\n",size,handle);
+  void* tmp = neutron_ptr_[handle];
+  neutron_ptr_[handle] += size;
+  neutron_size_[handle] -= size;
+  return tmp;
+}  
 
-  if (p == MAP_FAILED) {
-    ORT_THROW_EX(std::bad_alloc);
+void* NeutronStackAllocator::AllocReserved(size_t size, size_t handle) {
+  printf("[NeutronStackAllocator::Alloc] Allocating %ld reserved bytes from handle %ld\n",size,handle);
+  size = getAlignedSize(size);
+  if (neutron_size_[handle] < size) {
+    throw std::bad_alloc();
   }
-  allocated_ = size;
-  LOGS_DEFAULT(VERBOSE) <<
-      "[NeutronPinned] Mapping " << size << " bytes in " << p ;
-  return p;
+  printf("[NeutronStackAllocator::Alloc] Allocated %ld reserved bytes from handle %ld\n",size,handle);
+  void* tmp = neutron_ptr_[handle];
+  neutron_ptr_[handle] += size;
+  neutron_size_[handle] -= size;
+  return tmp;
+}  
+
+void NeutronStackAllocator::pushMemoryState(size_t handle) {
+  past_ptrs_.push_back(neutron_ptr_[handle]);
+  past_sizes_.push_back(neutron_size_[handle]);
 }
 
-void NeutronPinnedAllocator::Free(void* p) {
-    if(!allocated_) {
-      ORT_THROW_EX(std::bad_alloc);
-    }
-    LOGS_DEFAULT(VERBOSE) << "[NeutronPinned] Unmapping " << allocated_ << " bytes in " << p ;
-    munmap(p, allocated_);
+void NeutronStackAllocator::popMemoryState(size_t handle) {
+  neutron_ptr_[handle] = past_ptrs_.back();
+  past_ptrs_.pop_back();
+  neutron_size_[handle] = past_sizes_.back();
+  past_sizes_.pop_back();
 }
+
+NeutronStackAllocator::~NeutronStackAllocator() {
+  releaseBuffer(p_);
+}
+
 
 }  // namespace onnxruntime

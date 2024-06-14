@@ -2,50 +2,44 @@
 
 #pragma once
 
-#include "core/framework/allocator.h"
-
 #include <cstdlib>
-
-#define DEFAULT_NEUTRON_ALLOCATOR_DEVICE_ID 0
+#include <stdint.h>
+#include <vector>
 
 namespace onnxruntime {
 
-
 constexpr size_t kDefaultTensorAlignment = 64;
 constexpr size_t kFullNeutronBufferSize = 945 * 1024 * 1024 - 15;
+constexpr size_t kBoundaryNeutronBufferSize = 512 * 1024 * 1024;
+constexpr size_t kReservedNeutronBufferSize = 96 * 1024 * 1024;
+constexpr size_t kNeutronNumHandles = 2;
 
-class NeutronAllocator : public IAllocator {
- public:
-  NeutronAllocator(OrtDevice::DeviceId device_id, const char* name)
-      : IAllocator(
-            OrtMemoryInfo(name, OrtAllocatorType::OrtDeviceAllocator,
-                          OrtDevice(OrtDevice::NPU, OrtDevice::MemType::DEFAULT, device_id),
-                          device_id, OrtMemTypeDefault)) {}
-  void* Alloc(size_t size) override;
-  void Free(void* p) override;
+class NeutronStackAllocator {
+public:
+  // Constructor.
+  NeutronStackAllocator();
 
-  private:
-    size_t neutron_buffer_size_{0};
-    size_t neutron_used_size_{0};
-    size_t neutron_last_chunk_{0};
-    uint8_t* neutron_ptr_;
-};
+  // The first operation. Picks the memory slot with most free space.
+  size_t getMemoryHandle();
 
-/* Placeholder for page-locked allocation */
+  // Memory allocation within given
+  void* Alloc(size_t size, size_t handle);
+  void* AllocReserved(size_t size, size_t handle);
 
-class NeutronPinnedAllocator : public IAllocator {
- public:
-  NeutronPinnedAllocator(OrtDevice::DeviceId device_id, const char* name)
-      : IAllocator(
-            OrtMemoryInfo(name, OrtAllocatorType::OrtDeviceAllocator,
-                          OrtDevice(OrtDevice::CPU, OrtDevice::MemType::NEUTRON_PINNED, device_id),
-                          device_id, OrtMemTypeCPU)) {}
+  // Remember current allocations.
+  void pushMemoryState(size_t handle);
 
-  void* Alloc(size_t size) override;
-  void Free(void* p) override;
+  // Releases all allocations since the last push.
+  void popMemoryState(size_t handle);
 
- private:
-  size_t allocated_{0};
+  ~NeutronStackAllocator();
+
+private:
+  uint8_t* p_;
+  uint8_t* neutron_ptr_[kNeutronNumHandles];
+  size_t   neutron_size_[kNeutronNumHandles];
+  std::vector<uint8_t*> past_ptrs_;
+  std::vector<size_t> past_sizes_;
 };
 
 }  // namespace onnxruntime
