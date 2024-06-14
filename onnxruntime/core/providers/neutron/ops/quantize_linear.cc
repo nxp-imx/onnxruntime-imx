@@ -109,8 +109,8 @@ Status QuantizeLinear<T>::Compute(OpKernelContext* ctx) const {
   auto out_size = std::accumulate(vec_x_shape.begin(), vec_x_shape.end(), sizeof(T), std::multiplies<uint32_t>());
 
 #if NEUTRON_AARCH64
-  //auto allocator = Info().GetAllocator(OrtMemType::OrtMemTypeDefault);
-  auto allocator = ctx->GetAllocator({OrtDevice::NPU, OrtDevice::MemType::DEFAULT, DEFAULT_CPU_ALLOCATOR_DEVICE_ID});
+  auto allocator = Info().GetAllocator(OrtMemType::OrtMemTypeDefault);
+  //auto allocator = ctx->GetAllocator({OrtDevice::NPU, OrtDevice::MemType::DEFAULT, DEFAULT_CPU_ALLOCATOR_DEVICE_ID});
 #else
   auto allocator = Info().GetAllocator(OrtMemType::OrtMemTypeCPU);
 #endif

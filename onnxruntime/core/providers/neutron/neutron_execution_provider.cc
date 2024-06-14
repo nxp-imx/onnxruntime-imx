@@ -114,37 +114,4 @@ std::shared_ptr<KernelRegistry> NeutronExecutionProvider::GetKernelRegistry() co
   return k.kernel_registry;
 }
 
-AllocatorPtr NeutronExecutionProvider::CreateNeutronAllocator(OrtDevice::DeviceId device_id) {
-  AllocatorCreationInfo mem_info(
-      [](OrtDevice::DeviceId id) {
-        return std::make_unique<NeutronAllocator>(id, NEUTRON);
-      },
-      device_id,
-      neutron_flags_ & NEUTRON_FLAG_USE_ARENA
-  );
-  return CreateAllocator(mem_info);
-}
-
-std::vector<AllocatorPtr> NeutronExecutionProvider::CreatePreferredAllocators() {
-    AllocatorCreationInfo pinned_mem_info(
-      [](OrtDevice::DeviceId device_id) {
-        return std::make_unique<NeutronPinnedAllocator>(device_id, NEUTRON_PINNED);
-      },
-      DEFAULT_CPU_ALLOCATOR_DEVICE_ID);
-  return std::vector<AllocatorPtr>{
-      CreateNeutronAllocator(DEFAULT_NEUTRON_ALLOCATOR_DEVICE_ID),
-      CreateAllocator(pinned_mem_info),
-  };
-}
-
-OrtDevice NeutronExecutionProvider::GetOrtDeviceByMemType(OrtMemType mem_type) const {
-  if (mem_type == OrtMemTypeCPUInput) {
-    return {};
-  }
-  if (mem_type == OrtMemTypeCPUOutput) {
-    return {OrtDevice::CPU, OrtDevice::MemType::NEUTRON_PINNED, DEFAULT_CPU_ALLOCATOR_DEVICE_ID};
-  }
-  return default_device_;
-}
-
 }  // namespace onnxruntime
