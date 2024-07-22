@@ -122,8 +122,9 @@ Status QuantizeLinear<T>::Compute(OpKernelContext* ctx) const {
                     /* offset*/ 0);
 
   T* out_ptr = out_tensor.MutableData<T>();
+#ifndef NDEBUG
   printf("[QuantizeLinear] Output ptr: %p \n", out_ptr);
-
+#endif
   if (x.IsDataType<float>()) {
     ComputeLoop<T, float>(ctx, x.Data<float>(), y_scale.Data<float>(), zero_point,
                           out_ptr, N, broadcast_dim, block_size, saturate_);
