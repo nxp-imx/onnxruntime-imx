@@ -25,7 +25,9 @@ NeutronStackAllocator::NeutronStackAllocator() {
   neutron_ptr_[1] = p_ + kBoundaryNeutronBufferSize;
   neutron_size_[0] = kBoundaryNeutronBufferSize;
   neutron_size_[1] = kFullNeutronBufferSize - kBoundaryNeutronBufferSize;
+#ifndef NDEBUG
   printf("[NeutronStackAllocator::NeutronStackAllocator] Allocating buffers from %p of %ld and %ld Bytes\n",p_,neutron_size_[0],neutron_size_[1]);
+#endif
 }
 
 size_t NeutronStackAllocator::getMemoryHandle() {
