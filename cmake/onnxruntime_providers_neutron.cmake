@@ -14,7 +14,7 @@ onnxruntime_add_include_to_target(onnxruntime_providers_neutron
 
 set(NEUTRON_DRIVER_LIB "NeutronDriver")
 
-if("$ENV{OECORE_TARGET_ARCH}" MATCHES "aarch64")
+if(CMAKE_CROSSCOMPILING AND ("$ENV{OECORE_TARGET_ARCH}" MATCHES "aarch64" OR "${CMAKE_SYSTEM_PROCESSOR}" MATCHES "aarch64"))
   message(STATUS " Target arch: $ENV{OECORE_TARGET_ARCH}")
   add_definitions(-DNEUTRON_AARCH64=1)
   target_link_libraries(onnxruntime_providers_neutron PRIVATE ${NEUTRON_DRIVER_LIB})
