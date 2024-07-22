@@ -20,11 +20,13 @@
 namespace onnxruntime {
 namespace neutron {
 
+#ifndef NDEBUG
 static double time_diff(struct timespec start_time, struct timespec end_time)
 {
   double ns_diff = (double)(end_time.tv_sec - start_time.tv_sec) * 1e9 + (end_time.tv_nsec - start_time.tv_nsec);
   return ns_diff / 1e3;
 }
+#endif
  
 std::shared_ptr<NeutronStackAllocator> neutronAlloc(new NeutronStackAllocator());
   
@@ -143,10 +145,13 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
   }
   catch (const std::bad_alloc &e) {
     // Do not delegate this instance if out of memory
+#ifndef NDEBUG
     printf("[QLinearMatMul] Unable to alocate Neutron memory\n");
+#endif
     useCPU = true;
+    return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
   }
-  return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
+  return Status::OK();
   /*
   (void)tensor;
   (void)input_idx;
@@ -258,9 +263,9 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
 
     neutronAlloc->popMemoryState(m_handle);
     clock_gettime(CLOCK_REALTIME, &t5);
-    
+#ifndef NDEBUG
     printf("Neutron: Computed QLinearMatmul of size %ld * %ld * %ld in %f us\n", helper.M(),helper.N(),helper.K(),time_diff(t1,t5));
-    
+#endif    
   } else {
     const auto* b_scale_data = b_scale->Data<float>();
     auto a_scale_data = *(a_scale->Data<float>());
@@ -323,8 +328,9 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     clock_gettime(CLOCK_REALTIME, &t3);
     MlasGemmBatch(gemm_shape, gemm_params.data(), num_gemms, ctx->GetOperatorThreadPool());
     clock_gettime(CLOCK_REALTIME, &t4);
-    
+#ifndef NDEBUG
     printf("CPU: Computed QLinearMatmul of size %ld * %ld * %ld in %f us\n", helper.M(),helper.N(),helper.K(),time_diff(t3,t4));
+#endif
   }
   return Status::OK();
 }
