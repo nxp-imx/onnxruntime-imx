@@ -250,6 +250,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
     m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
     m_header[10] = m_y_zp;
+    m_header[11] = 1; // result num bytes
 
     NeutronError ret = ENONE;
     ret = matmul((const void *)m_header, 0, m_handle, 0, 0, 0, 0);
