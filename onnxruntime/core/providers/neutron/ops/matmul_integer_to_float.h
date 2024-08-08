@@ -34,6 +34,10 @@ class MatMulIntegerToFloat final : public MatMulIntegerToFloatBase {
  public:
   MatMulIntegerToFloat(const OpKernelInfo& info) : MatMulIntegerToFloatBase(info) {}
 
+  Status PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
+                 /*out*/ bool& is_packed,
+                 /*out*/ PrePackedWeights* prepacked_weights) override;
+
   Status Compute(OpKernelContext* context) const override;
 
   enum InputTensors : int {
@@ -49,6 +53,22 @@ class MatMulIntegerToFloat final : public MatMulIntegerToFloatBase {
  protected:
   int GetBIdx() const override { return IN_B; }
 
+  // neutron parameters
+  size_t    m_handle{0};
+  uint32_t* m_header{NULL};
+  int8_t   *m_b_neutron{NULL};
+  int32_t  *m_b_bias{NULL};
+  uint32_t *m_b_factors{NULL};
+
+  //pre-packing
+  float    m_a_scale_data;
+  uint8_t  m_a_zp;
+  uint32_t m_b_rows;
+  uint32_t m_b_cols;
+  const float  *m_output_bias{NULL};
+  const float  *m_b_scale_data{NULL};
+
+  bool useCPU{false};
  private:
   // a scale and b scale may be switched in fusion stage because of lack of shape information.
   // Fix them up before computation.
