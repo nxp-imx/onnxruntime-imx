@@ -66,7 +66,7 @@ class MatMulIntegerToFloat final : public MatMulIntegerToFloatBase {
   uint32_t m_b_rows;
   uint32_t m_b_cols;
   const float  *m_output_bias{NULL};
-  const float  *m_b_scale_data{NULL};
+  std::vector<float> out_scale;
 
   bool useCPU{false};
  private:
