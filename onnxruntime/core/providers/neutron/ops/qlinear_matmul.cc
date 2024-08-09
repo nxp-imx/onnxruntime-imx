@@ -21,7 +21,7 @@ namespace onnxruntime {
 namespace neutron {
 
 #ifndef NDEBUG
-static double time_diff(struct timespec start_time, struct timespec end_time)
+double time_diff(struct timespec start_time, struct timespec end_time)
 {
   double ns_diff = (double)(end_time.tv_sec - start_time.tv_sec) * 1e9 + (end_time.tv_nsec - start_time.tv_nsec);
   return ns_diff / 1e3;

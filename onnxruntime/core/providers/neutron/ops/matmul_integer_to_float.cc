@@ -22,8 +22,6 @@
 namespace onnxruntime {
 namespace neutron {
 
-#define CONST_BIAS (1 << 30)
-
 #ifndef NDEBUG
 extern double time_diff(struct timespec start_time, struct timespec end_time);
 #endif
@@ -221,7 +219,10 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
         break;
       case IN_B_SCALE:
         {
-          m_b_scale_data = tensor.Data<float>();
+          out_scale.resize(m_b_rows);
+          for (size_t i = 0; i < out_scale.size(); i++) {
+            out_scale[i] = tensor.Data<float>()[i] * m_a_scale_data;
+          }
         }
         break;
       case IN_A_ZERO_POINT:
@@ -235,7 +236,7 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
             for (uint32_t j=0; j< m_b_cols; j++) {
               row_sum += *(m_b_neutron + i * m_b_cols + j);
             }
-            m_b_bias[i] = (int32_t)( - row_sum * m_a_zp + CONST_BIAS);
+            m_b_bias[i] = (int32_t)( - row_sum * m_a_zp );
           }
 
           m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
@@ -281,17 +282,17 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
 }
 
 Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
-  struct timespec t1, t2, t3, t4, t5;
-  
+  struct timespec t1, t2, t3, t4, t5, t6;
+
 #ifndef NDEBUG
   printf("MatMulIntegerToFloat::Compute\n");
 #endif
-  
+
   const Tensor* a = ctx->Input<Tensor>(IN_A);
   const Tensor* b = packed_b_ ? nullptr : ctx->Input<Tensor>(IN_B);
 
-  if (!useCPU && m_header && m_b_neutron && m_b_bias && m_b_factors && m_b_scale_data) {
-    
+  if (!useCPU && m_header && m_b_neutron && m_b_bias && m_b_factors && !out_scale.empty()) {
+
     clock_gettime(CLOCK_REALTIME, &t1);
 
     neutronAlloc->pushMemoryState(m_handle);
@@ -304,7 +305,7 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     if (neutron_a_cols != neutron_b_cols) {
       printf("Neutron dimenssions do not match!\n");
     }
-    
+
     clock_gettime(CLOCK_REALTIME, &t2);
 
     uint32_t a_size = neutron_a_rows * neutron_a_cols;
@@ -312,10 +313,8 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     auto  a_data = static_cast<const uint8_t*>(a->DataRaw());
     memcpy(a_neutron, a_data, a_size);
 
-    clock_gettime(CLOCK_REALTIME, &t3);
+    int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(neutron_a_rows * neutron_b_rows * sizeof(int32_t), m_handle);
 
-    uint32_t *y_neutron = (uint32_t *) neutronAlloc->AllocReserved(neutron_a_rows * neutron_b_rows * sizeof(uint32_t), m_handle);
-    
     m_header[0] = 0;
     m_header[1] = 0;
     m_header[2] = neutron_a_rows;
@@ -329,6 +328,8 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     m_header[10] = 0; // m_y_zp;
     m_header[11] = 4; // result num bytes
 
+    clock_gettime(CLOCK_REALTIME, &t3);
+
     NeutronError ret = ENONE;
     ret = matmul((const void *)m_header, 0, m_handle, 0, 0, 0, 0);
     if (ret != ENONE){
@@ -336,31 +337,35 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
         return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
     }
 
-    Tensor* y = ctx->Output(OUT_Y, {1, neutron_a_rows, neutron_b_rows});
-    float* y_data = static_cast<float*>(y->MutableDataRaw());
-    
     clock_gettime(CLOCK_REALTIME, &t4);
 
-    uint32_t* y_new = (uint32_t*) malloc(neutron_a_rows * neutron_b_rows * sizeof(uint32_t));
-    memcpy(y_new, y_neutron, neutron_a_rows * neutron_b_rows * sizeof(uint32_t));
-    // The matmul result is internally unsigned but we assume only 31 bits are used.
-    int32_t* input = (int32_t*) y_new; // y_neutron;
+    Tensor* y = ctx->Output(OUT_Y, {1, neutron_a_rows, neutron_b_rows});
+    float* y_data = static_cast<float*>(y->MutableDataRaw());
+
+    int32_t* y_new = (int32_t*) malloc(neutron_a_rows * neutron_b_rows * sizeof(int32_t));
+    memcpy(y_new, y_neutron, neutron_a_rows * neutron_b_rows * sizeof(int32_t));
+
+    clock_gettime(CLOCK_REALTIME, &t5);
+
+    int32_t* input = y_new; // y_neutron;
     auto* output = y_data;
     for (uint32_t i=0; i<static_cast<uint32_t>(neutron_a_rows); i++) {
-      auto* b_scale = m_b_scale_data;
+      float* scale = (float*) out_scale.data();
       if (m_output_bias) {
         auto* bias = m_output_bias;
         for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
-          *output++ = static_cast<float>(*bias++) + static_cast<float>(static_cast<int32_t>(*input++) - static_cast<int32_t>(CONST_BIAS)) * static_cast<float>(*b_scale++) * m_a_scale_data;
+          *output++ = static_cast<float>(*bias++) + static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(*scale++);
         }
       } else {
         for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
-          *output++ = static_cast<float>(static_cast<int32_t>(*input++) - static_cast<int32_t>(CONST_BIAS)) * static_cast<float>(*b_scale++) * m_a_scale_data;
+          *output++ = static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(*scale++);
         }
       }
     }
     free(y_new);
-    
+
+    neutronAlloc->popMemoryState(m_handle);
+    clock_gettime(CLOCK_REALTIME, &t6);
 
 #ifndef NDEBUG
     printf("\nA shape=%ld %ld %ld\n\n",a->Shape()[0],a->Shape()[1],a->Shape()[2]);
@@ -371,14 +376,10 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
       }
       printf("\n");
     }
-#endif
-    
-    neutronAlloc->popMemoryState(m_handle);
-    clock_gettime(CLOCK_REALTIME, &t5);
-    
-#ifndef NDEBUG
-    printf("Neutron: Computed MatMulIntegerToFloat in %f us\n", time_diff(t1,t4));
-    printf("Neutron: Postprocessed MatMulIntegerToFloat in %f us\n", time_diff(t4,t5));
+    printf("Neutron: Prepared matmul in %f us\n", time_diff(t1,t3));
+    printf("Neutron: Computed matmul in %f us\n", time_diff(t3,t4));
+    printf("Neutron: Copying result in %f us\n", time_diff(t4,t5));
+    printf("Neutron: Dequant of MatMulIntegerToFloat in %f us\n", time_diff(t5,t6));
 #endif
   }
 #ifdef NDEBUG
@@ -421,6 +422,8 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
       ScaleOutput(*b_scale_tensor, *ctx->Output<Tensor>(0));
     }
 
+    clock_gettime(CLOCK_REALTIME, &t4);
+
 #ifndef NDEBUG
     // Dump the output
     const Tensor* y = ctx->Output<Tensor>(0);
@@ -433,9 +436,6 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
       }
       printf("\n");
     }
-#endif
-    clock_gettime(CLOCK_REALTIME, &t4);
-#ifndef NDEBUG
     printf("CPU: Computed MatMulIntegerToFloat in %f us\n", time_diff(t1,t4));
 #endif
   }
