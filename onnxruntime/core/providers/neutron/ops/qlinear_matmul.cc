@@ -27,9 +27,9 @@ double time_diff(struct timespec start_time, struct timespec end_time)
   return ns_diff / 1e3;
 }
 #endif
- 
+
 std::shared_ptr<NeutronStackAllocator> neutronAlloc(new NeutronStackAllocator());
-  
+
 ONNX_OPERATOR_TYPED_KERNEL_EX(                                        \
     QLinearMatMul,                                                    \
     kOnnxDomain,                                                      \
@@ -89,6 +89,7 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
             }
           }
         }
+        clean_cache(m_b_neutron, m_b_rows*m_b_cols);
         break;
       case IN_B_SCALE:
         m_b_scale_data = tensor.Data<float>();
@@ -123,7 +124,8 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
 
             m_b_factors[i] = scaler;
           }
-        }      
+          clean_cache(m_b_factors,m_b_rows*sizeof(uint32_t));
+        }
         break;
       case IN_Y_ZERO_POINT:
         {
@@ -139,6 +141,7 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
             m_b_bias[i] = (int32_t)(m_y_zp / m_output_scales[i] - row_sum * m_a_zp);
           }
         }
+        clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
         break;
       }
     }
@@ -237,7 +240,8 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     
     clock_gettime(CLOCK_REALTIME, &t3);
 
-    uint8_t *y_neutron = (uint8_t *) neutronAlloc->AllocReserved(neutron_a_rows * neutron_b_rows * sizeof(uint8_t), m_handle);
+    uint32_t y_size = neutron_a_rows * neutron_b_rows;
+    uint8_t *y_neutron = (uint8_t *) neutronAlloc->AllocReserved(y_size * sizeof(uint8_t), m_handle);
 
     m_header[0] = 0;
     m_header[1] = 0;
@@ -253,7 +257,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     m_header[11] = 1; // result num bytes
 
     NeutronError ret = ENONE;
-    ret = matmul((const void *)m_header, 0, m_handle, 0, 0, 0, 0);
+    ret = matmul((const void *)m_header, 16*sizeof(uint32_t), (const void*)a_neutron, a_size, (const void*)y_neutron, y_size, m_handle);
     if (ret != ENONE){
         printf("matmul() error %d\n", ret);
         return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");

@@ -211,6 +211,7 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
             }
           }
         }
+        clean_cache(m_b_neutron, m_b_rows*m_b_cols);
         break;
       case IN_A_SCALE:
         {
@@ -258,6 +259,8 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
             m_b_factors[i] = scaler;
           }
         }
+        clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
+        clean_cache(m_b_factors,m_b_rows*sizeof(uint32_t));
         break;
       case IN_B_ZERO_POINT:
         // we assume B has ZP equal to 0
@@ -266,7 +269,7 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
       case IN_BIAS:
         {
           m_output_bias = tensor.Data<float>();
-        }      
+        }
         break;
       }
     }
@@ -277,6 +280,8 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
     printf("[MatMulIntegerToFloat] Unable to alocate Neutron memory\n");
 #endif
     useCPU = true;
+
+    return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
   }
   return Status::OK();
 }
@@ -308,12 +313,13 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
 
     clock_gettime(CLOCK_REALTIME, &t2);
 
-    uint32_t a_size = neutron_a_rows * neutron_a_cols;
-    uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size*sizeof(uint8_t), m_handle);
+    uint32_t a_size = neutron_a_rows * neutron_a_cols * sizeof(uint8_t);
+    uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size, m_handle);
     auto  a_data = static_cast<const uint8_t*>(a->DataRaw());
     memcpy(a_neutron, a_data, a_size);
 
-    int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(neutron_a_rows * neutron_b_rows * sizeof(int32_t), m_handle);
+    uint32_t y_size = neutron_a_rows * neutron_b_rows * sizeof(int32_t);
+    int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(y_size, m_handle);
 
     m_header[0] = 0;
     m_header[1] = 0;
@@ -331,7 +337,7 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     clock_gettime(CLOCK_REALTIME, &t3);
 
     NeutronError ret = ENONE;
-    ret = matmul((const void *)m_header, 0, m_handle, 0, 0, 0, 0);
+    ret = matmul((const void *)m_header, 16*sizeof(uint32_t), (const void*)a_neutron, a_size, (const void*)y_neutron, y_size, m_handle);
     if (ret != ENONE){
         printf("matmul() error %d\n", ret);
         return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
@@ -366,6 +372,9 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
 
     neutronAlloc->popMemoryState(m_handle);
     clock_gettime(CLOCK_REALTIME, &t6);
+
+//    printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, out_copy %f, dequant %f\n",
+//            neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5), time_diff(t5,t6));
 
 #ifndef NDEBUG
     printf("\nA shape=%ld %ld %ld\n\n",a->Shape()[0],a->Shape()[1],a->Shape()[2]);
