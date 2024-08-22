@@ -17,7 +17,7 @@ inline size_t getAlignedSize(uint64_t size) {
 }
 
 NeutronStackAllocator::NeutronStackAllocator() {
-  NeutronError ret = allocateBuffer((uint32_t)kFullNeutronBufferSize, (void **)&p_);
+  NeutronError ret = allocateBuffer((uint32_t)kFullNeutronBufferSize, (void **)&p_, true);
   if (ret != ENONE) {
     throw std::bad_alloc();
   }
