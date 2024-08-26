@@ -348,12 +348,9 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     Tensor* y = ctx->Output(OUT_Y, {1, neutron_a_rows, neutron_b_rows});
     float* y_data = static_cast<float*>(y->MutableDataRaw());
 
-    int32_t* y_new = (int32_t*) malloc(neutron_a_rows * neutron_b_rows * sizeof(int32_t));
-    memcpy(y_new, y_neutron, neutron_a_rows * neutron_b_rows * sizeof(int32_t));
-
     clock_gettime(CLOCK_REALTIME, &t5);
 
-    int32_t* input = y_new; // y_neutron;
+    int32_t* input = y_neutron;
     auto* output = y_data;
     for (uint32_t i=0; i<static_cast<uint32_t>(neutron_a_rows); i++) {
       float* scale = (float*) out_scale.data();
@@ -368,7 +365,6 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
         }
       }
     }
-    free(y_new);
 
     neutronAlloc->popMemoryState(m_handle);
     clock_gettime(CLOCK_REALTIME, &t6);
