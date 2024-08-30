@@ -39,7 +39,7 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(                                              \
         .TypeConstraint("T2", { DataTypeImpl::GetTensorType<uint8_t>(),     \
                                 DataTypeImpl::GetTensorType<int8_t>() })    \
         .TypeConstraint("T3", DataTypeImpl::GetTensorType<float>()),        \
-    MatMulIntegerToFloat);  
+    MatMulIntegerToFloat);
 
 ONNX_OPERATOR_TYPED_KERNEL_EX(                                              \
     MatMulIntegerToFloat,                                                   \
@@ -242,18 +242,18 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
 
           m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
           float scale = 1;
-          for (uint32_t i=0; i< m_b_rows; i++){                                                                                  
-            float *pfloat = &scale;                                                                               
-            uint32_t u32 = *(uint32_t*) pfloat;                                                                                
+          for (uint32_t i=0; i< m_b_rows; i++){
+            float *pfloat = &scale;
+            uint32_t u32 = *(uint32_t*) pfloat;
 
-            uint32_t scaler = (u32 >>8) & 0x7fff ; // extract mantissa (15bits)                                                
-            int8_t exp_tmp = (u32 >> 23) & 0xff; // extract exponent                                                           
+            uint32_t scaler = (u32 >>8) & 0x7fff ; // extract mantissa (15bits)
+            int8_t exp_tmp = (u32 >> 23) & 0xff; // extract exponent
 
-            scaler = (exp_tmp==0) ? 0 :  scaler | 0x8000; // add hidden bit or zero out (if zero or subnormal                  
+            scaler = (exp_tmp==0) ? 0 :  scaler | 0x8000; // add hidden bit or zero out (if zero or subnormal
             exp_tmp = -(exp_tmp -142); // we subtract FP32 offset as well as 16bit growth of our scaler (126 is power of -1 so mantissa is in range 0.5 to 1, 126 + 16=142, where 16 is the factor we multiply by in scaler)
-            int8_t exp = (exp_tmp>63) ? 63 : exp_tmp; // ensure that we don't exceed available shift bits (note that this step could, in theory be skipped if this never happens. Not sure if we can take the chance) 
-            //if (exp == 63)                                                                                                   
-            //      printf("scalar %0d, exp %0d", (uint32_t)scaler, (uint32_t)exp);                                            
+            int8_t exp = (exp_tmp>63) ? 63 : exp_tmp; // ensure that we don't exceed available shift bits (note that this step could, in theory be skipped if this never happens. Not sure if we can take the chance)
+            //if (exp == 63)
+            //      printf("scalar %0d, exp %0d", (uint32_t)scaler, (uint32_t)exp);
             scaler = (exp<<16) | scaler; // merge scaler and downshift factor into the Neutron 32bit scaler format (16bit scaler in LSB and then 6bits of downshift)
 
             m_b_factors[i] = scaler;
@@ -287,7 +287,7 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
 }
 
 Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
-  struct timespec t1, t2, t3, t4, t5, t6;
+  struct timespec t1, t2, t3, t4, t5;
 
 #ifndef NDEBUG
   printf("MatMulIntegerToFloat::Compute\n");
@@ -348,8 +348,6 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     Tensor* y = ctx->Output(OUT_Y, {1, neutron_a_rows, neutron_b_rows});
     float* y_data = static_cast<float*>(y->MutableDataRaw());
 
-    clock_gettime(CLOCK_REALTIME, &t5);
-
     int32_t* input = y_neutron;
     auto* output = y_data;
     for (uint32_t i=0; i<static_cast<uint32_t>(neutron_a_rows); i++) {
@@ -367,10 +365,10 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     }
 
     neutronAlloc->popMemoryState(m_handle);
-    clock_gettime(CLOCK_REALTIME, &t6);
+    clock_gettime(CLOCK_REALTIME, &t5);
 
-//    printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, out_copy %f, dequant %f\n",
-//            neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5), time_diff(t5,t6));
+//    printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, dequant %f\n",
+//            neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
 
 #ifndef NDEBUG
     printf("\nA shape=%ld %ld %ld\n\n",a->Shape()[0],a->Shape()[1],a->Shape()[2]);
