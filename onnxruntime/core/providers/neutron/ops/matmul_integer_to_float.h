@@ -61,14 +61,15 @@ class MatMulIntegerToFloat final : public MatMulIntegerToFloatBase {
   uint32_t *m_b_factors{NULL};
 
   //pre-packing
-  float    m_a_scale_data;
+  float m_a_scale_data;
+  bool m_dynamic_bias{true};
   uint8_t  m_a_zp;
   uint32_t m_b_rows;
   uint32_t m_b_cols;
   const float  *m_output_bias{NULL};
-  std::vector<float> out_scale;
-
+  std::vector<float> m_out_scale;
   bool useCPU{false};
+
  private:
   // a scale and b scale may be switched in fusion stage because of lack of shape information.
   // Fix them up before computation.

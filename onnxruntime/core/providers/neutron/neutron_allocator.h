@@ -6,13 +6,15 @@
 #include <stdint.h>
 #include <vector>
 
+#define NEUTRON_DDR_GB 1.5
+
 namespace onnxruntime {
 
 constexpr size_t kDefaultTensorAlignment = 64;
-constexpr size_t kFullNeutronBufferSize = 945 * 1024 * 1024 - 15;
+constexpr size_t kFullNeutronBufferSize =  NEUTRON_DDR_GB * 1024 * 1024 * 1024LL;
 constexpr size_t kBoundaryNeutronBufferSize = 512 * 1024 * 1024;
-constexpr size_t kReservedNeutronBufferSize = 96 * 1024 * 1024;
-constexpr size_t kNeutronNumHandles = 2;
+constexpr size_t kReservedNeutronBufferSize = 128 * 1024 * 1024;
+constexpr size_t kNeutronNumHandles = NEUTRON_DDR_GB * 2;
 
 class NeutronStackAllocator {
 public:
@@ -35,7 +37,7 @@ public:
   ~NeutronStackAllocator();
 
 private:
-  uint8_t* p_;
+  uint8_t* p_{NULL};
   uint8_t* neutron_ptr_[kNeutronNumHandles];
   size_t   neutron_size_[kNeutronNumHandles];
   std::vector<uint8_t*> past_ptrs_;
