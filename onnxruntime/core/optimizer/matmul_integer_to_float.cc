@@ -214,8 +214,11 @@ Status MatMulIntegerToFloatFusion::ApplyImpl(Graph& graph, bool& modified, int g
                                      p_add_node != nullptr ? p_add_node->MutableOutputDefs() : mul_node.MutableOutputDefs(),
                                      nullptr,
                                      kMSDomain);
+
+    //printf("%s\n", matmulinteger_node.GetExecutionProviderType().c_str());
+
     // Assign provider to this new node. Provider should be same as the provider for old node.
-    fused_node.SetExecutionProviderType(mul_node.GetExecutionProviderType());
+    fused_node.SetExecutionProviderType(matmulinteger_node.GetExecutionProviderType());
 
     nodes_to_remove.push_back(matmulinteger_node);
     nodes_to_remove.push_back(cast_node);

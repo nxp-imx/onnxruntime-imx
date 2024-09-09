@@ -16,6 +16,15 @@
 #include "core/framework/session_state.h"
 #include "core/framework/op_kernel_context_internal.h"
 #include "core/framework/utils.h"
+#include <time.h>
+
+#ifndef NDEBUG
+static double time_diff2(struct timespec start_time, struct timespec end_time)
+{
+    double ns_diff = (double)(end_time.tv_sec - start_time.tv_sec) * 1e9 + (end_time.tv_nsec - start_time.tv_nsec);
+    return ns_diff / 1e3;
+}
+#endif
 
 #if defined DEBUG_NODE_INPUTS_OUTPUTS
 #include "core/framework/debug_node_inputs_outputs_utils.h"

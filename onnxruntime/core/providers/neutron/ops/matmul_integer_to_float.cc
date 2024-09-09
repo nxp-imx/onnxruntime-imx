@@ -22,9 +22,9 @@
 namespace onnxruntime {
 namespace neutron {
 
-#ifndef NDEBUG
+//#ifndef NDEBUG
 extern double time_diff(struct timespec start_time, struct timespec end_time);
-#endif
+//#endif
 
 extern std::shared_ptr<NeutronStackAllocator> neutronAlloc;
 
@@ -210,57 +210,63 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
               m_b_neutron[m_b_cols*j+i] = b_data[m_b_rows*i+j];
             }
           }
-        }
-        clean_cache(m_b_neutron, m_b_rows*m_b_cols);
-        break;
-      case IN_A_SCALE:
-        {
-          m_a_scale_data = *(tensor.Data<float>());
-        }
-        break;
-      case IN_B_SCALE:
-        {
-          out_scale.resize(m_b_rows);
-          for (size_t i = 0; i < out_scale.size(); i++) {
-            out_scale[i] = tensor.Data<float>()[i] * m_a_scale_data;
-          }
-        }
-        break;
-      case IN_A_ZERO_POINT:
-        {
-          m_a_zp = *(static_cast<const uint8_t*>(tensor.DataRaw()));
+          clean_cache(m_b_neutron, m_b_rows*m_b_cols);
+
           // Neutron expects the bias as a parameter anyway.
           m_b_bias = (int32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(int32_t), m_handle);
-
           for (uint32_t i=0; i< m_b_rows; i++){
             int32_t row_sum = 0;
             for (uint32_t j=0; j< m_b_cols; j++) {
               row_sum += *(m_b_neutron + i * m_b_cols + j);
             }
-            m_b_bias[i] = (int32_t)( - row_sum * m_a_zp );
+            m_b_bias[i] = row_sum;
           }
 
           m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
           float scale = 1;
+          float *pfloat = &scale;
+          uint32_t u32 = *(uint32_t*) pfloat;
+
+          uint32_t scaler = (u32 >>8) & 0x7fff ; // extract mantissa (15bits)
+          int8_t exp_tmp = (u32 >> 23) & 0xff; // extract exponent
+
+          scaler = (exp_tmp==0) ? 0 :  scaler | 0x8000; // add hidden bit or zero out (if zero or subnormal
+          exp_tmp = -(exp_tmp -142); // we subtract FP32 offset as well as 16bit growth of our scaler (126 is power of -1 so mantissa is in range 0.5 to 1, 126 + 16=142, where 16 is the factor we multiply by in scaler)
+          int8_t exp = (exp_tmp>63) ? 63 : exp_tmp; // ensure that we don't exceed available shift bits (note that this step could, in theory be skipped if this never happens. Not sure if we can take the chance)
+          //if (exp == 63)
+          //      printf("scalar %0d, exp %0d", (uint32_t)scaler, (uint32_t)exp);
+          scaler = (exp<<16) | scaler; // merge scaler and downshift factor into the Neutron 32bit scaler format (16bit scaler in LSB and then 6bits of downshift)
+
+          //TODO: optimize space too
           for (uint32_t i=0; i< m_b_rows; i++){
-            float *pfloat = &scale;
-            uint32_t u32 = *(uint32_t*) pfloat;
-
-            uint32_t scaler = (u32 >>8) & 0x7fff ; // extract mantissa (15bits)
-            int8_t exp_tmp = (u32 >> 23) & 0xff; // extract exponent
-
-            scaler = (exp_tmp==0) ? 0 :  scaler | 0x8000; // add hidden bit or zero out (if zero or subnormal
-            exp_tmp = -(exp_tmp -142); // we subtract FP32 offset as well as 16bit growth of our scaler (126 is power of -1 so mantissa is in range 0.5 to 1, 126 + 16=142, where 16 is the factor we multiply by in scaler)
-            int8_t exp = (exp_tmp>63) ? 63 : exp_tmp; // ensure that we don't exceed available shift bits (note that this step could, in theory be skipped if this never happens. Not sure if we can take the chance)
-            //if (exp == 63)
-            //      printf("scalar %0d, exp %0d", (uint32_t)scaler, (uint32_t)exp);
-            scaler = (exp<<16) | scaler; // merge scaler and downshift factor into the Neutron 32bit scaler format (16bit scaler in LSB and then 6bits of downshift)
-
             m_b_factors[i] = scaler;
           }
+          clean_cache(m_b_factors,m_b_rows*sizeof(uint32_t));
         }
-        clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
-        clean_cache(m_b_factors,m_b_rows*sizeof(uint32_t));
+        break;
+      case IN_A_SCALE:
+        {
+          // we don't cache it, to support dynamic simpler
+        }
+        break;
+      case IN_B_SCALE:
+        {
+            // multiply with a_scale latter
+            m_out_scale.resize(m_b_rows);
+            for (size_t i = 0; i < m_out_scale.size(); i++) {
+                m_out_scale[i] = tensor.Data<float>()[i];
+            }
+        }
+        break;
+      case IN_A_ZERO_POINT:
+        {
+          m_dynamic_bias = false;
+          m_a_zp = *(static_cast<const uint8_t*>(tensor.DataRaw()));
+          for (uint32_t i=0; i< m_b_rows; i++){
+            m_b_bias[i] = (int32_t)( - m_b_bias[i] * m_a_zp );
+          }
+          clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
+        }
         break;
       case IN_B_ZERO_POINT:
         // we assume B has ZP equal to 0
@@ -276,12 +282,13 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
   }
   catch (const std::bad_alloc &e) {
     // Do not delegate this instance if out of memory
-#ifndef NDEBUG
+//#ifndef NDEBUG
     printf("[MatMulIntegerToFloat] Unable to alocate Neutron memory\n");
-#endif
+//#endif
     useCPU = true;
 
-    return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
+    //Fast Neutron prepaking
+    //return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
   }
   return Status::OK();
 }
@@ -296,7 +303,7 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
   const Tensor* a = ctx->Input<Tensor>(IN_A);
   const Tensor* b = packed_b_ ? nullptr : ctx->Input<Tensor>(IN_B);
 
-  if (!useCPU && m_header && m_b_neutron && m_b_bias && m_b_factors && !out_scale.empty()) {
+  if (!useCPU && m_header && m_b_neutron && m_b_factors && !m_out_scale.empty()) {
 
     clock_gettime(CLOCK_REALTIME, &t1);
 
@@ -309,6 +316,16 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     uint32_t neutron_b_cols = b ? b->Shape()[0] : m_b_cols;
     if (neutron_a_cols != neutron_b_cols) {
       printf("Neutron dimenssions do not match!\n");
+    }
+
+    float a_scale_data = *(static_cast<const float *>(ctx->Input<Tensor>(IN_A_SCALE)->DataRaw()));
+
+    if (m_dynamic_bias) {
+        uint8_t a_zp = *(static_cast<const uint8_t*>(ctx->Input<Tensor>(IN_A_ZERO_POINT)->DataRaw()));
+        for (uint32_t i=0; i< m_b_rows; i++) {
+            m_b_bias[i] = (int32_t)( - m_b_bias[i] * a_zp);
+        }
+        clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
     }
 
     clock_gettime(CLOCK_REALTIME, &t2);
@@ -351,15 +368,15 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     int32_t* input = y_neutron;
     auto* output = y_data;
     for (uint32_t i=0; i<static_cast<uint32_t>(neutron_a_rows); i++) {
-      float* scale = (float*) out_scale.data();
+      float* scale = (float*) m_out_scale.data();
       if (m_output_bias) {
         auto* bias = m_output_bias;
         for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
-          *output++ = static_cast<float>(*bias++) + static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(*scale++);
+          *output++ = static_cast<float>(*bias++) + static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(*scale++) * a_scale_data;
         }
       } else {
         for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
-          *output++ = static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(*scale++);
+          *output++ = static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(*scale++) * a_scale_data;
         }
       }
     }
@@ -367,8 +384,8 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     neutronAlloc->popMemoryState(m_handle);
     clock_gettime(CLOCK_REALTIME, &t5);
 
-//    printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, dequant %f\n",
-//            neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
+    //printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, dequant %f\n",
+    //        neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
 
 #ifndef NDEBUG
     printf("\nA shape=%ld %ld %ld\n\n",a->Shape()[0],a->Shape()[1],a->Shape()[2]);

@@ -56,6 +56,9 @@ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDoma
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kMSDomain, 1, uint8_t, MatMulIntegerToFloat);
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kMSDomain, 1, int8_t, MatMulIntegerToFloat);
 
+class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 10, uint8_t, MatMulInteger);
+class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 10, int8_t, MatMulInteger);
+
 static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
   static const BuildKernelCreateInfoFn function_table[] = {
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(
@@ -86,6 +89,10 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
                           kNeutronExecutionProvider, kMSDomain, 1, uint8_t, MatMulIntegerToFloat)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kMSDomain, 1, int8_t, MatMulIntegerToFloat)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kOnnxDomain, 10, uint8_t, MatMulInteger)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kOnnxDomain, 10, int8_t, MatMulInteger)>,
   };
 
   for (auto& function_table_entry : function_table) {
