@@ -22,9 +22,9 @@
 namespace onnxruntime {
 namespace neutron {
 
-//#ifndef NDEBUG
+#ifndef NDEBUG
 extern double time_diff(struct timespec start_time, struct timespec end_time);
-//#endif
+#endif
 
 extern std::shared_ptr<NeutronStackAllocator> neutronAlloc;
 
@@ -384,8 +384,10 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     neutronAlloc->popMemoryState(m_handle);
     clock_gettime(CLOCK_REALTIME, &t5);
 
-    //printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, dequant %f\n",
-    //        neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
+#ifndef NDEBUG
+    printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, dequant %f\n",
+           neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
+#endif
 
 #ifndef NDEBUG
     printf("\nA shape=%ld %ld %ld\n\n",a->Shape()[0],a->Shape()[1],a->Shape()[2]);
@@ -443,6 +445,17 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     }
 
     clock_gettime(CLOCK_REALTIME, &t4);
+
+#ifndef NDEBUG
+    // non-transposed b
+    uint32_t neutron_a_rows = a->Shape()[1];
+    uint32_t neutron_a_cols = a->Shape()[2];
+    uint32_t neutron_b_rows = b ? b->Shape()[1] : m_b_rows;
+    uint32_t neutron_b_cols = b ? b->Shape()[0] : m_b_cols;
+
+    printf("CPU MatMulIntegerToFloat [%d,%d]*[%d,%d]: matmul %f us\n",
+           neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t4));
+#endif
 
 #ifndef NDEBUG
     // Dump the output
