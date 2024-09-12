@@ -20,13 +20,13 @@
 namespace onnxruntime {
 namespace neutron {
 
-//#ifndef NDEBUG
+#ifndef NDEBUG
 double time_diff(struct timespec start_time, struct timespec end_time)
 {
   double ns_diff = (double)(end_time.tv_sec - start_time.tv_sec) * 1e9 + (end_time.tv_nsec - start_time.tv_nsec);
   return ns_diff / 1e3;
 }
-//#endif
+#endif
 
 std::shared_ptr<NeutronStackAllocator> neutronAlloc(new NeutronStackAllocator());
 
@@ -278,8 +278,10 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     neutronAlloc->popMemoryState(m_handle);
     clock_gettime(CLOCK_REALTIME, &t5);
 
-//    printf("NeutronEP: QlinearMatmul [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, dequant %f\n",
-//            neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
+#ifndef NDEBUG
+    printf("NeutronEP: QlinearMatmul [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, dequant %f\n",
+            neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
+#endif
 
 #ifndef NDEBUG
     printf("Neutron: Computed QLinearMatmul of size %ld * %ld * %ld in %f us\n", helper.M(),helper.N(),helper.K(),time_diff(t1,t5));
