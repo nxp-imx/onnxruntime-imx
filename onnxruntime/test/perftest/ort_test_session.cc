@@ -32,6 +32,10 @@
 #include "core/providers/dml/dml_session_options_config_keys.h"
 #endif
 
+#ifdef USE_VSINPU
+#include "core/providers/vsinpu/vsinpu_provider_factory_creator.h"
+#endif
+
 #ifdef USE_NEUTRON
 #include "core/providers/neutron/neutron_provider_factory.h"
 #endif
