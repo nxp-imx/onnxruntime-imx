@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #include "core/optimizer/selectors_actions/selector_action_transformer.h"
+#pragma GCC diagnostic pop
 
 #include <algorithm>
 #include <cassert>
