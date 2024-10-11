@@ -14,3 +14,23 @@ function(get_parent_directory target_path num_levels out_var)
     endforeach()
     set(${out_var} ${current_path} PARENT_SCOPE)
 endfunction()
+
+
+# Utility to filter out paths from a given flag string
+#   E.g.: "-a -b -c=/path/to/c" -> "-a -b"
+function(filter_paths_from_flags in_var out_var)
+    set(flags_str "${${in_var}}")
+    # Split each flag
+    string(REGEX MATCHALL "[^ ]+" flags_list "${flags_str}")
+    # Find '/', asume path, skip when merging into list.
+    set(filtered_flags)
+    foreach(flag IN LISTS flags_list)
+        if ("${flag}" MATCHES "/")
+            continue()
+        endif()
+        list(APPEND filtered_flags "${flag}")
+    endforeach()
+    # Stringify the list
+    string(REPLACE ";" " " filtered_flags_str "${filtered_flags}")
+    set(${out_var} "${filtered_flags_str}" PARENT_SCOPE)
+endfunction()
