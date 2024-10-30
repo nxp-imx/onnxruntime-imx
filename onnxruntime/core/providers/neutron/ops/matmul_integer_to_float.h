@@ -62,6 +62,7 @@ class MatMulIntegerToFloat final : public MatMulIntegerToFloatBase {
 
   //pre-packing
   float m_a_scale_data;
+  bool m_dynamic_scale{true};
   bool m_dynamic_bias{true};
   uint8_t  m_a_zp;
   uint32_t m_b_rows;
