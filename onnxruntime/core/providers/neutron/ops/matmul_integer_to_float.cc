@@ -246,16 +246,21 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
         break;
       case IN_A_SCALE:
         {
-          // we don't cache it, to support dynamic simpler
+          m_dynamic_scale = false;
+          m_a_scale_data = *tensor.Data<float>();
         }
         break;
       case IN_B_SCALE:
         {
-            // multiply with a_scale latter
-            m_out_scale.resize(m_b_rows);
-            for (size_t i = 0; i < m_out_scale.size(); i++) {
-                m_out_scale[i] = tensor.Data<float>()[i];
+          // support scale per tensor and per channel
+          if (!m_dynamic_scale) {
+            uint32_t scale_size = tensor.Shape().NumDimensions() ?
+                                  tensor.Shape()[0] : 1;
+            m_out_scale.resize(scale_size);
+            for (size_t i = 0; i < m_out_scale.size(); i++){
+              m_out_scale[i] = tensor.Data<float>()[i] * m_a_scale_data;
             }
+          }
         }
         break;
       case IN_A_ZERO_POINT:
@@ -301,7 +306,7 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
   const Tensor* a = ctx->Input<Tensor>(IN_A);
   const Tensor* b = packed_b_ ? nullptr : ctx->Input<Tensor>(IN_B);
 
-  if (!useCPU && m_header && m_b_neutron && m_b_factors && !m_out_scale.empty()) {
+  if (!useCPU && m_header && m_b_neutron && m_b_factors) {
 
     clock_gettime(CLOCK_REALTIME, &t1);
 
@@ -316,7 +321,26 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
       printf("Neutron dimenssions do not match!\n");
     }
 
-    float a_scale_data = *(static_cast<const float *>(ctx->Input<Tensor>(IN_A_SCALE)->DataRaw()));
+    const float *out_scale_data = NULL;
+    bool scale_per_tensor = false;
+    std::vector<float> dyn_out_scale;
+
+    if (!m_dynamic_scale) {
+        out_scale_data = m_out_scale.data();
+        scale_per_tensor = (m_out_scale.size() == 1);
+    } else {
+        float a_scale_data = *(static_cast<const float *>(ctx->Input<Tensor>(IN_A_SCALE)->DataRaw()));
+
+        const Tensor* b_scale = ctx->Input<Tensor>(IN_B_SCALE);
+        uint32_t scale_size = b_scale->Shape().NumDimensions() ? b_scale->Shape()[0] : 1;
+
+        dyn_out_scale.resize(scale_size);
+        for (size_t i = 0; i < dyn_out_scale.size(); i++) {
+            dyn_out_scale[i] = a_scale_data * (static_cast<const float*>(b_scale->DataRaw()))[i];
+        }
+        out_scale_data = dyn_out_scale.data();
+        scale_per_tensor = (dyn_out_scale.size() == 1);
+    }
 
     if (m_dynamic_bias) {
         uint8_t a_zp = *(static_cast<const uint8_t*>(ctx->Input<Tensor>(IN_A_ZERO_POINT)->DataRaw()));
@@ -366,15 +390,12 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     int32_t* input = y_neutron;
     auto* output = y_data;
     for (uint32_t i=0; i<static_cast<uint32_t>(neutron_a_rows); i++) {
-      float* scale = (float*) m_out_scale.data();
-      if (m_output_bias) {
-        auto* bias = m_output_bias;
-        for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
-          *output++ = static_cast<float>(*bias++) + static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(*scale++) * a_scale_data;
-        }
-      } else {
-        for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
-          *output++ = static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(*scale++) * a_scale_data;
+      for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
+        uint32_t scale_idx = scale_per_tensor ? 0 : j;
+        if (m_output_bias) {
+          *output++ = static_cast<float>(m_output_bias[j]) + static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(out_scale_data[scale_idx]);
+        } else {
+          *output++ = static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(out_scale_data[scale_idx]);
         }
       }
     }
