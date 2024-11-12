@@ -80,8 +80,7 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
           m_b_rows = tensor.Shape()[1];
           m_b_cols = tensor.Shape()[0];
 
-          //skip logit
-          if (m_b_rows == 10000)
+          if ((m_b_rows % 16) || (m_b_rows * 16 >= 1024*1024))
             throw std::bad_alloc();
 
           m_handle = neutronAlloc->getMemoryHandle();
