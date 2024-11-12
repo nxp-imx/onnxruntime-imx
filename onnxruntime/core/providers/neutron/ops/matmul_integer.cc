@@ -61,6 +61,10 @@ Status MatMulInteger::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
         {
           m_b_rows = tensor.Shape()[1];
           m_b_cols = tensor.Shape()[0];
+
+          if (m_b_rows % 16 || (m_b_rows * 16 >= 1024*1024))
+              throw std::bad_alloc();
+
           m_handle = neutronAlloc->getMemoryHandle();
           m_header = (uint32_t*) neutronAlloc->Alloc(16*sizeof(uint32_t), m_handle);
           m_b_neutron = (int8_t*) neutronAlloc->Alloc(m_b_rows * m_b_cols, m_handle);
