@@ -109,7 +109,7 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
 } // namespace neutron
 
 NeutronExecutionProvider::NeutronExecutionProvider(uint32_t neutron_flags)
-    : IExecutionProvider{onnxruntime::kNeutronExecutionProvider, true},
+    : IExecutionProvider(onnxruntime::kNeutronExecutionProvider),
       neutron_flags_(neutron_flags) {
    onnxruntime::neutron::neutronAlloc->Init();
 }
