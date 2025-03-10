@@ -119,13 +119,24 @@ if(onnxruntime_USE_MIMALLOC)
 endif()
 
 #Protobuf depends on utf8_range
-FetchContent_Declare(
+# Note: Skip find stage if build uses SDK. `OVERRIDE_FIND_PACKAGE` will ensure that
+# `FetchContent_MakeAvailable` overrides `find_package`, using the declared source
+#  rather than finding the package inside the SDK, which might deviate from required version.
+if(CMAKE_CROSSCOMPILING AND DEFINED ENV{OECORE_NATIVE_SYSROOT} AND DEFINED ENV{OECORE_TARGET_SYSROOT})
+  FetchContent_Declare(
     utf8_range
     URL ${DEP_URL_utf8_range}
     URL_HASH SHA1=${DEP_SHA1_utf8_range}
-    FIND_PACKAGE_ARGS NAMES utf8_range
-)
-
+    OVERRIDE_FIND_PACKAGE
+  )
+else()
+  FetchContent_Declare(
+      utf8_range
+      URL ${DEP_URL_utf8_range}
+      URL_HASH SHA1=${DEP_SHA1_utf8_range}
+      FIND_PACKAGE_ARGS NAMES utf8_range
+  )
+endif()
 set(utf8_range_ENABLE_TESTS OFF CACHE BOOL "Build test suite" FORCE)
 set(utf8_range_ENABLE_INSTALL OFF CACHE BOOL "Configure installation" FORCE)
 
@@ -473,13 +484,26 @@ else()
 endif()
 
 #flatbuffers 1.11.0 does not have flatbuffers::IsOutRange, therefore we require 1.12.0+
-FetchContent_Declare(
+# Note: Skip find stage if build uses SDK. `OVERRIDE_FIND_PACKAGE` will ensure that
+# `FetchContent_MakeAvailable` overrides `find_package`, using the declared source
+#  rather than finding the package inside the SDK, which might deviate from required version.
+if(CMAKE_CROSSCOMPILING AND DEFINED ENV{OECORE_NATIVE_SYSROOT} AND DEFINED ENV{OECORE_TARGET_SYSROOT})
+  FetchContent_Declare(
+    flatbuffers
+    URL ${DEP_URL_flatbuffers}
+    URL_HASH SHA1=${DEP_SHA1_flatbuffers}
+    PATCH_COMMAND ${ONNXRUNTIME_FLATBUFFERS_PATCH_COMMAND}
+    OVERRIDE_FIND_PACKAGE
+  )
+else()
+  FetchContent_Declare(
     flatbuffers
     URL ${DEP_URL_flatbuffers}
     URL_HASH SHA1=${DEP_SHA1_flatbuffers}
     PATCH_COMMAND ${ONNXRUNTIME_FLATBUFFERS_PATCH_COMMAND}
     FIND_PACKAGE_ARGS 23.5.9 NAMES Flatbuffers flatbuffers
-)
+  )
+endif()
 
 onnxruntime_fetchcontent_makeavailable(flatbuffers)
 if(NOT flatbuffers_FOUND)
