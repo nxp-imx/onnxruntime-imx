@@ -1,21 +1,21 @@
 NXP Software Content Register
 
-Release - ONNX Runtime 1.17.1
+Release - ONNX Runtime 1.20.1
 June 2024
 
 Outgoing License: MIT
 License File:     LICENSE
 
-Release branch: lf-6.6.23-2.0.0
+Release branch: imx_1.20.1
 
 --------------------------------------------
 
 Package:                   onnxruntime-imx.git
-Version:                   1.17.1
+Version:                   1.20.1
 Outgoing License:          MIT
 License File:              LICENSE
 Description and comments:  ONNX Runtime inference engine
-Release Location:          https://source.codeaurora.org/external/imx/onnxruntime-imx.git -b lf-6.6.23-2.0.0
+Release Location:          https://github.com/nxp-imx/onnxruntime-imx.git -b imx_1.20.1
 Origin:                    https://github.com/microsoft/onnxruntime
 
 --------------------------------------------
@@ -25,16 +25,16 @@ Build Dependencies:
 --------------------------------------------
 
 Package:                   protobuf
-Version:                   21.12 (rev 7cf27339)
-Outgoing License:          BSD License 2.0
+Version:                   21.12 (rev f0dc78d7)
+Outgoing License:          BSD-3-Clause
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/protocolbuffers/protobuf
 
 --------------------------------------------
 
 Package:                   googletest
-Version:                   main (rev 530d5c8c)
-Outgoing License:          BSD License 2.0
+Version:                   1.5.0 (rev e3978608)
+Outgoing License:          BSD-3-Clause
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/google/googletest
 
@@ -42,7 +42,7 @@ Origin:                    https://github.com/google/googletest
 --------------------------------------------
 
 Package:                   onnx
-Version:                   v1.15.0 (rev b86cc54e)
+Version:                   v1.16.1 (rev 3bf92c03)
 Outgoing License:          Apache 2.0
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/onnx/onnx
@@ -50,7 +50,7 @@ Origin:                    https://github.com/onnx/onnx
 --------------------------------------------
 
 Package:                   date
-Version:                   v3.0.1 (rev 6e921e1)
+Version:                   v3.0.1 (rev 6e921e1b)
 Outgoing License:          MIT
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/HowardHinnant/date.git
@@ -66,8 +66,8 @@ Origin:                    https://github.com/google/nsync
 --------------------------------------------
 
 Package:                   re2
-Version:                   2022-06-01 (rev 5723bb89)
-Outgoing License:          BSD License 2.0
+Version:                   2024-07-02 (rev 6dcd83d6)
+Outgoing License:          BSD-3-Clause
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/google/re2
 
@@ -98,7 +98,7 @@ Origin:                    https://github.com/tensorflow/tensorboard
 --------------------------------------------
 
 Package:                   mimalloc
-Version:                   v2.1.1 (rev 3e313478)
+Version:                   v2.1.1 (rev 9826b1bf)
 Outgoing License:          MIT
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/microsoft/mimalloc
@@ -131,7 +131,7 @@ Origin:                    https://github.com/google/libprotobuf-mutator
 --------------------------------------------
 
 Package:                   flatbuffers
-Version:                   v1.12.0 (rev 6df40a24)
+Version:                   23.5.26 (rev 0100f6a5)
 Outgoing License:          Apache 2.0
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/google/flatbuffers
@@ -139,7 +139,7 @@ Origin:                    https://github.com/google/flatbuffers
 --------------------------------------------
 
 Package:                   safeint
-Version:                   3.0.28 (rev 4cafc91)
+Version:                   3.0.28 (rev 4cafc919)
 Outgoing License:          MIT
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/dcleblanc/SafeInt
@@ -147,7 +147,7 @@ Origin:                    https://github.com/dcleblanc/SafeInt
 --------------------------------------------
 
 Package:                   mp11
-Version:                   boost-1.82.0 (rev  0a0b5fb)
+Version:                   boost-1.82.0 (rev 0a0b5fb0)
 Outgoing License:          Boost Software License - Version 1.0
 License File:              http://boost.org/LICENSE_1_0.txt
 Origin:                    https://github.com/boostorg/mp11
@@ -163,8 +163,8 @@ Origin:                    https://github.com/dmlc/dlpack
 --------------------------------------------
 
 Package:                   emsdk
-Version:                   3.1.51 (rev 4e24961)
-Outgoing License:          MIT/Expat
+Version:                   3.1.59 (rev d52c4652)
+Outgoing License:          MIT
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/emscripten-core/emsdk
 
@@ -179,16 +179,16 @@ Origin:                    https://github.com/microsoft/onnxruntime-extensions.g
 --------------------------------------------
 
 Package:                   pytorch_cpuinfo
-Version:                   rev 959002
-Outgoing License:          BSD 2-Clause "Simplified"
+Version:                   rev ca678952
+Outgoing License:          BSD 2-Clause
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/pytorch/cpuinfo.git
 
 --------------------------------------------
 
 Package:                   onnx-tensorrt
-Version:                   rev a43ce6
-Outgoing License:          MIT
+Version:                   rev 9f98e2eb
+Outgoing License:          Apache 2.0
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/onnx/onnx-tensorrt.git
 
@@ -203,8 +203,8 @@ Origin:                    https://github.com/Maratyszcza/FP16.git
 --------------------------------------------
 
 Package:                   XNNPACK
-Version:                   rev 0da379fc
-Outgoing License:          BSD License
+Version:                   rev 309b75c9
+Outgoing License:          BSD-3-Clause
 License File:              cmake/external/XNNPACK/LICENSE
 Origin:                    https://github.com/google/XNNPACK.git
 
@@ -212,14 +212,14 @@ Origin:                    https://github.com/google/XNNPACK.git
 
 Package:                   pthreadpool
 Version:                   rev 4fe0e1e
-Outgoing License:          BSD-2-Clause License
+Outgoing License:          BSD-2-Clause
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/Maratyszcza/pthreadpool.git
 
 --------------------------------------------
 
 Package:                   abseil-cpp
-Version:                   LTS 20240116.1 (rev 2f9e432)
+Version:                   LTS 20240722 (rev 4447c756)
 Outgoing License:          Apache 2.0
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/abseil/abseil-cpp.git
@@ -235,7 +235,7 @@ Origin:                    https://github.com/Maratyszcza/FXdiv.git
 --------------------------------------------
 
 Package:                   google-benchmark
-Version:                   v1.7.0 (rev 361e8d1c)
+Version:                   v1.8.5 (rev a6ad7fbb)
 Outgoing License:          Apache 2.0
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/google/benchmark.git
@@ -259,18 +259,18 @@ Origin:                    https://github.com/Maratyszcza/psimd.git
 --------------------------------------------
 
 Package:                   pybind11
-Version:                   v2.10.1 (rev 80dc998e)
-Outgoing License:          -
+Version:                   v2.13.1 (rev 941f45bc)
+Outgoing License:          BSD-3-Clause
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/pybind/pybind11.git
 
 --------------------------------------------
 
 Package:                   cutlass
-Version:                   v3.1.0 (rev 6f47420)
-Outgoing License:          BSD-3
+Version:                   v3.5.1 (rev f7b19de3)
+Outgoing License:          BSD-3-Clause
 License File:              ThirdPartyNotices.txt
-Origin:                    https://github.com/Maratyszcza/psimd.git
+Origin:                    https://github.com/NVIDIA/cutlass.git
 
 --------------------------------------------
 
@@ -283,7 +283,7 @@ Origin:                    https://github.com/intel/neural-speed.git
 --------------------------------------------
 
 Package:                   composable-kernel
-Version:                   rev 5356c4a9
+Version:                   rev 204da9c5
 Outgoing License:          MIT
 License File:              ThirdPartyNotices.txt
 Origin:                    https://github.com/ROCm/composable_kernel.git
