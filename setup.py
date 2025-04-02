@@ -127,6 +127,10 @@ manylinux_tags = [
 ]
 is_manylinux = environ.get("AUDITWHEEL_PLAT", None) in manylinux_tags
 
+is_imx_sdk = bool(environ.get('OECORE_NATIVE_SYSROOT', None))
+is_imx_bb = bool(environ.get('PKG_CONFIG_SYSROOT_DIR', None))
+is_imx = is_imx_sdk or is_imx_bb
+
 
 class build_ext(_build_ext):  # noqa: N801
     def build_extension(self, ext):
@@ -141,11 +145,22 @@ try:
     class bdist_wheel(_bdist_wheel):  # noqa: N801
         """Helper functions to create wheel package"""
 
-        if is_openvino and is_manylinux:
+        if (is_openvino and is_manylinux) or is_imx:
 
             def get_tag(self):
                 _, _, plat = _bdist_wheel.get_tag(self)
-                if platform.system() == "Linux":
+                if is_imx:
+                    glibc_major, glibc_minor = popen("ldd --version | head -1").read().split()[-1].split(".")
+                    if is_imx_sdk:
+                        glibc_ver_cmd = f"{environ['OECORE_NATIVE_SYSROOT']}/usr/bin/pldd --version | head -1"
+                        glibc_major, glibc_minor = popen(glibc_ver_cmd).read().split()[-1].split(".")
+                    elif is_imx_bb:
+                        found = glob(f"{environ['PKG_CONFIG_SYSROOT_DIR']}/usr/lib/libm-*")
+                        if found:
+                            min_found = sorted(found)[0]
+                            glibc_major, glibc_minor = tuple(min_found.split('-')[-1].split('.')[:2])
+                    plat = f"manylinux_{glibc_major}_{glibc_minor}_aarch64"
+                elif platform.system() == "Linux":
                     # Get the right platform tag by querying the linker version
                     glibc_major, glibc_minor = popen("ldd --version | head -1").read().split()[-1].split(".")
                     """# See https://github.com/mayeut/pep600_compliance/blob/master/
