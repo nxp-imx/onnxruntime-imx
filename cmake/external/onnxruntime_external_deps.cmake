@@ -464,14 +464,37 @@ else()
 endif()
 
 #flatbuffers 1.11.0 does not have flatbuffers::IsOutRange, therefore we require 1.12.0+
-onnxruntime_fetchcontent_declare(
+#onnxruntime_fetchcontent_declare(
+#    flatbuffers
+#    URL ${DEP_URL_flatbuffers}
+#    URL_HASH SHA1=${DEP_SHA1_flatbuffers}
+#    PATCH_COMMAND ${ONNXRUNTIME_FLATBUFFERS_PATCH_COMMAND}
+#    EXCLUDE_FROM_ALL
+#    FIND_PACKAGE_ARGS 23.5.9 NAMES Flatbuffers flatbuffers
+#)
+
+
+# Note: Skip find stage if build uses SDK. `OVERRIDE_FIND_PACKAGE` will ensure that
+# `FetchContent_MakeAvailable` overrides `find_package`, using the declared source
+#  rather than finding the package inside the SDK, which might deviate from required version.
+if(CMAKE_CROSSCOMPILING AND DEFINED ENV{OECORE_NATIVE_SYSROOT} AND DEFINED ENV{OECORE_TARGET_SYSROOT})
+  onnxruntime_fetchcontent_declare(
+    flatbuffers
+    URL ${DEP_URL_flatbuffers}
+    URL_HASH SHA1=${DEP_SHA1_flatbuffers}
+    PATCH_COMMAND ${ONNXRUNTIME_FLATBUFFERS_PATCH_COMMAND}
+    OVERRIDE_FIND_PACKAGE
+  )
+else()
+  onnxruntime_fetchcontent_declare(
     flatbuffers
     URL ${DEP_URL_flatbuffers}
     URL_HASH SHA1=${DEP_SHA1_flatbuffers}
     PATCH_COMMAND ${ONNXRUNTIME_FLATBUFFERS_PATCH_COMMAND}
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS 23.5.9 NAMES Flatbuffers flatbuffers
-)
+  )
+endif()
 
 onnxruntime_fetchcontent_makeavailable(flatbuffers)
 if(NOT flatbuffers_FOUND)
