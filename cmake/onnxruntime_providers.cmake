@@ -113,6 +113,9 @@ endif()
 if (onnxruntime_USE_AZURE)
   set(PROVIDERS_AZURE onnxruntime_providers_azure)
 endif()
+if (onnxruntime_USE_NEUTRON)
+  set(PROVIDERS_NEUTRON onnxruntime_providers_neutron)
+endif()
 
 
 if(onnxruntime_USE_SNPE)
@@ -206,4 +209,7 @@ endif()
 
 if (onnxruntime_USE_AZURE)
   include(onnxruntime_providers_azure.cmake)
+endif()
+if (onnxruntime_USE_NEUTRON)
+  include(onnxruntime_providers_neutron.cmake)
 endif()
