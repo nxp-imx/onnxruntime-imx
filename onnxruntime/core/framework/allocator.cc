@@ -168,6 +168,10 @@ ORT_API_STATUS_IMPL(OrtApis::CreateMemoryInfo, _In_ const char* name1, enum OrtA
         onnxruntime::QNN_HTP_SHARED, type,
         OrtDevice(OrtDevice::CPU, OrtDevice::MemType::QNN_HTP_SHARED, static_cast<OrtDevice::DeviceId>(id1)),
         id1, mem_type1);
+  } else if (strcmp(name1, onnxruntime::NEUTRON_PINNED) == 0) {
+    *out = new OrtMemoryInfo(
+        onnxruntime::NEUTRON_PINNED, type, OrtDevice(OrtDevice::CPU, OrtDevice::MemType::NEUTRON_PINNED, static_cast<OrtDevice::DeviceId>(id1)),
+        id1, mem_type1);
   } else {
     return OrtApis::CreateStatus(ORT_INVALID_ARGUMENT, "Specified device is not supported.");
   }
