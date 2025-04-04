@@ -13,7 +13,7 @@
 #include "core/util/qmath.h"
 #include "core/mlas/inc/mlas.h"
 #if NEUTRON_AARCH64
-#include "core/providers/neutron/platform/NeutronDriver.h"
+#include "neutron/NeutronDriver.h"
 #endif
 #include "core/providers/neutron/neutron_allocator.h"
 

@@ -16,7 +16,7 @@
 #include <algorithm>
 
 #if NEUTRON_AARCH64
-#include "NeutronDriver.h"
+#include "neutron/NeutronDriver.h"
 #endif
 
 namespace onnxruntime {

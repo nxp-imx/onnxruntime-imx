@@ -6,7 +6,7 @@
 #include "core/providers/neutron/neutron_allocator.h"
 #include "core/common/logging/logging.h"
 #if NEUTRON_AARCH64
-#include "core/providers/neutron/platform/NeutronDriver.h"
+#include "neutron/NeutronDriver.h"
 #endif
 
 namespace onnxruntime {
