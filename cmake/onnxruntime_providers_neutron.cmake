@@ -9,7 +9,7 @@ file(GLOB_RECURSE onnxruntime_providers_neutron_srcs
 source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_neutron_srcs})
 onnxruntime_add_static_library(onnxruntime_providers_neutron ${onnxruntime_providers_neutron_srcs})
 onnxruntime_add_include_to_target(onnxruntime_providers_neutron
-  onnxruntime_common onnxruntime_framework onnx onnx_proto ${PROTOBUF_LIB} flatbuffers::flatbuffers Boost::mp11 safeint_interface
+  onnxruntime_common onnxruntime_framework onnx onnx_proto ${PROTOBUF_LIB} flatbuffers::flatbuffers Boost::mp11 safeint_interface Eigen3::Eigen
 )
 
 set(NEUTRON_DRIVER_LIB "NeutronDriver")
