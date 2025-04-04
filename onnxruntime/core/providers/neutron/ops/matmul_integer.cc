@@ -12,7 +12,7 @@
 #include <algorithm>
 
 #if NEUTRON_AARCH64
-#include "core/providers/neutron/platform/NeutronDriver.h"
+#include "neutron/NeutronDriver.h"
 #endif
 
 namespace onnxruntime {
