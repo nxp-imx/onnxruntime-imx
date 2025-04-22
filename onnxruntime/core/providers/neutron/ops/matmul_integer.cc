@@ -323,13 +323,13 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
 
 #ifndef NDEBUG
     // Dump the output
-    const Tensor* y = ctx->Output<Tensor>(0);
+    y = ctx->Output<Tensor>(0);
     printf("\nY shape=%ld %ld %ld\n\n",y->Shape()[0],y->Shape()[1],y->Shape()[2]);
-    const float *y_data = static_cast<const float*>(y->DataRaw());
+    const float *y_data_f = static_cast<const float*>(y->DataRaw());
     printf("\n");
     for (int i=0; i<y->Shape()[1]; i++) {
       for (int j=0; j<y->Shape()[2]; j++) {
-        printf("Y[%d][%d]=%f ",i,j,y_data[i * y->Shape()[2] + j]);
+        printf("Y[%d][%d]=%f ",i,j,y_data_f[i * y->Shape()[2] + j]);
       }
       printf("\n");
     }
