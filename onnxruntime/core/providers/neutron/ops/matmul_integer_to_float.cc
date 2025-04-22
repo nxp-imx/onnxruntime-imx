@@ -423,8 +423,7 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     }
     printf("Neutron: Prepared matmul in %f us\n", time_diff(t1,t3));
     printf("Neutron: Computed matmul in %f us\n", time_diff(t3,t4));
-    printf("Neutron: Copying result in %f us\n", time_diff(t4,t5));
-    printf("Neutron: Dequant of MatMulIntegerToFloat in %f us\n", time_diff(t5,t6));
+    printf("Neutron: Dequant of MatMulIntegerToFloat in %f us\n", time_diff(t4,t5));
 #endif
   }
 #ifdef NDEBUG
