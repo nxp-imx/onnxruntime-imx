@@ -261,6 +261,10 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
     m_header[10] = m_y_zp;
     m_header[11] = 1; // result num bytes
+    m_header[12] = 8; // Weight Bits
+    m_header[13] = -1; // Group Size equal to negative means no group size
+    m_header[14] = 0;
+    m_header[15] = 0;
 
     NeutronError ret = ENONE;
     ret = matmul((const void *)m_header, 16*sizeof(uint32_t), (const void*)a_neutron, a_size, (const void*)y_neutron, y_size, m_handle);
