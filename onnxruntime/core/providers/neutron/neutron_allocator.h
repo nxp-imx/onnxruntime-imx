@@ -6,14 +6,14 @@
 #include <stdint.h>
 #include <vector>
 
-#define NEUTRON_DEFAULT_512MB_SLOTS 3
+#define NEUTRON_DEFAULT_512MB_SLOTS 4
 #define NEUTRON_MAX_512MB_SLOTS 6
 
 namespace onnxruntime {
 
 constexpr size_t kDefaultTensorAlignment = 64;
 constexpr size_t kBoundaryNeutronBufferSize = 512 * 1024 * 1024;
-constexpr size_t kReservedNeutronBufferSize = 128 * 1024 * 1024;
+constexpr size_t kReservedNeutronBufferSize = 192 * 1024 * 1024;
 constexpr size_t kMaxNeutronNumHandles = NEUTRON_MAX_512MB_SLOTS;
 
 class NeutronStackAllocator {

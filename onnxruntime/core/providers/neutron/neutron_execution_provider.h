@@ -20,7 +20,7 @@ class NeutronExecutionProvider : public IExecutionProvider {
 
  private:
   uint32_t neutron_flags_;
-
+  uint32_t node_number_{0};
 };
 
 Status RegisterNeutronKernels(KernelRegistry& kernel_registry);
