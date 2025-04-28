@@ -39,8 +39,8 @@ namespace perftest {
       "\t-A: Disable memory arena\n"
       "\t-I: Generate tensor input binding. Free dimensions are treated as 1 unless overridden using -f.\n"
       "\t-c [parallel runs]: Specifies the (max) number of runs to invoke simultaneously. Default:1.\n"
-      "\t-e [cpu|cuda|dnnl|tensorrt|openvino|dml|acl|nnapi|coreml|qnn|snpe|rocm|migraphx|xnnpack|vitisai|webgpu|neutron]: Specifies the provider 'cpu','cuda','dnnl','tensorrt', "
-      "'openvino', 'dml', 'acl', 'nnapi', 'coreml', 'qnn', 'snpe', 'rocm', 'migraphx', 'xnnpack', 'vitisai', 'webgpu' or 'neutron'. "
+      "\t-e [cpu|cuda|dnnl|tensorrt|openvino|dml|acl|nnapi|coreml|qnn|snpe|rocm|migraphx|xnnpack|vitisai|webgpu|vsinpu|neutron]: Specifies the provider 'cpu','cuda','dnnl','tensorrt', "
+      "'openvino', 'dml', 'acl', 'nnapi', 'coreml', 'qnn', 'snpe', 'rocm', 'migraphx', 'xnnpack', 'vitisai', 'webgpu', 'vsinpu' or 'neutron'. "
       "Default:'cpu'.\n"
       "\t-b [tf|ort]: backend to use. Default:ort\n"
       "\t-r [repeated_times]: Specifies the repeated times if running in 'times' test mode.Default:1000.\n"
@@ -266,6 +266,8 @@ static bool ParseDimensionOverride(std::basic_string<ORTCHAR_T>& dim_identifier,
           test_config.machine_config.provider_type_name = onnxruntime::kWebGpuExecutionProvider;
         } else if (!CompareCString(optarg, ORT_TSTR("neutron"))) {
           test_config.machine_config.provider_type_name = onnxruntime::kNeutronExecutionProvider;
+        } else if (!CompareCString(optarg, ORT_TSTR("vsinpu"))) {
+          test_config.machine_config.provider_type_name = onnxruntime::kVSINPUExecutionProvider;
         } else {
           return false;
         }
