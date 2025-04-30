@@ -10,6 +10,7 @@
 
 #include "core/framework/op_kernel.h"
 #include "core/providers/neutron/neutron_fwd.h"
+#include "core/framework/compute_capability.h"
 
 using namespace onnxruntime::common;
 
@@ -126,6 +127,53 @@ KernelRegistryAndStatus GetNeutronKernelRegistry() {
   KernelRegistryAndStatus ret;
   ret.st = ::onnxruntime::neutron::RegisterNeutronKernels(*ret.kernel_registry);
   return ret;
+}
+
+std::vector<std::unique_ptr<ComputeCapability>>
+NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
+                                        const IKernelLookup&,
+	                                const GraphOptimizerRegistry&,
+                                        IResourceAccountant*)const {
+  InlinedVector<NodeIndex> candidates;
+
+  for (auto& node_index : graph.GetNodesInTopologicalOrder()) {
+    const auto* p_node = graph.GetNode(node_index);
+    if (p_node == nullptr)
+      continue;
+
+    const auto& node = *p_node;
+    if (!node.GetExecutionProviderType().empty()) {
+      continue;
+    }
+
+    if ("DequantizeLinear" == node.OpType() ||
+        "QuantizeLinear" == node.OpType() ||
+        "QLinearMatMul" == node.OpType() ||
+        "MatMulIntegerToFloat" == node.OpType() ||
+        "MatMulInteger" == node.OpType()) {
+      candidates.push_back(node.Index());
+    } else if ("MatMulNBits" == node.OpType()) {
+      const auto& attributes = node.GetAttributes();
+      int64_t K = SafeInt<int64_t>(attributes.at("K").i());
+      int64_t N = SafeInt<int64_t>(attributes.at("N").i());
+      if (K % 16 == 0 && N % 128 == 0) {
+        candidates.push_back(node.Index());
+      } else {
+      printf("Neutron: MatMulNBits Node(%s) not supported, K(%ld) N(%ld)..\n", node.Name().c_str(), K, N);
+      }
+    }
+  }
+
+  // For ROCM EP, exclude the subgraph that is preferred to be placed in CPU
+  // These are usually shape related computation subgraphs
+  // Following logic can be extended for other EPs
+  std::vector<std::unique_ptr<ComputeCapability>> result;
+  for (auto& node_index : candidates) {
+    std::unique_ptr<IndexedSubGraph> sub_graph = std::make_unique<IndexedSubGraph>();
+    sub_graph->nodes.push_back(node_index);
+    result.push_back(std::make_unique<ComputeCapability>(std::move(sub_graph)));
+  }
+  return result;
 }
 
 std::shared_ptr<KernelRegistry> NeutronExecutionProvider::GetKernelRegistry() const {
