@@ -544,8 +544,8 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
 
 #if defined(USE_NBITS_KERNEL) || defined(USE_8BITS_KERNEL)
   uint32_t a_cols = K_;
-  float input_scales[128];
   uint32_t a_size = a_batch * a_rows * a_cols * sizeof(uint8_t);
+  float *input_scales = (float *) neutronAlloc->AllocReserved(a_rows * sizeof(float), m_handle);
   uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size, m_handle);
   QuantizeInput(a_data, a_neutron, input_scales, a_rows, a_cols);
   clean_cache(a_neutron, a_size);
