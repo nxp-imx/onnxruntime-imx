@@ -14,6 +14,12 @@ class NeutronExecutionProvider : public IExecutionProvider {
 
   std::shared_ptr<KernelRegistry> GetKernelRegistry() const override;
 
+  std::vector<std::unique_ptr<ComputeCapability>>
+  GetCapability(const onnxruntime::GraphViewer& graph_viewer,
+                const IKernelLookup& /*kernel_lookup*/,
+                const GraphOptimizerRegistry& /* graph_optimizer_registry */,
+                IResourceAccountant* /* resource_accountant */) const override;
+
   const void* GetExecutionHandle() const noexcept override {
     return nullptr;
   }
