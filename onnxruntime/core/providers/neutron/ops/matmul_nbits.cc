@@ -411,7 +411,7 @@ Status MatMulNBits::PrePack(const Tensor& tensor, int input_idx, /*out*/ Allocat
         break;
       case InputIndex::IN_B:{
         if (K_ % 16 || (N_ % 128)) {
-          throw std::bad_alloc();
+          throw std::invalid_argument("NeutronEP:MatMulNBits invalid argument(s) K or N");
         }
 
         m_handle = neutronAlloc->getMemoryHandle();
@@ -502,11 +502,12 @@ Status MatMulNBits::PrePack(const Tensor& tensor, int input_idx, /*out*/ Allocat
         break;
       }
       case InputIndex::ZERO_POINTS:
+        throw std::invalid_argument("NeutronEP:MatMulNBits don't support zero-points");
         break;
     }
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::exception &e) {
     // Do not delegate this instance if out of memory
-    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits bad_alloc");
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, e.what());
   }
   return Status::OK();
 }
