@@ -223,8 +223,8 @@ void PackScaler(const uint8_t *B, const float *scalesData, int16_t *decodeScales
             value = ((value >> 4) & 0x0F);
           }
 
-          int8_t requantvalue = (int8_t)std::floor(((float)value - 8) * decimalToFixedPoint(scale) + 0.5);
-          sum = sum + requantvalue;
+          float temp = ((float)value - 8) * decimalToFixedPoint(scale);
+          sum = sum + (int8_t)std::clamp((int)std::floor(temp + 0.5), -128, 127);
         }
       }
 
@@ -411,7 +411,7 @@ Status MatMulNBits::PrePack(const Tensor& tensor, int input_idx, /*out*/ Allocat
         break;
       case InputIndex::IN_B:{
         if (K_ % 16 || (N_ % 128)) {
-          throw std::bad_alloc();
+          throw std::invalid_argument("NeutronEP:MatMulNBits invalid argument(s) K or N");
         }
 
         m_handle = neutronAlloc->getMemoryHandle();
@@ -502,11 +502,12 @@ Status MatMulNBits::PrePack(const Tensor& tensor, int input_idx, /*out*/ Allocat
         break;
       }
       case InputIndex::ZERO_POINTS:
+        throw std::invalid_argument("NeutronEP:MatMulNBits don't support zero-points");
         break;
     }
-  } catch (const std::bad_alloc &e) {
+  } catch (const std::exception &e) {
     // Do not delegate this instance if out of memory
-    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits bad_alloc");
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, e.what());
   }
   return Status::OK();
 }
@@ -544,8 +545,8 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
 
 #if defined(USE_NBITS_KERNEL) || defined(USE_8BITS_KERNEL)
   uint32_t a_cols = K_;
-  float input_scales[128];
   uint32_t a_size = a_batch * a_rows * a_cols * sizeof(uint8_t);
+  float *input_scales = (float *) neutronAlloc->AllocReserved(a_rows * sizeof(float), m_handle);
   uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size, m_handle);
   QuantizeInput(a_data, a_neutron, input_scales, a_rows, a_cols);
   clean_cache(a_neutron, a_size);
