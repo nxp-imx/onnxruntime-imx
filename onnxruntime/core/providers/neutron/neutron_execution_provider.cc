@@ -154,12 +154,16 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
       candidates.push_back(node.Index());
     } else if ("MatMulNBits" == node.OpType()) {
       const auto& attributes = node.GetAttributes();
+      const auto& input_defs = node.InputDefs();
       int64_t K = SafeInt<int64_t>(attributes.at("K").i());
       int64_t N = SafeInt<int64_t>(attributes.at("N").i());
-      if (K % 16 == 0 && N % 128 == 0) {
-        candidates.push_back(node.Index());
+
+      if (K % 16 != 0 || N % 128 != 0) {
+        LOGS_DEFAULT(INFO) << "NeutronEP: MatMulNBits (" << node.Name() << ") not supported, invalid K or N.";
+      } else if (input_defs.size() > 3 && input_defs[3]->Exists()) {
+        LOGS_DEFAULT(INFO) << "NeutronEP: MatMulNBits (" << node.Name() << ") with zero-point not supported.";
       } else {
-      printf("Neutron: MatMulNBits Node(%s) not supported, K(%ld) N(%ld)..\n", node.Name().c_str(), K, N);
+        candidates.push_back(node.Index());
       }
     }
   }
