@@ -223,8 +223,8 @@ void PackScaler(const uint8_t *B, const float *scalesData, int16_t *decodeScales
             value = ((value >> 4) & 0x0F);
           }
 
-          int8_t requantvalue = (int8_t)std::floor(((float)value - 8) * decimalToFixedPoint(scale) + 0.5);
-          sum = sum + requantvalue;
+          float temp = ((float)value - 8) * decimalToFixedPoint(scale);
+          sum = sum + (int8_t)std::clamp((int)std::floor(temp + 0.5), -128, 127);
         }
       }
 
