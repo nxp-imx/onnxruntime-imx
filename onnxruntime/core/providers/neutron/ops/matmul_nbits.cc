@@ -354,6 +354,17 @@ void DequantizeWeight(const uint8_t *in, float *out, const float *scalesData,
   }
 }
 
+static inline int32x4_t roundq_s32_f32(float32x4_t x) {
+    float32x4_t half = vdupq_n_f32(0.5f);
+
+    uint32x4_t is_positive = vcgeq_f32(x, vdupq_n_f32(0.0f));
+
+    float32x4_t offset = vbslq_f32(is_positive, half, vnegq_f32(half));
+    float32x4_t adjusted = vaddq_f32(x, offset);
+
+    return vcvtq_s32_f32(adjusted);
+}
+
 // Function to perform per-tensor quantization with zero-point = 0
 void  QuantizeInput(const float *in, uint8_t* out, float *scales,
                     uint32_t a_rows, uint32_t a_cols) {
@@ -367,11 +378,42 @@ void  QuantizeInput(const float *in, uint8_t* out, float *scales,
     }
 
     scales[i] = max_abs / 127;
-    for (uint32_t j = 0; j < a_cols; j ++) {
-      // Perform quantization by scaling the tensor values and rounding
-      int value = std::round(in[i * a_cols + j] / scales[i]);
-      // Clip the quantized value to the range [-128, 127] for int8
-      out[i * a_cols + j] = (int8_t)std::clamp(value, -128, 127) + 128;
+
+    static constexpr int32_t min_val = std::numeric_limits<uint8_t>::min();
+    static constexpr int32_t max_val = std::numeric_limits<uint8_t>::max();
+    const int32_t zero_point = 128;
+
+    uint32_t j = 0;
+    const float32x4_t reverse_scale_dup = vdupq_n_f32(1.0f / scales[i]);
+    const int32x4_t zero_point_dup = vdupq_n_s32(zero_point);
+    const int32x4_t min_val_dup = vdupq_n_s32(min_val);
+    const int32x4_t max_val_dup = vdupq_n_s32(max_val);
+
+    for (; j <= a_cols - 8; j += 8) {
+      const float* src_data_ptr = in + i * a_cols + j;
+      float32x4_t input_val_0 = vld1q_f32(src_data_ptr);
+      float32x4_t input_val_1 = vld1q_f32(src_data_ptr + 4);
+
+      input_val_0 = vmulq_f32(input_val_0, reverse_scale_dup);
+      input_val_1 = vmulq_f32(input_val_1, reverse_scale_dup);
+
+      int32x4_t casted_val_0 = roundq_s32_f32(input_val_0);
+      int32x4_t casted_val_1 = roundq_s32_f32(input_val_1);
+
+      casted_val_0 = vaddq_s32(casted_val_0, zero_point_dup);
+      casted_val_1 = vaddq_s32(casted_val_1, zero_point_dup);
+
+      // Clamp the values to fit the target type's range.
+      casted_val_0 = vmaxq_s32(casted_val_0, min_val_dup);
+      casted_val_1 = vmaxq_s32(casted_val_1, min_val_dup);
+      casted_val_0 = vminq_s32(casted_val_0, max_val_dup);
+      casted_val_1 = vminq_s32(casted_val_1, max_val_dup);
+
+      const uint16x4_t narrowed_val_0 = vqmovun_s32(casted_val_0);
+      const uint16x4_t narrowed_val_1 = vqmovun_s32(casted_val_1);
+      const uint16x8_t combined_val = vcombine_u16(narrowed_val_0, narrowed_val_1);
+      const uint8x8_t combined_val_narrowed = vmovn_u16(combined_val);
+      vst1_u8(out + i * a_cols + j, combined_val_narrowed);
     }
   }
 
@@ -382,24 +424,18 @@ void DequantizeOutput(const int32_t *in, float* out, float* scales,
                       uint32_t a_batch, uint32_t a_rows, uint32_t b_rows) {
   for (uint32_t b = 0; b < a_batch; b ++) {
     for (uint32_t i = 0; i < a_rows; i ++) {
-      for (uint32_t j = 0; j < b_rows; j ++) {
+      for (uint32_t j = 0; j <= b_rows - 4; j += 4) {
         uint32_t idx = b * a_rows * b_rows + i * b_rows + j;
-        out[idx] = (float) in[idx] * scales[i];
+        int32x4_t vq = vld1q_s32(in + idx);
+
+        float32x4_t vf = vcvtq_f32_s32(vq);
+        float32x4_t vscale = vdupq_n_f32(scales[i]);
+        float32x4_t vres = vmulq_f32(vf, vscale);
+
+        vst1q_f32(out + idx, vres);
       }
     }
   }
-}
-
-auto QuantizeInput_zp(OpKernelContext* ctx, const float *in, uint8_t* out, uint32_t num_of_elements){
-  struct param{
-    float scale;
-    uint8_t zero_point;
-  }out_data;
-
-  // code extracted from dynamicquantizelinear.cc
-  GetQuantizationParameter(in, num_of_elements, out_data.scale, out_data.zero_point, ctx->GetOperatorThreadPool());
-  ParQuantizeLinearStd(in, out, onnxruntime::narrow<size_t>(num_of_elements), out_data.scale, out_data.zero_point, ctx->GetOperatorThreadPool());
-  return out_data;
 }
 
 Status MatMulNBits::PrePack(const Tensor& tensor, int input_idx, /*out*/ AllocatorPtr alloc,
