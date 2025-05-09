@@ -164,7 +164,7 @@ int CaculateChannelDensity(int embeddings_in, int groupSize, int weightBits = 8,
   double tcm_per_bank = (tcm_size * 1.0) / tcm_banks;
 
   double offsetB = std::max(
-    std::ceil((std::ceil(channelDensity / numNeutrons * embeddings_in * scale) * numNeutrons + channelDensity * 8)
+    std::ceil((std::ceil(channelDensity / numNeutrons * embeddings_in * scale) * numNeutrons)
     / tcm_per_bank) * tcm_per_bank, decodeWeights *
     std::ceil((channelDensity * embeddings_in + (2 + 1 * useDecodeBias) * channelDensity * embeddings_in
     / groupSize + 16 * 1024 * numNeutrons)/ tcm_per_bank)* tcm_per_bank
@@ -567,13 +567,11 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
     a_batch = 1;
     a_rows = a->Shape()[0];
   } else {
-    printf("Neutron matmulnbits(): A dims number %ld not supported\n", a_dims);
-    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits input dims number unsupported.");
   }
 
-  if (!m_header){
-    printf("Neutron matmulnbits() falied to init.\n");
-    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
+  if (!m_header) {
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits falied to init.");
   }
 
   neutronAlloc->pushMemoryState(m_handle);
@@ -645,9 +643,8 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
 #if defined(USE_NBITS_KERNEL) || defined(USE_8BITS_KERNEL)
   NeutronError ret = ENONE;
   ret = matmul((const void *)m_header, 16*sizeof(uint32_t), (const void*)a_neutron, a_size, (const void*)y_neutron, y_size, m_handle);
-  if (ret != ENONE){
-      printf("matmul() error %d\n", ret);
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
+  if (ret != ENONE) {
+      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits falied to call kernel");
   }
   clean_cache(y_neutron, y_size);
   DequantizeOutput(y_neutron, y_data, input_scales,
