@@ -5,9 +5,10 @@
 #include <memory>
 
 #include "core/providers/providers.h"
+#include "core/providers/neutron/neutron_provider_factory.h"
 
 namespace onnxruntime {
 struct NeutronProviderFactoryCreator {
-  static std::shared_ptr<IExecutionProviderFactory> Create(uint32_t neutron_flags);
+  static std::shared_ptr<IExecutionProviderFactory> Create(NeutronProviderOptions neutron_options);
 };
 }  // namespace onnxruntime

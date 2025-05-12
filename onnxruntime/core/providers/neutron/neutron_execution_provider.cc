@@ -5,7 +5,6 @@
 /* other headers */
 #include "core/providers/neutron/neutron_execution_provider.h"
 #include "core/providers/neutron/neutron_allocator.h"
-#include "core/providers/neutron/neutron_provider_factory.h"
 #include "core/framework/kernel_registry.h"
 
 #include "core/framework/op_kernel.h"
@@ -113,9 +112,9 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
 }
 } // namespace neutron
 
-NeutronExecutionProvider::NeutronExecutionProvider(uint32_t neutron_flags)
+NeutronExecutionProvider::NeutronExecutionProvider(NeutronProviderOptions neutron_options)
     : IExecutionProvider(onnxruntime::kNeutronExecutionProvider),
-      neutron_flags_(neutron_flags) {
+      neutron_options_(neutron_options) {
    onnxruntime::neutron::neutronAlloc->Init();
 }
 

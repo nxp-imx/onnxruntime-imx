@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) NXP. All rights reserved.
 // Licensed under the MIT License.
 
 #include <cstdint>
@@ -37,7 +37,7 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(                                            \
         .TypeConstraint("T4", DataTypeImpl::GetTensorType<int32_t>()),    \
     onnxruntime::neutron::MatMulNBits);
 
-  uint32_t ScaleToNeutron(float scale_data) {
+uint32_t ScaleToNeutron(float scale_data) {
   float *scale_ptr = &scale_data;
   uint32_t u32 = *(uint32_t*) (scale_ptr);
   uint32_t scaler = (u32 >>8) & 0x7fff ; // extract mantissa (15bits)
@@ -60,7 +60,7 @@ ONNX_OPERATOR_TYPED_KERNEL_EX(                                            \
   return scaler;
 }
 
-double decimalToFixedPoint(double number, int integer_bits = 10, int fraction_bits = 6) {
+double DecimalToFixedPoint(double number, int integer_bits = 10, int fraction_bits = 6) {
   bool sign = false;
   if (number < 0) {
     sign = true;
@@ -110,7 +110,7 @@ double decimalToFixedPoint(double number, int integer_bits = 10, int fraction_bi
 }
 
 // Number must be non-negative
-int16_t DecimalToFixedPoint(double number, int integer_bits = 10, int fraction_bits = 6) {
+int16_t DecimalToNeutron(double number, int integer_bits = 10, int fraction_bits = 6) {
   if (number > (1 << integer_bits) - 1) {
     number = (1 << integer_bits) - 1;
   }
@@ -155,7 +155,7 @@ int16_t DecimalToFixedPoint(double number, int integer_bits = 10, int fraction_b
   return static_cast<int16_t>(result - 65536 * (shift_6bit >= 32));
 }
 
-int CaculateChannelDensity(int embeddings_in, int groupSize, int weightBits = 8,
+int CalculateChannelDensity(int embeddings_in, int groupSize, int weightBits = 8,
                            bool decodeWeights = false, bool useDecodeBias = false,
                            int resNumBytes = 4, int MACS = 16, int numNeutrons = 4,
                            int tcm_size = 1024 * 1024, int tcm_banks = 16) {
@@ -171,8 +171,7 @@ int CaculateChannelDensity(int embeddings_in, int groupSize, int weightBits = 8,
   );
 
   double offsetA = std::ceil((double)embeddings_in / tcm_per_bank) * tcm_per_bank;
-  double pingpongDist = numNeutrons ? offsetB : 0;
-  if (tcm_size - offsetA - (pingpongDist + offsetB) - channelDensity * resNumBytes < 0){
+  if (tcm_size - offsetA - 2 * offsetB - channelDensity * resNumBytes < 0){
     channelDensity = MACS * numNeutrons;
   }
 
@@ -210,7 +209,7 @@ void PackScaler(const uint8_t *B, const float *scalesData, int16_t *decodeScales
         } else {
           decodeBias[i * blocksPerCol + j * channelDensity + k] = 0;
         }
-        auto fixedPointScale = DecimalToFixedPoint(decimalToFixedPoint(scale * sign));
+        auto fixedPointScale = DecimalToNeutron(DecimalToFixedPoint(scale * sign));
         decodeScales[i * blocksPerCol + j * channelDensity + k] = fixedPointScale;
 
         //Caculate weights row sum
@@ -223,7 +222,7 @@ void PackScaler(const uint8_t *B, const float *scalesData, int16_t *decodeScales
             value = ((value >> 4) & 0x0F);
           }
 
-          float temp = ((float)value - 8) * decimalToFixedPoint(scale);
+          float temp = ((float)value - 8) * DecimalToFixedPoint(scale);
           sum = sum + (int8_t)std::clamp((int)std::floor(temp + 0.5), -128, 127);
         }
       }
@@ -457,45 +456,55 @@ Status MatMulNBits::PrePack(const Tensor& tensor, int input_idx, /*out*/ Allocat
 
         //unpacked_b_ data
         unpacked_b_ = static_cast<const uint8_t*>(tensor.DataRaw());
+	b_size_ = tensor.SizeInBytes();
         break;
       }
       case InputIndex::SCALES:{
-        // m_b_factors
-        auto scales_data = static_cast<const float*>(tensor.DataRaw());
 #ifdef USE_NBITS_KERNEL
-        auto channelDensity = CaculateChannelDensity(K_, block_size_, nbits_, true, true);
+        auto channelDensity = CalculateChannelDensity(K_, block_size_, nbits_, true, true);
         int length = std::ceil(channelDensity * K_ * 4 / 8.0) * N_ / channelDensity;
-        m_b_neutron = (int8_t*) neutronAlloc->Alloc(length, m_handle);
-        PackWeight(unpacked_b_, scales_data, m_b_neutron, N_, K_, blocks_per_col_, block_size_, channelDensity, 4);
-        clean_cache(m_b_neutron, length);
-
         int blength = N_ * blocks_per_col_ * sizeof(int8_t);
         int slength = N_ * blocks_per_col_ * sizeof(int16_t);
         int flength = N_ * sizeof(int32_t);
         int biaslength =  N_ * sizeof(int32_t);
+
+        // Alloc memory from neutron BUFFER
+        m_b_neutron = (int8_t*) neutronAlloc->Alloc(length, m_handle);
         m_decode_bias = (int8_t *)neutronAlloc->Alloc(blength, m_handle);
         m_decode_scale = (int16_t *)neutronAlloc->Alloc(slength, m_handle);
+        m_b_bias = (int32_t *)neutronAlloc->Alloc(biaslength, m_handle);
         m_b_factors = (uint32_t *)neutronAlloc->Alloc(flength, m_handle);
-        m_b_row_sum = (int32_t *)neutronAlloc->Alloc(biaslength, m_handle);
-        PackScaler(unpacked_b_, scales_data, m_decode_scale, m_decode_bias, m_b_factors,
-                   m_b_row_sum, N_, blocks_per_col_, channelDensity, nbits_, block_size_);
 
+        if (offline_packed_ || b_size_ == (size_t)(length + blength + slength + biaslength + flength)) {
+          memcpy(m_b_neutron, unpacked_b_, length);
+          memcpy(m_decode_bias, unpacked_b_ + length, blength);
+          memcpy(m_decode_scale, unpacked_b_ + length + blength, slength);
+          memcpy(m_b_bias, unpacked_b_ + length + blength + slength, biaslength);
+          memcpy(m_b_factors, unpacked_b_ + length + blength + slength + biaslength, flength);
+        } else { //non offline packed
+          auto scales_data = static_cast<const float*>(tensor.DataRaw());
+          m_b_row_sum = (int32_t *)neutronAlloc->Alloc(biaslength, m_handle);
+          PackWeight(unpacked_b_, scales_data, m_b_neutron, N_, K_,
+                     blocks_per_col_, block_size_, channelDensity, 4);
+          PackScaler(unpacked_b_, scales_data, m_decode_scale, m_decode_bias, m_b_factors,
+                     m_b_row_sum, N_, blocks_per_col_, channelDensity, nbits_, block_size_);
+
+          m_b_bias = (int32_t *)neutronAlloc->Alloc(biaslength, m_handle);
+          for (uint32_t i = 0; i < N_; i++){
+            m_b_bias[i] = (int32_t)(m_b_row_sum[i] * -128);
+          }
+        }
+
+        clean_cache(m_b_neutron, length);
         clean_cache(m_decode_bias, blength);
         clean_cache(m_decode_scale, slength);
         clean_cache(m_b_factors, flength);
-        clean_cache(m_b_row_sum, biaslength);
-
-        m_b_bias = (int32_t *)neutronAlloc->Alloc(biaslength, m_handle);
-        for (uint32_t i = 0; i < N_; i++){
-        m_b_bias[i] = (int32_t)( - m_b_row_sum[i] * 128 );
-        }
         clean_cache(m_b_bias, biaslength);
 
-        //This is a dummy vector of 16 ones [1, 1, 1, …, 1]
-        length = 16 * sizeof(uint8_t);
-        m_decode_input = (uint8_t *)neutronAlloc->Alloc(length, m_handle);
-        memset(m_decode_input, 1, length);
-        clean_cache(m_decode_input, length);
+        int ilength = 16 * sizeof(uint8_t);
+        m_decode_input = (uint8_t *)neutronAlloc->Alloc(ilength, m_handle);
+        memset(m_decode_input, 1, ilength);
+        clean_cache(m_decode_input, ilength);
 #endif
 
 #ifdef USE_8BITS_KERNEL
