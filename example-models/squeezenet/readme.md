@@ -2,7 +2,7 @@
 
 Source (ONNX Zoo): https://github.com/onnx/models/raw/main/vision/classification/squeezenet/model/squeezenet1.0-9.tar.gz
 
-By default, the model ONNX opset is 9. The one present in this repo is converted to opset 17 (latest for onnxruntime 1.13.1).
+By default, the model ONNX opset is 9. The one present in this repo is converted to opset 17.
 
 Opset update reproduction steps:
 + Environment with Python3 (3.8+) and ONNX (1.13+)
