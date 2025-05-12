@@ -3,13 +3,14 @@
 #pragma once
 
 #include "core/framework/execution_provider.h"
+#include "core/providers/neutron/neutron_provider_factory.h"
 
 
 namespace onnxruntime {
 
 class NeutronExecutionProvider : public IExecutionProvider {
  public:
-  explicit NeutronExecutionProvider(uint32_t neutron_flags);
+  explicit NeutronExecutionProvider(NeutronProviderOptions neutron_options);
   virtual ~NeutronExecutionProvider();
 
   std::shared_ptr<KernelRegistry> GetKernelRegistry() const override;
@@ -24,8 +25,12 @@ class NeutronExecutionProvider : public IExecutionProvider {
     return nullptr;
   }
 
+  bool IsOfflinePacked() const{
+    return neutron_options_.offline_packed;
+  }
+
  private:
-  uint32_t neutron_flags_;
+  NeutronProviderOptions neutron_options_;
   uint32_t node_number_{0};
 };
 

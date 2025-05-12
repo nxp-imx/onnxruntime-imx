@@ -1,3 +1,5 @@
+// Copyright (c) NXP. All rights reserved.
+
 #pragma once
 
 #include "core/framework/op_kernel.h"
@@ -37,8 +39,7 @@ class MatMulNBits final : public OpKernel {
         nbits_{narrow<size_t>(info.GetAttr<int64_t>("bits"))},
         blocks_per_col_{(K_ + block_size_ - 1) / block_size_},
         accuracy_level_{4},
-        has_g_idx_{info.GetInputCount() > InputIndex::G_IDX && info.node().InputDefs()[InputIndex::G_IDX]->Exists()},
-        has_bias_{info.GetInputCount() > InputIndex::BIAS && info.node().InputDefs()[InputIndex::BIAS]->Exists()} {
+        offline_packed_{static_cast<const NeutronExecutionProvider*>(info.GetExecutionProvider())->IsOfflinePacked()} {
   }
 
   Status Compute(OpKernelContext* context) const override;
@@ -57,9 +58,8 @@ class MatMulNBits final : public OpKernel {
   const size_t nbits_;
   const size_t blocks_per_col_;
   const int64_t accuracy_level_;
-  const bool has_g_idx_;
-  const bool has_bias_;
   const uint8_t *unpacked_b_{NULL};
+  size_t b_size_;
   float *int8_scale_{NULL};
 
   // neutron parameters
@@ -74,6 +74,7 @@ class MatMulNBits final : public OpKernel {
   int8_t   *m_decode_bias{NULL};
 
   float *float_b{NULL};
+  const bool offline_packed_{false};
 };
 
 }  // namespace neutron
