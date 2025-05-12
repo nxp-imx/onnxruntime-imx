@@ -10,25 +10,26 @@
 namespace onnxruntime {
 
 struct NeutronProviderFactory : IExecutionProviderFactory {
-  NeutronProviderFactory(uint32_t neutron_flags) : neutron_flags_(neutron_flags) {}
+  NeutronProviderFactory(NeutronProviderOptions neutron_options) : neutron_options_(neutron_options) {}
   ~NeutronProviderFactory() override = default;
   std::unique_ptr<IExecutionProvider> CreateProvider() override;
 
  private:
-  uint32_t neutron_flags_;
+  NeutronProviderOptions neutron_options_;
 };
 
 std::unique_ptr<IExecutionProvider> NeutronProviderFactory::CreateProvider() {
-  return std::make_unique<NeutronExecutionProvider>(neutron_flags_);
+  return std::make_unique<NeutronExecutionProvider>(neutron_options_);
 }
 
-std::shared_ptr<IExecutionProviderFactory> NeutronProviderFactoryCreator::Create(uint32_t neutron_flags) {
-  return std::make_shared<onnxruntime::NeutronProviderFactory>(neutron_flags);
+std::shared_ptr<IExecutionProviderFactory> NeutronProviderFactoryCreator::Create(
+		NeutronProviderOptions neutron_options) {
+  return std::make_shared<onnxruntime::NeutronProviderFactory>(neutron_options);
 }
 }  // namespace onnxruntime
 
 ORT_API_STATUS_IMPL(OrtSessionOptionsAppendExecutionProvider_Neutron,
-                    _In_ OrtSessionOptions* options, uint32_t neutron_flags) {
-  options->provider_factories.push_back(onnxruntime::NeutronProviderFactoryCreator::Create(neutron_flags));
+                    _In_ OrtSessionOptions* options, NeutronProviderOptions neutron_options) {
+  options->provider_factories.push_back(onnxruntime::NeutronProviderFactoryCreator::Create(neutron_options));
   return nullptr;
 }

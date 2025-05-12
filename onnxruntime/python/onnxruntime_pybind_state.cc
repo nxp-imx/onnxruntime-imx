@@ -1209,8 +1209,26 @@ static std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory
 #endif
   } else if (type == kNeutronExecutionProvider) {
 #ifdef USE_NEUTRON
-    // @TODO: Leverage flags
-    return onnxruntime::NeutronProviderFactoryCreator::Create(0)->CreateProvider();
+    NeutronProviderOptions neutron_options = {0,0};
+    auto it = provider_options_map.find(type);
+    if (it != provider_options_map.end()) {
+      for (auto option : it->second) {
+        if (option.first == "offline_packed") {
+          std::set<std::string> supported_values = {"true", "True", "false", "False"};
+          if (supported_values.find(option.second) != supported_values.end()) {
+            neutron_options.offline_packed = (option.second == "true") || (option.second == "True");
+          } else {
+            ORT_THROW(
+                "Invalid value for enable_fast_math. "
+                "Select from 'true' or 'false'\n");
+          }
+        } else {
+          ORT_THROW("Unrecognized option: ", option.first);
+        }
+      }
+    }
+
+    return onnxruntime::NeutronProviderFactoryCreator::Create(neutron_options)->CreateProvider();
 #endif
   } else {
     // check whether it is a dynamic load EP:
