@@ -1132,6 +1132,9 @@ if (onnxruntime_USE_NEUTRON)
     COMMAND ${CMAKE_COMMAND} -E copy
         $<TARGET_FILE:onnxruntime_providers_neutron>
         $<TARGET_FILE_DIR:${build_output_target}>/onnxruntime/capi/
+    COMMAND ${CMAKE_COMMAND} -E copy
+        ${REPO_ROOT}/onnxruntime/core/providers/neutron/tools/convert_ort_models_to_neutron.py
+        $<TARGET_FILE_DIR:${build_output_target}>/onnxruntime/tools/
   )
 endif()
 
