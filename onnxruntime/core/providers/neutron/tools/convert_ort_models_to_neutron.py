@@ -3,6 +3,7 @@ import onnx
 import numpy as np
 import math
 import argparse
+import multiprocessing
 from ctypes import *
 from onnx import numpy_helper, helper
 
@@ -220,7 +221,9 @@ def ScalesPacker(decodeScales, N, channelDensity, blocksPerCol):
         neutronScales[i * blocksPerCol + j * channelDensity + k] = DecimalToNeutron(decodeScales[i + k, j])
   return neutronScales
 
-def ConvertWeightToNeutron(K, N, blockSize, B, scales):
+def ConvertWeightToNeutron(cvt_args):
+  b_name, B, scales, K, N, blockSize = cvt_args
+  print("Packing weight: ", b_name)
   blocksPerCol = (K + blockSize - 1) // blockSize
   channelDensity = CalculateChannelDensity(K, blockSize)
 
@@ -230,7 +233,7 @@ def ConvertWeightToNeutron(K, N, blockSize, B, scales):
   packedWeight = WeightPacker(B_int8, N, K, channelDensity)
 
   raw = packedWeight.tobytes() + decodeBiases.tobytes() + packedDecodeScales.tobytes() + bias.tobytes() + factors.tobytes()
-  return np.frombuffer(raw, dtype=np.uint8)
+  return (b_name, np.frombuffer(raw, dtype=np.uint8))
 
 class Index:
     IN_A = 0
@@ -245,6 +248,7 @@ def Main(args):
     nodes = [x for x in model.graph.node if x.op_type == "MatMulNBits"]
     initializers = {init.name: init for init in model.graph.initializer}
 
+    cvt_args = []
     for node in nodes:
         attrs = {attr.name: helper.get_attribute_value(attr) for attr in node.attribute}
         K, N = attrs["K"], attrs["N"]
@@ -255,7 +259,6 @@ def Main(args):
             continue
 
         b_name = node.input[Index.IN_B]
-        print("Packing weight: ", b_name)
         b_tensor = initializers[b_name]
         b_data = numpy_helper.to_array(b_tensor)
 
@@ -263,7 +266,13 @@ def Main(args):
         scales_tensor = initializers[scales_name]
         scales_data = numpy_helper.to_array(scales_tensor)
 
-        packaged_data = ConvertWeightToNeutron(K, N, block_size, b_data, scales_data)
+        cvt_args.append((b_name, b_data, scales_data, K, N, block_size))
+
+    with multiprocessing.Pool(processes=args.jobs) as pool:
+        results = pool.map(ConvertWeightToNeutron, cvt_args)
+
+    for b_name, packaged_data in results:
+        b_tensor = initializers[b_name]
         b_tensor.CopyFrom(numpy_helper.from_array(packaged_data, name=b_name))
 
     onnx.save(model, args.output)
@@ -277,6 +286,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Offline pack weights to Neutron format.")
     parser.add_argument("-i", "--input", required=True, type=CheckArgs, help="Input model file name")
     parser.add_argument("-o", "--output", type=CheckArgs, help="Output model file name")
+    parser.add_argument("-j", "--jobs", type=int, default=multiprocessing.cpu_count(), help="Number of jobs")
     args = parser.parse_args()
 
     if (args.output == None):
