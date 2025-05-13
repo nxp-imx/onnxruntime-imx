@@ -219,11 +219,10 @@ std::unique_ptr<IExecutionProvider> DefaultArmNNExecutionProvider(bool enable_ar
 #endif
 }
 
-std::unique_ptr<IExecutionProvider> DefaultNeutronExecutionProvider(uint32_t neutron_flags) {
+std::unique_ptr<IExecutionProvider> DefaultNeutronExecutionProvider() {
 #ifdef USE_NEUTRON
-  return NeutronProviderFactoryCreator::Create(neutron_flags)->CreateProvider();
+  return NeutronProviderFactoryCreator::Create({0,0})->CreateProvider();
 #else
-  ORT_UNUSED_PARAMETER(neutron_flags);
   return nullptr;
 #endif
 }
