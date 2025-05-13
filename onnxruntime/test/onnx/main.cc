@@ -732,7 +732,7 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
     }
     if (enable_neutron) {
 #ifdef USE_NEUTRON
-      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Neutron(sf, 0));
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Neutron(sf, {0, 0}));
 #else
       fprintf(stderr, "Neutron is not supported in this build\n");
       return -1;
