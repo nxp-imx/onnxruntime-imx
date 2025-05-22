@@ -1,4 +1,4 @@
-// Copyright (c) NXP. All rights reserved.
+// Copyright 2025 NXP
 
 #include "core/providers/neutron/ops/quantize_linear.h"
 #include "core/framework/element_type_lists.h"

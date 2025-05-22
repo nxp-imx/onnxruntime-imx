@@ -1,5 +1,4 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
+// Copyright 2025 NXP 
 
 #include "core/providers/neutron/ops/matmul_integer.h"
 #include "core/framework/op_kernel.h"

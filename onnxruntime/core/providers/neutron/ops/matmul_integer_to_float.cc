@@ -1,4 +1,4 @@
-// Copyright (c) NXP. All rights reserved.
+// Copyright 2025 NXP
 
 #include "core/providers/neutron/ops/matmul_integer_to_float.h"
 #include "core/framework/op_kernel.h"

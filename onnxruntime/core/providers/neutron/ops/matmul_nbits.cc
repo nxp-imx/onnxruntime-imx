@@ -1,5 +1,4 @@
-// Copyright (c) NXP. All rights reserved.
-// Licensed under the MIT License.
+// Copyright 2025 NXP
 
 #include <cstdint>
 #include <type_traits>
