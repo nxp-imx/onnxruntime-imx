@@ -1,4 +1,4 @@
-// Copyright (c) NXP. All rights reserved.
+// Copyright 2025 NXP
 
 #pragma once
 

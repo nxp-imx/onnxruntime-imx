@@ -1,4 +1,4 @@
-// Copyright 2024 NXP
+// Copyright 2025 NXP
 
 #pragma once
 

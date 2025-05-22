@@ -1,4 +1,4 @@
-// Copyright (c) NXP. All rights reserved.
+// Copyright 2025 NXP
 
 /* Include `provider_api.h` first to avoid funny inclusion issues */
 //#include "core/providers/shared_library/provider_api.h"
