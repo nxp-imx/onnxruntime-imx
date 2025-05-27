@@ -1,4 +1,4 @@
-# Copyright (c) NXP. All rights reserved.
+# Copyright 2025 NXP
 import onnx
 import numpy as np
 import math
@@ -211,15 +211,14 @@ def ComputeWeightAndBias(B, decodeScales, N, blocksPerCol, groupSize):
 
   return B_int8, decodeBiases, bias.astype(np.int32)
 
-def ScalesPacker(decodeScales, N, channelDensity, blocksPerCol):
-  decodeScales = np.abs(decodeScales)
-
-  neutronScales = np.zeros(N  * blocksPerCol, np.int16)
+def DecodeDataPacker(data, N, channelDensity, blocksPerCol, isBias):
+  packed = np.zeros(N  * blocksPerCol, np.int8 if isBias else np.int16)
   for i in range(0, N, channelDensity):
     for k in range(channelDensity):
       for j in range(blocksPerCol):
-        neutronScales[i * blocksPerCol + j * channelDensity + k] = DecimalToNeutron(decodeScales[i + k, j])
-  return neutronScales
+        value = data[i + k, j] if isBias else DecimalToNeutron(abs(data[i + k, j]))
+        packed[i * blocksPerCol + j * channelDensity + k] = value
+  return packed
 
 def ConvertWeightToNeutron(cvt_args):
   b_name, B, scales, K, N, blockSize = cvt_args
@@ -229,10 +228,12 @@ def ConvertWeightToNeutron(cvt_args):
 
   decodeScales, factors = ComputeDecodeScales(N, blocksPerCol, scales)
   B_int8, decodeBiases, bias = ComputeWeightAndBias(B, decodeScales, N, blocksPerCol, blockSize)
-  packedDecodeScales = ScalesPacker(decodeScales, N, channelDensity, blocksPerCol)
+  packedDecodeScales = DecodeDataPacker(decodeScales, N, channelDensity, blocksPerCol, False)
+  packedDecodeBiases = DecodeDataPacker(decodeBiases, N, channelDensity, blocksPerCol, True)
   packedWeight = WeightPacker(B_int8, N, K, channelDensity)
 
-  raw = packedWeight.tobytes() + decodeBiases.tobytes() + packedDecodeScales.tobytes() + bias.tobytes() + factors.tobytes()
+  raw = packedWeight.tobytes() + packedDecodeBiases.tobytes() + \
+        packedDecodeScales.tobytes() + bias.tobytes() + factors.tobytes()
   return (b_name, np.frombuffer(raw, dtype=np.uint8))
 
 class Index:
