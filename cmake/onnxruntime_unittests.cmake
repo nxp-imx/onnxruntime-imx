@@ -584,7 +584,10 @@ if(onnxruntime_USE_NNAPI_BUILTIN)
 endif()
 
 if(onnxruntime_USE_VSINPU)
+  list(APPEND onnxruntime_test_framework_src_patterns  ${TEST_SRC_DIR}/providers/vsinpu/*)
+  list(APPEND onnxruntime_test_framework_libs onnxruntime_providers_vsinpu)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_vsinpu)
+  list(APPEND onnxruntime_test_providers_libs onnxruntime_providers_vsinpu)
 endif()
 
 if(onnxruntime_USE_JSEP)
