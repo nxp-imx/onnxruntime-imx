@@ -559,6 +559,13 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
 #else
     ORT_THROW("VitisAI is not supported in this build\n");
 #endif
+  } else if (provider_name_ == onnxruntime::kNeutronExecutionProvider) {
+#ifdef USE_NEUTRON
+    Ort::ThrowOnError(
+        OrtSessionOptionsAppendExecutionProvider_Neutron(session_options, 0));
+#else
+    ORT_THROW("Neutron is not supported in this build\n");
+#endif
   } else if (!provider_name_.empty() &&
              provider_name_ != onnxruntime::kCpuExecutionProvider &&
              provider_name_ != onnxruntime::kOpenVINOExecutionProvider) {
