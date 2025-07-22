@@ -172,6 +172,14 @@ bool BaseOpBuilder::BuildOp(vsi::npu::GraphEP* graph_ep,
   std::vector<NodeUnitIODef> output_defs = node_unit.Outputs();
 
   for (const auto input_def : input_defs) {
+    //If a input is null, skip it.
+    if (input_def.node_arg.Name().empty()){
+      LOGS_DEFAULT(WARNING) << "[VSINPU EP] Ignoring otptional empty input in node("
+                            <<  node_unit.Name() << ")";
+      inputs.push_back(nullptr);
+      continue;
+    }
+
     auto it = std::find_if(
         graph_ep->GetGraphInputs().begin(), graph_ep->GetGraphInputs().end(),
         [input_def](const std::shared_ptr<GraphIOInfo>& info) {
