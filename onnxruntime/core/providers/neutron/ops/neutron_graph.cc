@@ -1,0 +1,120 @@
+// Copyright 2025 NXP
+
+#include <cstdint>
+#include <type_traits>
+#include <algorithm>
+
+#include "core/framework/op_kernel.h"
+#include "core/framework/tensorprotoutils.h"
+#include "core/providers/neutron/neutron_fwd.h"
+#include "core/providers/neutron/neutron_kernel.h"
+
+#if NEUTRON_AARCH64
+#include "neutron/NeutronDriver.h"
+#endif
+
+namespace onnxruntime {
+namespace neutron {
+
+namespace NeutronIndex {
+//Input index
+constexpr int32_t MICROCODE = 0,
+                  WEIGHTS = 1,
+                  KERNELS = 2;
+//Output index
+constexpr int32_t SCRATCH = 0;
+};
+
+class NeutronGraphKernel final : public OpKernel {
+public:
+  NeutronGraphKernel(const OpKernelInfo& info)
+      : OpKernel(info),
+        input_count_{info.GetInputCount()},
+        output_count_{info.GetOutputCount()} {
+    // Allocate arrays for inputs and outputs
+    dcfg_.inputs = new const void*[input_count_ - 3];
+    dcfg_.outputs = new void*[output_count_ - 1];
+
+    for (uint32_t i = 0; i < output_count_; ++ i) {
+      auto shape_proto = info.node().OutputDefs().at(i)->Shape();
+      auto shape = utils::GetTensorShapeFromTensorShapeProto(*shape_proto);
+      output_shapes_.push_back(shape);
+    }
+  }
+
+  Status PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
+                 /*out*/ bool& is_packed,
+                 /*out*/ PrePackedWeights* prepacked_weights) override {
+    ORT_UNUSED_PARAMETER(alloc);
+    ORT_UNUSED_PARAMETER(is_packed);
+    ORT_UNUSED_PARAMETER(prepacked_weights);
+    switch (input_idx) {
+      case NeutronIndex::MICROCODE: {
+        mcfg_.microcode = tensor.DataRaw();
+        break;
+      }
+      case NeutronIndex::WEIGHTS: {
+        mcfg_.weights = tensor.DataRaw();
+	break;
+      }
+      case NeutronIndex::KERNELS: {
+        mcfg_.kernels = tensor.DataRaw();
+        auto ret = neutronModelPrepare(&mcfg_, &nmh_);
+        ORT_ENFORCE(ret == ENONE, "NeutronGraph model prepare error");
+	break;
+      }
+    }
+    return Status::OK();
+  }
+
+  Status Compute(OpKernelContext* ctx) const override {
+    // Set reference for all inputs
+    for (uint32_t i = 3; i < input_count_; i ++) {
+      const auto* tensor = ctx->Input<Tensor>(i);
+      dcfg_.inputs[i - 3] = tensor->DataRaw();
+    }
+
+    for (uint32_t i = 1; i < output_count_; ++ i) {
+      auto* output = ctx->Output(i, output_shapes_[i]);
+      dcfg_.outputs[i - 1] = output->MutableDataRaw();
+    }
+    // Run neutron compute.
+    auto ret = neutronRunBlocking(nmh_, &dcfg_);
+    if (ret != ENONE) {
+      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:NeutronGraph falied to invoke");
+    }
+
+    return Status::OK();
+  }
+
+  ~NeutronGraphKernel() override {
+    neutronModelUnprepare(nmh_);
+    delete dcfg_.inputs;
+    delete dcfg_.outputs;
+  }
+
+private:
+
+  const uint32_t input_count_;
+  const uint32_t output_count_;
+  std::vector<TensorShape> output_shapes_;
+
+  NeutronModelConfig mcfg_;
+  NeutronDataConfig dcfg_;
+  NeutronModelHandle nmh_;
+};
+
+ONNX_OPERATOR_TYPED_KERNEL_EX(                                            \
+    NeutronGraph,                                                         \
+    kNeutronDomain,                                                       \
+    1,                                                                    \
+    int8_t,                                                               \
+    kNeutronExecutionProvider,                                            \
+    KernelDefBuilder()                                                    \
+        .TypeConstraint("T2", DataTypeImpl::GetTensorType<uint8_t>())     \
+        .TypeConstraint("T2", DataTypeImpl::GetTensorType<uint8_t>())     \
+        .TypeConstraint("T2", DataTypeImpl::GetTensorType<uint8_t>())     \
+        .TypeConstraint("T1", DataTypeImpl::GetTensorType<int8_t>()),     \
+    onnxruntime::neutron::NeutronGraphKernel);
+}  // namespace neutron
+}  // namespace onnxruntime

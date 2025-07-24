@@ -63,6 +63,8 @@ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDoma
 
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kMSDomain, 1, float, MatMulNBits);
 
+class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kNeutronDomain, 1, int8_t, NeutronGraph);
+
 static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
   static const BuildKernelCreateInfoFn function_table[] = {
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(
@@ -99,6 +101,8 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
                           kNeutronExecutionProvider, kOnnxDomain, 10, int8_t, MatMulInteger)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kMSDomain, 1, float, MatMulNBits)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kNeutronDomain, 1, int8_t, NeutronGraph)>,
   };
 
   for (auto& function_table_entry : function_table) {
@@ -149,7 +153,8 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
         "QuantizeLinear" == node.OpType() ||
         "QLinearMatMul" == node.OpType() ||
         "MatMulIntegerToFloat" == node.OpType() ||
-        "MatMulInteger" == node.OpType()) {
+        "MatMulInteger" == node.OpType() ||
+        "NeutronGraph" == node.OpType()) {
       candidates.push_back(node.Index());
     } else if ("MatMulNBits" == node.OpType()) {
       const auto& attributes = node.GetAttributes();
