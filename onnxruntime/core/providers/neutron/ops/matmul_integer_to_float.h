@@ -16,18 +16,6 @@ class MatMulIntegerToFloatBase : public MatMulIntegerBase {
   MatMulIntegerToFloatBase(const OpKernelInfo& info) : MatMulIntegerBase(info) {}
 
   enum OutputTensors : int { OUT_Y = 0 };
-
- protected:
-  Status ComputeCommon(OpKernelContext* ctx,
-                       const uint8_t* a_data,
-                       const TensorShape& a_shape,
-                       float a_scale,
-                       uint8_t a_zp,
-                       bool a_is_signed,
-                       const Tensor* b_tensor,
-                       const Tensor* b_scale,
-                       const Tensor* b_zp,
-                       const Tensor* bias_tensor) const;
 };
 
 class MatMulIntegerToFloat final : public MatMulIntegerToFloatBase {
@@ -69,12 +57,6 @@ class MatMulIntegerToFloat final : public MatMulIntegerToFloatBase {
   uint32_t m_b_cols;
   const float  *m_output_bias{NULL};
   std::vector<float> m_out_scale;
-  bool useCPU{false};
-
- private:
-  // a scale and b scale may be switched in fusion stage because of lack of shape information.
-  // Fix them up before computation.
-  static void FixupScaleTensor(const Tensor*& a_scale_tensor, const Tensor*& b_scale_tensor);
 };
 
 

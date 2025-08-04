@@ -31,6 +31,7 @@ class NeutronExecutionProvider : public IExecutionProvider {
 
  private:
   NeutronProviderOptions neutron_options_;
+  bool neutron_init_{false};
   uint32_t node_number_{0};
 };
 

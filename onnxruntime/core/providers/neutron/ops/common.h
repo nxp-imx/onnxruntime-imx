@@ -8,41 +8,36 @@
 namespace onnxruntime {
 namespace neutron {
 
-/*
-    From CPU Provider implementation
-*/
+void PrepareForQDQ(const TensorShape& input_shape,
+                   const Tensor& scale,
+                   const Tensor* zero_point_ptr,
+                   int64_t axis,
+                   int64_t& block_count,
+                   int64_t& broadcast_dim,
+                   int64_t& block_size);
 
-static void PrepareForQDQ(const TensorShape& input_shape,
-                          const Tensor& scale,
-                          const Tensor* zero_point_ptr,
-                          int64_t axis,
-                          int64_t& block_count,
-                          int64_t& broadcast_dim,
-                          int64_t& block_size) {
-  if (IsScalarOr1ElementVector(&scale)) {  // per-tensor QuantizeLinear/DequantizeLinear
-    block_count = 1;
-    broadcast_dim = 1;
-    block_size = static_cast<size_t>(input_shape.Size());
+uint32_t ScaleToNeutron(float scale_data);
 
-    // enforce that zero point are scalars
-    ORT_ENFORCE(zero_point_ptr == nullptr || IsScalarOr1ElementVector(zero_point_ptr),
-                "x_zero_point must be null or a scalar or 1D tensor or size 1.");
-  } else {  // per-channel QuantizeLinear/DequantizeLinear
-    const int64_t axis_no_neg = HandleNegativeAxis(axis, input_shape.NumDimensions());
-    block_count = input_shape.SizeToDimension(onnxruntime::narrow<size_t>(axis_no_neg));
-    broadcast_dim = input_shape[onnxruntime::narrow<size_t>(axis_no_neg)];
-    block_size = input_shape.SizeFromDimension(SafeInt<size_t>(axis_no_neg) + 1);
+std::tuple<int, int, int>
+TilingSolver(int embeddings_in,
+             int groupSize,
+             int resNumBytes,
+             int weightBits,
+             bool decodeWeights = true,
+             bool useDecodeBias = true,
+             int MACS = 16,
+             int neutrons = 4,
+             int tcm_size = 1024 * 1024,
+             int tcm_banks = 16);
 
-    // if an axis was specified, ensure the scale and zero point are compatible
-    ORT_ENFORCE(scale.Shape().NumDimensions() == 1 && scale.Shape()[0] == broadcast_dim,
-                "scale must be 1D tensor with size ",
-                broadcast_dim);
-    ORT_ENFORCE(zero_point_ptr == nullptr ||
-               (zero_point_ptr->Shape().NumDimensions() == 1 && zero_point_ptr->Shape()[0] == broadcast_dim),
-                "x_zero_point must be null or 1D tensor with size ",
-                broadcast_dim);
-  }
-}
+void OrganizeWeightsData(const int8_t* weights,
+                         int8_t* output,
+                         int rowsB,
+                         int colsB,
+                         int channelDensity,
+                         int numNeutrons,
+                         int weightBits = 4,
+                         int MACs = 16);
 
 }  // namespace neutron
 }  // namespace onnxruntime

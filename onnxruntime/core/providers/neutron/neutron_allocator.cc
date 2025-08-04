@@ -21,12 +21,10 @@ NeutronStackAllocator::~NeutronStackAllocator() {
     releaseBuffer(p_);
 }
 
-void NeutronStackAllocator::Init() {
+bool NeutronStackAllocator::Init() {
   static bool init = false;
 
   if (!init) {
-    _Bool user = true;
-
     // update number handles
     char *strNumHandles = NULL;
     strNumHandles = getenv("NEUTRON_CMA_512SLOTS");
@@ -39,28 +37,26 @@ void NeutronStackAllocator::Init() {
     }
 
     size_t fullNeutronBufferSize = neutronNumHandles * kBoundaryNeutronBufferSize;
-
-
-    printf("[NeutronEP:Allocator] CMA %s memory %ld MB\n", user ? "userspace" : "kernel", (fullNeutronBufferSize/1024/1024));
-
-    NeutronError ret = allocateBuffer(fullNeutronBufferSize, (void **)&p_, user);
+    NeutronError ret = allocateBuffer(fullNeutronBufferSize, (void **)&p_, true);
     if (ret != ENONE)
-      return;
+      return false;
 
 #ifndef NDEBUG
     printf("NeutronEP: allocated memory %p %ld MB\n", p_ , (fullNeutronBufferSize/1024/1024));
 #endif
 
+    LOGS_DEFAULT(WARNING) << "Alloc CMA userspace memory " << (fullNeutronBufferSize/1024/1024) << " MB";
     for (size_t i = 0; i < neutronNumHandles; i++) {
       neutron_ptr_[i] = p_ + i * kBoundaryNeutronBufferSize;
       size_t rest = fullNeutronBufferSize - i * kBoundaryNeutronBufferSize;
       neutron_size_[i] =  rest >=  kBoundaryNeutronBufferSize ? kBoundaryNeutronBufferSize : (uint32_t) rest;
 
-      printf("[NeutronEP:Allocator] %ld %p %ld MB\n", i, neutron_ptr_[i], (long)(neutron_size_[i]/1024/1024));
+      LOGS_DEFAULT(WARNING) << "Alloc " << neutron_ptr_[i] << (long)(neutron_size_[i]/1024/1024) << "MB for slot " << i;
     }
 
     init = true;
   }
+  return true;
 }
 
 size_t NeutronStackAllocator::getMemoryHandle() {

@@ -1,12 +1,12 @@
 // Copyright 2025 NXP 
 
 #include "core/providers/neutron/ops/matmul_integer.h"
+#include "core/providers/neutron/ops/common.h"
 #include "core/framework/op_kernel.h"
 #include "core/providers/neutron/neutron_fwd.h"
 
 #include "core/providers/cpu/math/matmul_helper.h"
 #include "core/util/math_cpuonly.h"
-#include "core/util/qmath.h"
 
 #include <algorithm>
 
@@ -52,7 +52,6 @@ Status MatMulInteger::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
                                      /*out*/ bool& is_packed,
                                      /*out*/ PrePackedWeights* prepacked_weights) {
  try {
-    if (!useCPU) {
       switch (input_idx) {
       case IN_A:
         break;
@@ -62,18 +61,24 @@ Status MatMulInteger::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
           m_b_cols = tensor.Shape()[0];
 
           if (m_b_rows % 16 || (m_b_rows * 16 >= 1024*1024))
-              throw std::bad_alloc();
+              throw std::invalid_argument("NeutronEP:MatMulInteger invalid argument(s)");
+
+          auto [channelDensity, numNeutrons, divisions] = TilingSolver(m_b_cols, -1, 4, 8, false, false);
 
           m_handle = neutronAlloc->getMemoryHandle();
           m_header = (uint32_t*) neutronAlloc->Alloc(16*sizeof(uint32_t), m_handle);
           m_b_neutron = (int8_t*) neutronAlloc->Alloc(m_b_rows * m_b_cols, m_handle);
 
+          neutronAlloc->pushMemoryState(m_handle);
+          auto tempWeight = (int8_t*)neutronAlloc->AllocReserved(m_b_rows * m_b_cols, m_handle);
           const int8_t *b_data = static_cast<const int8_t*>(tensor.DataRaw());
           for(uint32_t i=0; i<m_b_cols; i++) {
             for(uint32_t j=0; j<m_b_rows; j++) {
-              m_b_neutron[m_b_cols*j+i] = b_data[m_b_rows*i+j];
+              tempWeight[m_b_cols*j+i] = b_data[m_b_rows*i+j];
             }
           }
+          OrganizeWeightsData(tempWeight, m_b_neutron, m_b_rows,
+                              m_b_cols, channelDensity, numNeutrons, 8, 16);
           clean_cache(m_b_neutron, m_b_rows*m_b_cols);
 
           // m_b_bias
@@ -81,28 +86,16 @@ Status MatMulInteger::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
           for (uint32_t i=0; i< m_b_rows; i++){
             int32_t row_sum = 0;
             for (uint32_t j=0; j< m_b_cols; j++) {
-              row_sum += *(m_b_neutron + i * m_b_cols + j);
+              row_sum += *(tempWeight + i * m_b_cols + j);
             }
             m_b_row_sum[i] = row_sum;
           }
-          m_b_bias = (int32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(int32_t), m_handle);
+          neutronAlloc->popMemoryState(m_handle);
 
+          m_b_bias = (int32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(int32_t), m_handle);
           // m_b_factors
           m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
-          float scale = 1;
-          float *pfloat = &scale;
-          uint32_t u32 = *(uint32_t*) pfloat;
-
-          uint32_t scaler = (u32 >>8) & 0x7fff ; // extract mantissa (15bits)
-          int8_t exp_tmp = (u32 >> 23) & 0xff; // extract exponent
-
-          scaler = (exp_tmp==0) ? 0 :  scaler | 0x8000; // add hidden bit or zero out (if zero or subnormal
-          exp_tmp = -(exp_tmp -142); // we subtract FP32 offset as well as 16bit growth of our scaler (126 is power of -1 so mantissa is in range 0.5 to 1, 126 + 16=142, where 16 is the factor we multiply by in scaler)
-          int8_t exp = (exp_tmp>63) ? 63 : exp_tmp; // ensure that we don't exceed available shift bits (note that this step could, in theory be skipped if this never happens. Not sure if we can take the chance)
-          //if (exp == 63)
-          //      printf("scalar %0d, exp %0d", (uint32_t)scaler, (uint32_t)exp);
-          scaler = (exp<<16) | scaler; // merge scaler and downshift factor into the Neutron 32bit scaler format (16bit scaler in LSB and then 6bits of downshift)
-
+          uint32_t scaler = ScaleToNeutron(1.0);
           for (uint32_t i=0; i< m_b_rows; i++){
             m_b_factors[i] = scaler;
           }
@@ -125,15 +118,10 @@ Status MatMulInteger::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
         // todo: implement a check
         break;
       }
-    }
   }
-  catch (const std::bad_alloc &e) {
+  catch (const std::exception &e) {
     // Do not delegate this instance if out of memory
-    printf("[NeutronEP:MatMulInteger] W[%d, %d] will be executed on CPU\n", m_b_cols, m_b_rows);
-    useCPU = true;
-
-    // Fast CPU prepacking
-    return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, e.what());
   }
   return Status::OK();
 }
@@ -149,8 +137,9 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
   const auto* a = ctx->Input<Tensor>(IN_A);
   const auto* b = packed_b_ ? nullptr : ctx->Input<Tensor>(IN_B);
 
-  if (!useCPU && m_header && m_b_neutron) {
-
+  if (!m_header || !m_b_neutron) {
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulInteger falied to init.");
+  } else {
     clock_gettime(CLOCK_REALTIME, &t1);
 
     if (m_dynamic_bias) {
@@ -172,7 +161,7 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
     uint32_t neutron_b_rows = b ? b->Shape()[1] : m_b_rows;
     uint32_t neutron_b_cols = b ? b->Shape()[0] : m_b_cols;
     if (neutron_a_cols != neutron_b_cols) {
-      printf("Neutron dimenssions do not match!\n");
+      LOGS_DEFAULT(WARNING) << "Neutron dimenssions do not match!";
     }
 
     clock_gettime(CLOCK_REALTIME, &t2);
@@ -207,7 +196,6 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
     NeutronError ret = ENONE;
     ret = matmul((const void *)m_header, 16*sizeof(uint32_t), (const void*)a_neutron, a_size, (const void*)y_neutron, y_size, m_handle);
     if (ret != ENONE){
-        printf("matmul() error %d\n", ret);
         return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
     }
 
@@ -221,7 +209,7 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
     clock_gettime(CLOCK_REALTIME, &t5);
 
 #ifndef NDEBUG
-    printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, out_copy %f\n",
+    printf("Neutron MatMulInteger [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, out_copy %f\n",
             neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
 #endif
 
@@ -237,106 +225,6 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
     printf("Neutron: Prepared matmul in %f us\n", time_diff(t1,t3));
     printf("Neutron: Computed matmul in %f us\n", time_diff(t3,t4));
     printf("Neutron: Copying result in %f us\n", time_diff(t4,t5));
-#endif
-  }
-#ifdef NDEBUG
-  else
-#endif
- {
-     clock_gettime(CLOCK_REALTIME, &t1);
-
-  // validate zero points
-  uint8_t a_offset = 0;
-  const auto* a_zero_point = ctx->Input<Tensor>(IN_A_ZERO_POINT);
-  if (a_zero_point != nullptr) {
-    ORT_ENFORCE(IsScalarOr1ElementVector(a_zero_point),
-                "MatmulInteger : input1 zero point must be a scalar or 1D tensor of size 1");
-    a_offset = *(static_cast<const uint8_t*>(a_zero_point->DataRaw()));
-  }
-
-  bool is_b_zp_per_column = false;
-  uint8_t b_default_offset = 0;
-  const uint8_t* b_offset_ptr = &b_default_offset;
-  const auto* b_zero_point = ctx->Input<Tensor>(IN_B_ZERO_POINT);
-  if (b_zero_point != nullptr) {
-    ORT_ENFORCE(IsBQuantParamSupported(b_zero_point->Shape(), b ? b->Shape() : b_shape_),
-                "MatmulInteger : B zero point is not valid");
-    is_b_zp_per_column = !IsScalarOr1ElementVector(b_zero_point);
-    b_offset_ptr = static_cast<const uint8_t*>(b_zero_point->DataRaw());
-  }
-
-  MatMulComputeHelper helper;
-  const uint8_t* b_data;
-  bool b_is_signed;
-  if (nullptr != b) {
-    ORT_RETURN_IF_ERROR(helper.Compute(a->Shape(), b->Shape(), nullptr, b_zero_point ? &b_zero_point->Shape() : nullptr));
-    b_data = static_cast<const uint8_t*>(b->DataRaw());
-    b_is_signed = b->IsDataType<int8_t>();
-  } else {
-    ORT_RETURN_IF_ERROR(helper.Compute(a->Shape(), b_shape_, nullptr, b_zero_point ? &b_zero_point->Shape() : nullptr));
-    b_data = static_cast<const uint8_t*>(packed_b_.get());
-    b_is_signed = b_is_signed_;
-  }
-
-  Tensor* y = ctx->Output(OUT_Y, helper.OutputShape());
-  // Bail out early if the output is going to be empty
-  if (y->Shape().Size() == 0)
-    return Status::OK();
-
-  const uint8_t* a_data = static_cast<const uint8_t*>(a->DataRaw());
-  auto* y_data = y->MutableData<int32_t>();
-
-  MLAS_GEMM_QUANT_SHAPE_PARAMS gemm_shape;
-  gemm_shape.M = static_cast<size_t>(helper.M());
-  gemm_shape.N = static_cast<size_t>(helper.N());
-  gemm_shape.K = static_cast<size_t>(helper.K());
-  gemm_shape.AIsSigned = a->IsDataType<int8_t>();
-  gemm_shape.BIsSigned = b_is_signed;
-
-  const size_t batch_size = helper.OutputOffsets().size();
-  std::vector<MLAS_GEMM_QUANT_DATA_PARAMS> gemm_data_vec(batch_size);
-
-  for (size_t batch = 0; batch < batch_size; batch++) {
-    auto& gemm_params = gemm_data_vec[batch];
-    gemm_params.lda = gemm_shape.K;
-    gemm_params.ZeroPointA = a_offset;
-    gemm_params.ldb = gemm_shape.N;
-    gemm_params.ZeroPointB = b_offset_ptr + helper.RightZeroPointOffsets()[batch];
-    gemm_params.PerColumnZeroPoints = is_b_zp_per_column;
-    gemm_params.ldc = gemm_shape.N;
-    gemm_params.BIsPacked = bool(packed_b_);
-    gemm_params.A = a_data + helper.LeftOffsets()[batch];
-    gemm_params.B = b_data + helper.RightOffsets()[batch];
-    gemm_params.C = y_data + helper.OutputOffsets()[batch];
-  }
-  MlasGemmBatch(gemm_shape, gemm_data_vec.data(), batch_size, ctx->GetOperatorThreadPool());
-
- clock_gettime(CLOCK_REALTIME, &t4);
-
-#ifndef NDEBUG
-    // non-transposed b
-    uint32_t neutron_a_rows = a->Shape()[1];
-    uint32_t neutron_a_cols = a->Shape()[2];
-    uint32_t neutron_b_rows = b ? b->Shape()[1] : m_b_rows;
-    uint32_t neutron_b_cols = b ? b->Shape()[0] : m_b_cols;
-
-    printf("CPU MatMulInteger [%d,%d,%d]*[%d,%d]: matmul %f us\n",
-            (uint32_t) a->Shape()[0], neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t4));
-#endif
-
-#ifndef NDEBUG
-    // Dump the output
-    y = ctx->Output<Tensor>(0);
-    printf("\nY shape=%ld %ld %ld\n\n",y->Shape()[0],y->Shape()[1],y->Shape()[2]);
-    const float *y_data_f = static_cast<const float*>(y->DataRaw());
-    printf("\n");
-    for (int i=0; i<y->Shape()[1]; i++) {
-      for (int j=0; j<y->Shape()[2]; j++) {
-        printf("Y[%d][%d]=%f ",i,j,y_data_f[i * y->Shape()[2] + j]);
-      }
-      printf("\n");
-    }
-    printf("CPU: Computed MatMulIntegerToFloat in %f us\n", time_diff(t1,t4));
 #endif
   }
 
