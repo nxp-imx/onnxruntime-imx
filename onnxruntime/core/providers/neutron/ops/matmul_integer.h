@@ -45,9 +45,6 @@ class MatMulInteger final : public MatMulIntegerBase {
   uint8_t  m_a_zp;
   uint32_t m_b_rows;
   uint32_t m_b_cols;
-
-  bool useCPU{false};
-
 };
 
 }  // namespace neutron

@@ -119,7 +119,10 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
 NeutronExecutionProvider::NeutronExecutionProvider(NeutronProviderOptions neutron_options)
     : IExecutionProvider(onnxruntime::kNeutronExecutionProvider),
       neutron_options_(neutron_options) {
-   onnxruntime::neutron::neutronAlloc->Init();
+   neutron_init_ = onnxruntime::neutron::neutronAlloc->Init();
+   if (!neutron_init_) {
+     LOGS_DEFAULT(WARNING) << "Neutron hardware init failed!!! All nodes will be assigned to CPU.";
+   }
 }
 
 NeutronExecutionProvider::~NeutronExecutionProvider() {}
@@ -139,6 +142,10 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
                                         IResourceAccountant*)const {
   InlinedVector<NodeIndex> candidates;
 
+  if (!neutron_init_) {
+    return std::vector<std::unique_ptr<ComputeCapability>>();
+  }
+
   for (auto& node_index : graph.GetNodesInTopologicalOrder()) {
     const auto* p_node = graph.GetNode(node_index);
     if (p_node == nullptr)
@@ -148,17 +155,25 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
     if (!node.GetExecutionProviderType().empty()) {
       continue;
     }
+    const auto& input_defs = node.InputDefs();
 
     if ("DequantizeLinear" == node.OpType() ||
         "QuantizeLinear" == node.OpType() ||
-        "QLinearMatMul" == node.OpType() ||
-        "MatMulIntegerToFloat" == node.OpType() ||
-        "MatMulInteger" == node.OpType() ||
         "NeutronGraph" == node.OpType()) {
       candidates.push_back(node.Index());
+    } else if ("MatMulInteger" == node.OpType() ||
+               "QLinearMatMul" == node.OpType() ||
+               "MatMulIntegerToFloat" == node.OpType()) {
+      const auto* shape_proto = input_defs[1]->Shape(); //B shape
+      auto b_rows = shape_proto->dim(1).dim_value();
+      if (b_rows % 16 || (b_rows * 16 >= 1024*1024)) {
+        LOGS_DEFAULT(INFO) << "NeutronEP: "<< node.OpType() << " ("
+                           << node.Name() << ") not supported, invalid B rows.";
+      } else {
+        candidates.push_back(node.Index());
+      }
     } else if ("MatMulNBits" == node.OpType()) {
       const auto& attributes = node.GetAttributes();
-      const auto& input_defs = node.InputDefs();
       int64_t K = SafeInt<int64_t>(attributes.at("K").i());
       int64_t N = SafeInt<int64_t>(attributes.at("N").i());
 
