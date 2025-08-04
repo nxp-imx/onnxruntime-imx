@@ -59,8 +59,6 @@ class QLinearMatMul : public MatMulIntegerBase {
   uint32_t m_b_cols;
   const float  *m_b_scale_data;
   std::vector<float> m_output_scales;
-
-  bool useCPU{false};
 };
 
 

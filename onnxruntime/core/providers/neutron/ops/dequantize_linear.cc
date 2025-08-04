@@ -4,7 +4,6 @@
 #include "core/framework/element_type_lists.h"
 #include "core/framework/op_kernel.h"
 #include "core/framework/float16.h"
-#include "core/mlas/inc/mlas.h"
 #include "core/providers/neutron/ops/common.h"
 #include "core/providers/neutron/neutron_fwd.h"
 
