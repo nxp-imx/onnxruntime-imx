@@ -18,7 +18,7 @@ constexpr size_t kMaxNeutronNumHandles = NEUTRON_MAX_512MB_SLOTS;
 
 class NeutronStackAllocator {
 public:
-  void Init();
+  bool Init();
 
   // The first operation. Picks the memory slot with most free space.
   size_t getMemoryHandle();

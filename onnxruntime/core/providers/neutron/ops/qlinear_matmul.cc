@@ -1,17 +1,13 @@
 // Copyright 2025 NXP
 
 #include "core/providers/neutron/ops/qlinear_matmul.h"
+#include "core/providers/neutron/ops/common.h"
 #include "core/framework/op_kernel.h"
 #include "core/providers/neutron/neutron_fwd.h"
 
-
-// CPU matmul, remove when neutron integrated
-#include "core/common/narrow.h"
 #include "core/providers/cpu/math/matmul_helper.h"
-#include "core/providers/common.h"
 #include "core/util/math_cpuonly.h"
-#include "core/util/qmath.h"
-#include "core/mlas/inc/mlas.h"
+
 #if NEUTRON_AARCH64
 #include "neutron/NeutronDriver.h"
 #endif
@@ -65,7 +61,6 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
                               /*out*/ bool& is_packed,
                               /*out*/ PrePackedWeights* prepacked_weights) {
   try {
-    if (!useCPU) {
       switch (input_idx) {
       case IN_A:
         break;
@@ -81,28 +76,35 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
           m_b_cols = tensor.Shape()[0];
 
           if ((m_b_rows % 16) || (m_b_rows * 16 >= 1024*1024))
-            throw std::bad_alloc();
+            throw std::invalid_argument("NeutronEP:QLinearMatMul invalid argument(s)");
+
+          auto [channelDensity, numNeutrons, divisions] = TilingSolver(m_b_cols, -1, 4, 8, false, false);
 
           m_handle = neutronAlloc->getMemoryHandle();
           m_header = (uint32_t*) neutronAlloc->Alloc(16*sizeof(uint32_t), m_handle);
 
           m_b_neutron = (int8_t*) neutronAlloc->Alloc(m_b_rows * m_b_cols, m_handle);
+          neutronAlloc->pushMemoryState(m_handle);
+          auto tempWeight = (int8_t*)neutronAlloc->AllocReserved(m_b_rows * m_b_cols, m_handle);
           const int8_t *b_data = static_cast<const int8_t*>(tensor.DataRaw());
           for(uint32_t i=0; i<m_b_cols; i++) {
             for(uint32_t j=0; j<m_b_rows; j++) {
-              m_b_neutron[m_b_cols*j+i] = b_data[m_b_rows*i+j];
+              tempWeight[m_b_cols*j+i] = b_data[m_b_rows*i+j];
             }
           }
+          OrganizeWeightsData(tempWeight, m_b_neutron, m_b_rows,
+                              m_b_cols, channelDensity, numNeutrons, 8, 16);
           clean_cache(m_b_neutron, m_b_rows*m_b_cols);
 
           m_b_bias = (int32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(int32_t), m_handle);
           for (uint32_t i=0; i< m_b_rows; i++){
             int32_t row_sum = 0;
             for (uint32_t j=0; j< m_b_cols; j++) {
-              row_sum += *(m_b_neutron + i * m_b_cols + j);
+              row_sum += *(tempWeight + i * m_b_cols + j);
             }
             m_b_bias[i] = row_sum;
           }
+          neutronAlloc->popMemoryState(m_handle);
         }
         break;
       case IN_B_SCALE:
@@ -123,20 +125,7 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
           m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
 
           for (uint32_t i=0; i< m_b_rows; i++){
-            float *pfloat = &(m_output_scales[i]);
-            uint32_t u32 = *(uint32_t*) pfloat;
-
-            uint32_t scaler = (u32 >>8) & 0x7fff ; // extract mantissa (15bits)
-            int8_t exp_tmp = (u32 >> 23) & 0xff; // extract exponent
-
-            scaler = (exp_tmp==0) ? 0 :  scaler | 0x8000; // add hidden bit or zero out (if zero or subnormal
-            exp_tmp = -(exp_tmp -142); // we subtract FP32 offset as well as 16bit growth of our scaler (126 is power of -1 so mantissa is in range 0.5 to 1, 126 + 16=142, where 16 is the factor we multiply by in scaler)
-            int8_t exp = (exp_tmp>63) ? 63 : exp_tmp; // ensure that we don't exceed available shift bits (note that this step could, in theory be skipped if this never happens. Not sure if we can take the chance)
-            //if (exp == 63)
-            //      printf("scalar %0d, exp %0d", (uint32_t)scaler, (uint32_t)exp);
-            scaler = (exp<<16) | scaler; // merge scaler and downshift factor into the Neutron 32bit scaler format (16bit scaler in LSB and then 6bits of downshift)
-
-            m_b_factors[i] = scaler;
+            m_b_factors[i] = ScaleToNeutron(m_output_scales[i]);
           }
           clean_cache(m_b_factors, m_b_rows*sizeof(uint32_t));
         }
@@ -151,34 +140,17 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
         }
         break;
       }
-    }
   }
-  catch (const std::bad_alloc &e) {
+  catch (const std::exception &e) {
     // Do not delegate this instance if out of memory
-    printf("[NeutronEP:QLinearMatMul} W{%d, %d} will be executed on CPU\n", m_b_cols, m_b_rows);
-    useCPU = true;
-
-    //Fast CPU pre-packing
-    return MatMulIntegerBase::PrePack(tensor, input_idx, alloc, is_packed, prepacked_weights);
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, e.what());
   }
   return Status::OK();
-  /*
-  (void)tensor;
-  (void)input_idx;
-  (void)alloc;
-  (void)is_packed;
-  (void)prepacked_weights;
-  return Status::OK();
-  */
 }
 
 Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
-/* @TODO, based in cpu for testing. Modify to add neutron management */
   const auto* a = ctx->Input<Tensor>(IN_A);
   const auto* b = packed_b_ ? nullptr : ctx->Input<Tensor>(IN_B);
-
-  //  printf("[QLinearMatMul] Input A ptr : %p \n", a->DataRaw());
-  //  printf("[QLinearMatMul] Input B ptr : %p \n", b->DataRaw());
 
   // validate offsets
   const auto* a_offset = ctx->Input<Tensor>(IN_A_ZERO_POINT);
@@ -203,27 +175,22 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
               "QLinearMatmul : result scale must be a scalar or 1D tensor of size 1");
 
   MatMulComputeHelper helper;
-  const uint8_t* b_data;
-  bool b_is_signed;
   if (nullptr != b) {
     ORT_RETURN_IF_ERROR(helper.Compute(a->Shape(), b->Shape(), &b_scale->Shape(), &b_offset->Shape()));
-    b_data = static_cast<const uint8_t*>(b->DataRaw());
-    b_is_signed = b->IsDataType<int8_t>();
   } else {
     ORT_RETURN_IF_ERROR(helper.Compute(a->Shape(), b_shape_, &b_scale->Shape(), &b_offset->Shape()));
-    b_data = static_cast<const uint8_t*>(packed_b_.get());
-    b_is_signed = b_is_signed_;
   }
 
   Tensor* y = ctx->Output(OUT_Y, helper.OutputShape());
-  //  printf("[QLinearMatMul] Output Y ptr : %p \n", y->DataRaw());
   // Bail out early if the output is going to be empty
   if (y->Shape().Size() == 0)
     return Status::OK();
 
   struct timespec t1, t2, t3, t4, t5;
 
-  if (!useCPU && m_header && m_b_neutron && m_b_bias && m_b_factors) {
+  if (!m_header || !m_b_neutron || !m_b_bias || !m_b_factors) {
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:QLinearMatMul falied to init.");
+  } else {
     clock_gettime(CLOCK_REALTIME, &t1);
 
     neutronAlloc->pushMemoryState(m_handle);
@@ -234,7 +201,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     uint32_t neutron_b_rows = b ? b->Shape()[1] : b_shape_[1];
     uint32_t neutron_b_cols = b ? b->Shape()[0] : b_shape_[0];
     if (neutron_a_cols != neutron_b_cols) {
-      printf("Neutron dimenssions do not match!\n");
+      LOGS_DEFAULT(WARNING) << "Neutron dimenssions do not match!";
     }
 
     clock_gettime(CLOCK_REALTIME, &t2);
@@ -269,7 +236,6 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     NeutronError ret = ENONE;
     ret = matmul((const void *)m_header, 16*sizeof(uint32_t), (const void*)a_neutron, a_size, (const void*)y_neutron, y_size, m_handle);
     if (ret != ENONE){
-        printf("matmul() error %d\n", ret);
         return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
     }
 
@@ -286,73 +252,6 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
 
 #ifndef NDEBUG
     printf("Neutron: Computed QLinearMatmul of size %ld * %ld * %ld in %f us\n", helper.M(),helper.N(),helper.K(),time_diff(t1,t5));
-#endif
-  }
-  else
-  {
-    const auto* b_scale_data = b_scale->Data<float>();
-    auto a_scale_data = *(a_scale->Data<float>());
-    auto y_scale_data = *(y_scale->Data<float>());
-
-    const int64_t output_scale_size = b_scale->Shape().Size();
-    std::vector<float> output_scales(narrow<size_t>(output_scale_size));
-    for (int64_t i = 0; i < output_scale_size; i++) {
-      output_scales[narrow<size_t>(i)] = (a_scale_data * b_scale_data[narrow<size_t>(i)] / y_scale_data);
-    }
-
-    const size_t num_gemms = helper.OutputOffsets().size();
-    MLAS_GEMM_QUANT_SHAPE_PARAMS gemm_shape;
-    gemm_shape.M = static_cast<size_t>(helper.M());
-    gemm_shape.N = static_cast<size_t>(helper.N());
-    gemm_shape.K = static_cast<size_t>(helper.K());
-    gemm_shape.AIsSigned = a->IsDataType<int8_t>();
-    gemm_shape.BIsSigned = b_is_signed;
-
-    AllocatorPtr alloc;
-    ORT_RETURN_IF_ERROR(ctx->GetTempSpaceAllocator(&alloc));
-    auto gemm_output_data = alloc->Alloc(SafeInt<size_t>(gemm_shape.M) *
-                                         gemm_shape.N * sizeof(int32_t) * num_gemms);
-    BufferUniquePtr gemm_output_buffer(gemm_output_data, BufferDeleter(std::move(alloc)));
-    auto* gemm_output = static_cast<int32_t*>(gemm_output_buffer.get());
-
-    std::vector<MLAS_GEMM_QUANT_DATA_PARAMS> gemm_params(num_gemms);
-    std::vector<MLAS_QGEMM_REQUANT_OUTPUT_PROCESSOR> requant_procs;
-    requant_procs.reserve(num_gemms);
-
-    bool is_output_signed = y->IsDataType<int8_t>();
-    int32_t output_offset = is_output_signed ? *(static_cast<const int8_t*>(y_offset->DataRaw()))
-      : *(static_cast<const uint8_t*>(y_offset->DataRaw()));
-    auto b_zp_data = static_cast<const uint8_t*>(b_offset->DataRaw());
-    for (size_t i = 0; i < num_gemms; i++) {
-      gemm_params[i].A = static_cast<const uint8_t*>(a->DataRaw()) + helper.LeftOffsets()[i];
-      gemm_params[i].lda = gemm_shape.K;
-      gemm_params[i].ZeroPointA = *(static_cast<const uint8_t*>(a_offset->DataRaw()));
-
-      gemm_params[i].B = b_data + helper.RightOffsets()[i];
-      gemm_params[i].ldb = gemm_shape.N;
-      gemm_params[i].BIsPacked = bool(packed_b_);
-      gemm_params[i].ZeroPointB = b_zp_data + helper.RightZeroPointOffsets()[i];
-
-      gemm_params[i].C = gemm_output + (gemm_shape.M * gemm_shape.N * i);
-      gemm_params[i].ldc = gemm_shape.N;
-
-      gemm_params[i].PerColumnZeroPoints = !IsScalarOr1ElementVector(b_offset);
-
-      requant_procs.emplace_back(static_cast<uint8_t*>(y->MutableDataRaw()) + helper.OutputOffsets()[i],
-                                 static_cast<size_t>(helper.N()),
-                                 nullptr,
-                                 output_scales.data() + helper.RightScaleOffsets()[i],
-                                 output_scales.size() > 1,
-                                 output_offset,
-                                 is_output_signed);
-      gemm_params[i].OutputProcessor = &(requant_procs[i]);
-    }
-
-    clock_gettime(CLOCK_REALTIME, &t3);
-    MlasGemmBatch(gemm_shape, gemm_params.data(), num_gemms, ctx->GetOperatorThreadPool());
-    clock_gettime(CLOCK_REALTIME, &t4);
-#ifndef NDEBUG
-    printf("CPU: Computed QLinearMatmul of size %ld * %ld * %ld in %f us\n", helper.M(),helper.N(),helper.K(),time_diff(t3,t4));
 #endif
   }
 
