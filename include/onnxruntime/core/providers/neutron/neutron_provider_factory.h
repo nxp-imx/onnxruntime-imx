@@ -15,6 +15,7 @@ typedef enum {
 typedef struct {
     uint32_t flags;
     bool offline_packed;
+    bool neutron_op_only;
 } NeutronProviderOptions;
 
 #ifdef __cplusplus

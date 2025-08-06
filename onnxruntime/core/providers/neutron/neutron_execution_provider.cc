@@ -119,10 +119,24 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
 NeutronExecutionProvider::NeutronExecutionProvider(NeutronProviderOptions neutron_options)
     : IExecutionProvider(onnxruntime::kNeutronExecutionProvider),
       neutron_options_(neutron_options) {
-   neutron_init_ = onnxruntime::neutron::neutronAlloc->Init();
-   if (!neutron_init_) {
+   // Initialize the neutron driver library
+   NeutronError err = neutronInit();
+   if (err != ENONE) {
+     neutron_state_ = NEUTRON_STATE::FAILED;
      LOGS_DEFAULT(WARNING) << "Neutron hardware init failed!!! All nodes will be assigned to CPU.";
+     return;
    }
+
+   if (!neutron_options_.neutron_op_only) {
+     bool success = onnxruntime::neutron::neutronAlloc->Init();
+     if (success) {
+       neutron_state_ = NEUTRON_STATE::OK;
+       return;
+     }
+   }
+
+   neutron_state_ = NEUTRON_STATE::OP_ONLY;
+   LOGS_DEFAULT(WARNING) << "Only NeutronGraph op will be assigned to NPU.";
 }
 
 NeutronExecutionProvider::~NeutronExecutionProvider() {}
@@ -142,7 +156,7 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
                                         IResourceAccountant*)const {
   InlinedVector<NodeIndex> candidates;
 
-  if (!neutron_init_) {
+  if (neutron_state_ == NEUTRON_STATE::FAILED) {
     return std::vector<std::unique_ptr<ComputeCapability>>();
   }
 
@@ -157,9 +171,15 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
     }
     const auto& input_defs = node.InputDefs();
 
+    if ("NeutronGraph" == node.OpType()) {
+      candidates.push_back(node.Index());
+    }
+    if (neutron_state_ == NEUTRON_STATE::OP_ONLY) {
+      continue;
+    }
+
     if ("DequantizeLinear" == node.OpType() ||
-        "QuantizeLinear" == node.OpType() ||
-        "NeutronGraph" == node.OpType()) {
+        "QuantizeLinear" == node.OpType()) {
       candidates.push_back(node.Index());
     } else if ("MatMulInteger" == node.OpType() ||
                "QLinearMatMul" == node.OpType() ||

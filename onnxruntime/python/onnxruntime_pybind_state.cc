@@ -1209,7 +1209,7 @@ static std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory
 #endif
   } else if (type == kNeutronExecutionProvider) {
 #ifdef USE_NEUTRON
-    NeutronProviderOptions neutron_options = {0,0};
+    NeutronProviderOptions neutron_options = {0,0,0};
     auto it = provider_options_map.find(type);
     if (it != provider_options_map.end()) {
       for (auto option : it->second) {
@@ -1219,7 +1219,16 @@ static std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory
             neutron_options.offline_packed = (option.second == "true") || (option.second == "True");
           } else {
             ORT_THROW(
-                "Invalid value for enable_fast_math. "
+                "Invalid value for offline_packed. "
+                "Select from 'true' or 'false'\n");
+          }
+	} else if (option.first == "neutron_op_only") {
+          std::set<std::string> supported_values = {"true", "True", "false", "False"};
+          if (supported_values.find(option.second) != supported_values.end()) {
+            neutron_options.neutron_op_only = (option.second == "true") || (option.second == "True");
+          } else {
+            ORT_THROW(
+                "Invalid value for neutron_op_only. "
                 "Select from 'true' or 'false'\n");
           }
         } else {

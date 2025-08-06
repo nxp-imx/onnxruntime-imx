@@ -9,10 +9,6 @@
 #include "core/providers/neutron/neutron_fwd.h"
 #include "core/providers/neutron/neutron_kernel.h"
 
-#if NEUTRON_AARCH64
-#include "neutron/NeutronDriver.h"
-#endif
-
 namespace onnxruntime {
 namespace neutron {
 
