@@ -5,6 +5,9 @@
 #include "core/framework/execution_provider.h"
 #include "core/providers/neutron/neutron_provider_factory.h"
 
+#if NEUTRON_AARCH64
+#include "neutron/NeutronDriver.h"
+#endif
 
 namespace onnxruntime {
 
@@ -31,7 +34,8 @@ class NeutronExecutionProvider : public IExecutionProvider {
 
  private:
   NeutronProviderOptions neutron_options_;
-  bool neutron_init_{false};
+  enum class NEUTRON_STATE {FAILED, OP_ONLY, OK};
+  NEUTRON_STATE neutron_state_{NEUTRON_STATE::FAILED};
   uint32_t node_number_{0};
 };
 
