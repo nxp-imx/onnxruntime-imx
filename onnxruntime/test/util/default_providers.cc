@@ -230,7 +230,7 @@ std::unique_ptr<IExecutionProvider> DefaultArmNNExecutionProvider(bool enable_ar
 
 std::unique_ptr<IExecutionProvider> DefaultNeutronExecutionProvider() {
 #ifdef USE_NEUTRON
-  return NeutronProviderFactoryCreator::Create({0,0})->CreateProvider();
+  return NeutronProviderFactoryCreator::Create({0,0,0})->CreateProvider();
 #else
   return nullptr;
 #endif
