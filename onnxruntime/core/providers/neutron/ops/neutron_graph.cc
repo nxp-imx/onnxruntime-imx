@@ -26,7 +26,8 @@ public:
   NeutronGraphKernel(const OpKernelInfo& info)
       : OpKernel(info),
         input_count_{info.GetInputCount()},
-        output_count_{info.GetOutputCount()} {
+        output_count_{info.GetOutputCount()},
+        nmh_{NULL} {
     // Allocate arrays for inputs and outputs
     dcfg_.inputs = new const void*[input_count_ - 3];
     dcfg_.outputs = new void*[output_count_ - 1];
