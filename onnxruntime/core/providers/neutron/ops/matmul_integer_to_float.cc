@@ -67,16 +67,9 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
           m_header = (uint32_t*) neutronAlloc->Alloc(16*sizeof(uint32_t), m_handle);
           m_b_neutron = (int8_t*) neutronAlloc->Alloc(m_b_rows * m_b_cols, m_handle);
 
-          neutronAlloc->pushMemoryState(m_handle);
-          auto tempWeight = (int8_t*)neutronAlloc->AllocReserved(m_b_rows * m_b_cols, m_handle);
           const int8_t *b_data = static_cast<const int8_t*>(tensor.DataRaw());
-          for(uint32_t i=0; i<m_b_cols; i++) {
-            for(uint32_t j=0; j<m_b_rows; j++) {
-              tempWeight[m_b_cols*j+i] = b_data[m_b_rows*i+j];
-            }
-          }
-          OrganizeWeightsData(tempWeight, m_b_neutron, m_b_rows,
-                              m_b_cols, channelDensity, numNeutrons, 8, 16);
+          OrganizeWeightsData(b_data, m_b_neutron, m_b_rows,
+                              m_b_cols, channelDensity, numNeutrons, 8, 16, true);
           clean_cache(m_b_neutron, m_b_rows*m_b_cols);
 
           // Neutron expects the bias as a parameter anyway.
@@ -84,11 +77,10 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
           for (uint32_t i=0; i< m_b_rows; i++){
             int32_t row_sum = 0;
             for (uint32_t j=0; j< m_b_cols; j++) {
-              row_sum += *(tempWeight + i * m_b_cols + j);
+              row_sum += *(b_data + j * m_b_rows + i);
             }
             m_b_bias[i] = row_sum;
           }
-          neutronAlloc->popMemoryState(m_handle);
 
           m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
           uint32_t scaler = ScaleToNeutron(1.0);
