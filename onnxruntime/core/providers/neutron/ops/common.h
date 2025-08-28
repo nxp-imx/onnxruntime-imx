@@ -37,7 +37,8 @@ void OrganizeWeightsData(const int8_t* weights,
                          int channelDensity,
                          int numNeutrons,
                          int weightBits = 4,
-                         int MACs = 16);
+                         int MACs = 16,
+                         bool isTransposed = false);
 
 }  // namespace neutron
 }  // namespace onnxruntime

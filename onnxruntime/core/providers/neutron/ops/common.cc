@@ -208,7 +208,7 @@ TilingSolver(int embeddings_in, int groupSize, int resNumBytes,
 
 void OrganizeWeightsData(const int8_t* weights, int8_t* output, int rowsB,
                          int colsB, int channelDensity, int numNeutrons,
-                         int weightBits, int MACs) {
+                         int weightBits, int MACs, bool isTransposed) {
     int da = 0;  // data address (read pointer in B)
     int sa = 0;  // store address (write pointer in weights_packed)
 
@@ -224,7 +224,15 @@ void OrganizeWeightsData(const int8_t* weights, int8_t* output, int rowsB,
 
             for (int idx = 0; idx < numNeutrons; ++idx) {
                 for (int jdx = 0; jdx < inner_cnt; ++jdx) {
-                    output[sa++] = weights[da++];
+                    if (isTransposed) {
+                        int row = da / colsB;
+                        int col = da % colsB;
+                        output[sa++] = weights[col * rowsB + row];
+                    } else {
+                        output[sa++] = weights[da];
+                    }
+
+                    da++;
                 }
                 da += stride;  // skip to next stride
             }
