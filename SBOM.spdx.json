@@ -1,0 +1,64 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "spdxVersion": "SPDX-2.3",
+  "creationInfo": {
+    "created": "2025-08-24T08:18:10Z",
+    "creators": [
+      "Organization: NXP"
+    ],
+    "licenseListVersion": "3.20"
+  },
+  "name": "onnxruntime-imx-LF_6.12.34_2.1.0",
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://nxp.com/spdx/48f69c1f-0f13-4e90-ae0d-bba14676d118",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-package-48f69c1f-0f13-4e90-ae0d-bba14676d118",
+      "name": "onnxruntime-imx",
+      "versionInfo": "LF_6.12.34_2.1.0",
+      "licenseConcluded": "(MIT)",
+      "licenseDeclared": "(MIT)",
+      "downloadLocation": "https://github.com/nxp-imx/onnxruntime-imx -b lf-6.12.34-2.1.0",
+      "originator": "Organization: NXP",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-b084bd5f-0c1d-4b0a-862e-837d11b96eed",
+      "name": "onnxruntime",
+      "versionInfo": "1.22.0",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "homepage": "https://www.onnxruntime.ai",
+      "downloadLocation": "https://github.com/microsoft/onnxruntime/releases/tag/v1.22.0",
+      "originator": "Organization: microsoft",
+      "supplier": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceLocator": "pkg:github/microsoft/onnxruntime@v1.22.0",
+          "referenceType": "purl"
+        },
+        {
+          "referenceCategory": "OTHER",
+          "referenceLocator": "a7a2e7dd-d0eb-4e8a-8aa7-c8e49766e707",
+          "referenceType": "BlackDuck-ComponentOrigin"
+        }
+      ],
+      "filesAnalyzed": false
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-package-48f69c1f-0f13-4e90-ae0d-bba14676d118"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-48f69c1f-0f13-4e90-ae0d-bba14676d118",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-package-b084bd5f-0c1d-4b0a-862e-837d11b96eed"
+    }
+  ]
+}
