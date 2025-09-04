@@ -26,6 +26,10 @@
 #include "core/providers/dml/dml_provider_factory_creator.h"
 #endif
 
+#if defined(USE_NEUTRON)
+#include "core/providers/neutron/neutron_provider_factory_creator.h"
+#endif
+
 #if defined(USE_NV) || defined(USE_NV_PROVIDER_INTERFACE)
 #include "core/providers/nv_tensorrt_rtx/nv_provider_options.h"
 #endif
@@ -99,6 +103,7 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider,
     AZURE,
     JS,
     VitisAI,
+    Neutron,
     CoreML,
     NvTensorRtRtx,  // TensorRt EP for RTX GPUs.
   };
@@ -109,7 +114,7 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider,
     const char* canonical_name = nullptr;
   };
 
-  static std::array<EpToAppend, 12> supported_eps = {
+  static std::array<EpToAppend, 13> supported_eps = {
       EpToAppend{EpID::DML, "DML", kDmlExecutionProvider},
       EpToAppend{EpID::QNN, "QNN", kQnnExecutionProvider},
       EpToAppend{EpID::OpenVINO, "OpenVINO", kOpenVINOExecutionProvider},
@@ -120,6 +125,7 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider,
       EpToAppend{EpID::AZURE, "AZURE", kAzureExecutionProvider},
       EpToAppend{EpID::JS, "JS", kJsExecutionProvider},
       EpToAppend{EpID::VitisAI, "VitisAI", kVitisAIExecutionProvider},
+      EpToAppend{EpID::Neutron, "Neutron", kNeutronExecutionProvider},
       EpToAppend{EpID::CoreML, "CoreML", kCoreMLExecutionProvider},
       EpToAppend{EpID::NvTensorRtRtx, "NvTensorRtRtx", kNvTensorRTRTXExecutionProvider}};
 
@@ -286,6 +292,14 @@ ORT_API_STATUS_IMPL(OrtApis::SessionOptionsAppendExecutionProvider,
 #if defined(USE_VITISAI) || defined(USE_VITISAI_PROVIDER_INTERFACE)
       status = OrtApis::SessionOptionsAppendExecutionProvider_VitisAI(options, provider_options_keys,
                                                                       provider_options_values, num_keys);
+#else
+      status = create_not_supported_status();
+#endif
+      break;
+    }
+    case EpID::Neutron: {
+#if defined(USE_NEUTRON)
+      options->provider_factories.push_back(NeutronProviderFactoryCreator::Create({0,0,0}));
 #else
       status = create_not_supported_status();
 #endif
