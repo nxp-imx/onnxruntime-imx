@@ -13,13 +13,11 @@ def DecimalToFixedPoint(number, integer_bits=10, fraction_bits=6):
     if number < 0:
         sign =1
         number *= -1
-
     elif number > 2**integer_bits-1:
       number = 2**integer_bits-1
     # Split integer and fractional parts
     integer_part = int(number)
     fractional_part = number - integer_part
-
 
     first_bit_obtained = (integer_part>0)
     bits_obtained = int(math.log2(integer_part)) + 1 if (integer_part>0) else 0
@@ -53,14 +51,12 @@ def DecimalToFixedPoint(number, integer_bits=10, fraction_bits=6):
 
 def DecimalToNeutron(number, integer_bits=10, fraction_bits=6):
     """Converts an unsigned decimal number to a fixed-point binary representation on Neutron."""
-    if number < 0:
-        raise ValueError("Number must be non-negative for unsigned representation.")
-    elif number > 2**integer_bits-1:
+    number = abs(number)
+    if number > 2**integer_bits-1:
       number = 2**integer_bits-1
     # Split integer and fractional parts
     integer_part = int(number)
     fractional_part = number - integer_part
-
 
     first_bit_obtained = (integer_part>0)
     bits_obtained = int(math.log2(integer_part)) + 1 if (integer_part>0) else 0
@@ -122,38 +118,100 @@ def WeightPacker(B, rowsB, colsB, channelDensity, weightBits = 4, MACs = 16):
 
   return packedWeights
 
-def CalculateChannelDensity(embeddings_in, group_size, weight_bits=8,
-                            decode_weights=False, use_decode_bias=False,
-                            res_num_bytes=4, MACS=16, num_neutrons=4,
-                            tcm_size=1024 * 1024, tcm_banks=16):
-  scale = 1 if decode_weights else (weight_bits / 8.0)
-  channel_density = 2 * MACS * num_neutrons
-  tcm_per_bank = tcm_size / tcm_banks
+def TilingSolver(embeddings_in, weightBits=8, groupSize=-1, resNumBytes = 4,
+    decodeWeights=True, useDecodeBias=True, MACS=16, neutrons=4, tcm_size=1024 * 1024, tcm_banks=16):
+    numTokens = 1
+    scale = weightBits / 8.0 if not decodeWeights else 1
 
-  term1 = math.ceil(
-      math.ceil(channel_density / num_neutrons * embeddings_in * scale)
-      * num_neutrons / tcm_per_bank
-  ) * tcm_per_bank
+    channelDensity = 2 * MACS * neutrons
+    lineDensity = numTokens
+    _numNeutrons = neutrons
+    bPingPong = True
 
-  if decode_weights:
-      term2 = math.ceil(
-          (channel_density * embeddings_in +
-          (2 + 1 * use_decode_bias) * channel_density * embeddings_in / group_size +
-           16 * 1024 * num_neutrons)
-          / tcm_per_bank
-      ) * tcm_per_bank
-  else:
-      term2 = 0
+    # Avoid division by -1 or 0
+    safeGroupSize = groupSize if groupSize > 0 else 1
+    def calc_offsetB():
+        base_offset = math.ceil(
+            (math.ceil(channelDensity / _numNeutrons * embeddings_in * scale) * _numNeutrons + channelDensity * 8)
+            / (tcm_size / tcm_banks)
+        ) * (tcm_size / tcm_banks) / _numNeutrons
 
-  offset_b = max(term1, term2)
-  offset_a = math.ceil(embeddings_in / tcm_per_bank) * tcm_per_bank
+        if decodeWeights:
+            decode_offset = math.ceil(
+                (
+                    channelDensity * embeddings_in +
+                    (2 + 1 * useDecodeBias) * channelDensity * embeddings_in / safeGroupSize +
+                    16 * 1024 * _numNeutrons +
+                    channelDensity * 8
+                ) / (tcm_size / tcm_banks)
+            ) * (tcm_size / tcm_banks) / _numNeutrons
+            return max(base_offset, decode_offset)
+        else:
+            return base_offset
 
-  used_tcm = offset_a + 2 * offset_b + channel_density * res_num_bytes
+    offsetB = calc_offsetB()
+    offsetBias = offsetB - 8 * channelDensity
+    offsetPostScale = offsetB - 4 * channelDensity
 
-  if tcm_size - used_tcm < 0:
-    channel_density = MACS * num_neutrons
+    offsetA = math.ceil(
+        (lineDensity * embeddings_in) / (tcm_size / tcm_banks)
+    ) * (tcm_size / tcm_banks) / _numNeutrons
 
-  return int(channel_density / num_neutrons)
+    pingpongDist = offsetB if bPingPong else 0
+
+    solved = False
+    while not solved:
+        i = 1
+        while (
+            tcm_size
+            - offsetA * _numNeutrons
+            - (pingpongDist + offsetB) * _numNeutrons
+            - channelDensity * lineDensity * resNumBytes
+            < 0 and i <= numTokens
+        ):
+            i += 1
+            lineDensity = math.ceil(numTokens / i)
+
+            offsetB = calc_offsetB()
+            offsetBias = offsetB - 8 * channelDensity
+            offsetPostScale = offsetB - 4 * channelDensity
+
+            offsetA = math.ceil(
+                (lineDensity * embeddings_in) / (tcm_size / tcm_banks)
+            ) * (tcm_size / tcm_banks) / _numNeutrons
+
+            pingpongDist = offsetB if bPingPong else 0
+
+        if i <= numTokens:
+            solved = True
+        else:
+            # Try alternative configurations
+            if channelDensity == MACS * _numNeutrons and not bPingPong and _numNeutrons != 1:
+                _numNeutrons = 1
+                channelDensity = 2 * MACS * _numNeutrons
+                bPingPong = True
+            elif channelDensity == 2 * MACS * _numNeutrons and bPingPong:
+                channelDensity = MACS * _numNeutrons
+            elif channelDensity == MACS * _numNeutrons and bPingPong:
+                bPingPong = False
+            elif channelDensity == MACS * _numNeutrons and not bPingPong and _numNeutrons == 1:
+                print("No feasible solution found.")
+                break
+            else:
+                return
+
+            lineDensity = numTokens
+            offsetB = calc_offsetB()
+            offsetBias = offsetB - 8 * channelDensity
+            offsetPostScale = offsetB - 4 * channelDensity
+
+            offsetA = math.ceil(
+                (lineDensity * embeddings_in) / (tcm_size / tcm_banks)
+            ) * (tcm_size / tcm_banks) / _numNeutrons
+
+            pingpongDist = offsetB if bPingPong else 0
+
+    return int(channelDensity / _numNeutrons), _numNeutrons, bPingPong
 
 def FactorToNeutronScaler(float_factor):
   casted_factor = cast(pointer(c_float(float_factor)), POINTER(c_int32)).contents.value
@@ -211,28 +269,110 @@ def ComputeWeightAndBias(B, decodeScales, N, blocksPerCol, groupSize):
 
   return B_int8, decodeBiases, bias.astype(np.int32)
 
-def DecodeDataPacker(data, N, channelDensity, blocksPerCol, isBias):
-  packed = np.zeros(N  * blocksPerCol, np.int8 if isBias else np.int16)
-  for i in range(0, N, channelDensity):
-    for k in range(channelDensity):
-      for j in range(blocksPerCol):
-        value = data[i + k, j] if isBias else DecimalToNeutron(abs(data[i + k, j]))
-        packed[i * blocksPerCol + j * channelDensity + k] = value
-  return packed
+def FetchUnpOrganizeWeight(B, rowsB, colsB, channelDensity, MACs, weightBits, numNeutrons):
+    B = B.reshape(-1)
+    weights_packed = np.zeros(len(B), dtype=np.int8)
+    da = 0  # source address index
+    sa = 0  # destination address index
+    dstStride = int(channelDensity * colsB * weightBits / 8)
+    inner_cnt = int(MACs * MACs * weightBits / 8)
+    iters = dstStride // inner_cnt
+    stride = dstStride - inner_cnt
+
+    repeats = int(rowsB / channelDensity / numNeutrons)
+    for repeat in range(repeats):
+        for iter in range(iters):
+            da_save = da  # Save current source index
+            for idx in range(numNeutrons):
+                for jdx in range(inner_cnt):
+                    weights_packed[sa] = B[da]  # Copy byte
+                    sa += 1
+                    da += 1
+                da += stride  # Jump to next block
+            da = da_save + inner_cnt  # Restore source index for next neutron group
+        da = da - inner_cnt * iters  # Rewind to start of repeat
+        da = da + int(channelDensity * numNeutrons * colsB * weightBits / 8)
+
+    return weights_packed
+
+def FetchUnpOrganizeDecodeData(decodeParam, rowsB, colsB, channelDensity,
+        MACs, weightBits, numNeutrons, groupSize, isBias, divisions):
+    if isBias:
+        reorganized = np.zeros(decodeParam.size, dtype=np.int8)
+    else:
+        reorganized = np.zeros(decodeParam.size, dtype=np.int16)
+
+    counter = 0
+    for i in range(0, rowsB, channelDensity * numNeutrons):
+        for division in range(divisions):
+            for neutron in range(numNeutrons):
+                for j in range(colsB // groupSize // divisions):
+                    for row in range(channelDensity):
+                        value = decodeParam[
+                            i + row + neutron * channelDensity,
+                            j + division * (colsB // groupSize // divisions)
+                        ]
+                        if isBias:
+                            reorganized[counter] = value
+                        else:
+                            reorganized[counter] = DecimalToNeutron(value)
+                        counter += 1
+
+    dtype = np.int8 if isBias else np.int16
+    scales_packed = np.zeros(len(reorganized), dtype=dtype)
+
+    da = 0  # source index
+    sa = 0  # destination index
+
+    dstStride = int(channelDensity * colsB / groupSize / divisions)
+    inner_cnt = MACs
+    iters = dstStride // inner_cnt
+    stride = dstStride - inner_cnt
+    repeats = rowsB // (channelDensity * numNeutrons)
+
+    for repeat in range(repeats):
+        for division in range(divisions):
+            for iter in range(iters):
+                da_save = da
+                for idx in range(numNeutrons):
+                    for jdx in range(inner_cnt):
+                        scales_packed[sa] = reorganized[da]
+                        sa += 1
+                        da += 1
+                    da += stride
+                da = da_save + inner_cnt
+            da -= inner_cnt * iters
+            da += int(channelDensity * numNeutrons * colsB / groupSize / divisions)
+
+    return scales_packed
+
 
 def ConvertWeightToNeutron(cvt_args):
-  b_name, B, scales, K, N, blockSize = cvt_args
+  b_name, B, scales, K, N, blockSize, weightBits = cvt_args
   print("Packing weight: ", b_name)
   blocksPerCol = (K + blockSize - 1) // blockSize
-  channelDensity = CalculateChannelDensity(K, blockSize)
+  channelDensity, numNeutrons, bPingPong = TilingSolver(K, weightBits = weightBits, groupSize = blockSize)
 
   decodeScales, factors = ComputeDecodeScales(N, blocksPerCol, scales)
   B_int8, decodeBiases, bias = ComputeWeightAndBias(B, decodeScales, N, blocksPerCol, blockSize)
-  packedDecodeScales = DecodeDataPacker(decodeScales, N, channelDensity, blocksPerCol, False)
-  packedDecodeBiases = DecodeDataPacker(decodeBiases, N, channelDensity, blocksPerCol, True)
-  packedWeight = WeightPacker(B_int8, N, K, channelDensity)
 
-  raw = packedWeight.tobytes() + packedDecodeBiases.tobytes() + \
+  MACs = 16
+  packedWeight = bytes()
+  divisions = 2 if (not bPingPong) else 1
+  for rows in range(0, N, channelDensity * numNeutrons):
+    for cols in range(0, K, K // divisions):
+      packed = WeightPacker(B_int8[rows : rows + channelDensity * numNeutrons, cols : cols + K // divisions],
+              channelDensity * numNeutrons, K // divisions, channelDensity, weightBits)
+      packed = FetchUnpOrganizeWeight(packed, channelDensity * numNeutrons, K // divisions, channelDensity,
+              MACs, weightBits, numNeutrons)
+      packedWeight = packedWeight + packed.tobytes()
+
+  packedDecodeScales = FetchUnpOrganizeDecodeData(decodeScales, N, K, channelDensity, MACs, weightBits,
+          numNeutrons, blockSize, False, divisions)
+  packedDecodeBiases = FetchUnpOrganizeDecodeData(decodeBiases, N, K, channelDensity, MACs, weightBits,
+          numNeutrons, blockSize, True, divisions)
+
+  raw = packedWeight + packedDecodeBiases.tobytes() + \
         packedDecodeScales.tobytes() + bias.tobytes() + factors.tobytes()
   return (b_name, np.frombuffer(raw, dtype=np.uint8))
 
@@ -267,7 +407,7 @@ def Main(args):
         scales_tensor = initializers[scales_name]
         scales_data = numpy_helper.to_array(scales_tensor)
 
-        cvt_args.append((b_name, b_data, scales_data, K, N, block_size))
+        cvt_args.append((b_name, b_data, scales_data, K, N, block_size, bits))
 
     with multiprocessing.Pool(processes=args.jobs) as pool:
         results = pool.map(ConvertWeightToNeutron, cvt_args)
