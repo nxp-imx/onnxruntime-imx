@@ -27,7 +27,9 @@ void RegisterNeutronSchemas() {
       .Input(2, "Kernels", "", "T2")
       .Input(3, "I", "", "T1", OpSchema::Variadic)
       .Output(0, "Scratch", "", "T2")
-      .Output(1, "O", "", "T1", OpSchema::Variadic)
+      .Output(1, "Profile", "", "T2")
+      .Output(2, "Debug", "", "T2")
+      .Output(3, "O", "", "T1", OpSchema::Variadic)
       .TypeConstraint("T1", {"tensor(int8)"}, "")
       .TypeConstraint("T2", {"tensor(uint8)"}, "")
       .TypeAndShapeInferenceFunction([](ONNX_NAMESPACE::InferenceContext&) {});
