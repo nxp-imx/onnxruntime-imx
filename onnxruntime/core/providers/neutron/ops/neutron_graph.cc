@@ -14,11 +14,16 @@ namespace neutron {
 
 namespace NeutronIndex {
 //Input index
-constexpr int32_t MICROCODE = 0,
-                  WEIGHTS = 1,
-                  KERNELS = 2;
+constexpr int32_t MICROCODE = 0;
+constexpr int32_t WEIGHTS   = 1;
+constexpr int32_t KERNELS   = 2;
+constexpr int32_t INPUTS    = 3;
+
 //Output index
 constexpr int32_t SCRATCH = 0;
+constexpr int32_t PROFILE = 1;
+constexpr int32_t DEBUG   = 2;
+constexpr int32_t OUTPUTS = 3;
 };
 
 class NeutronGraphKernel final : public OpKernel {
@@ -29,8 +34,8 @@ public:
         output_count_{info.GetOutputCount()},
         nmh_{NULL} {
     // Allocate arrays for inputs and outputs
-    dcfg_.inputs = new const void*[input_count_ - 3];
-    dcfg_.outputs = new void*[output_count_ - 1];
+    dcfg_.inputs = new const void*[input_count_ - NeutronIndex::INPUTS];
+    dcfg_.outputs = new void*[output_count_ - NeutronIndex::OUTPUTS];
 
     for (uint32_t i = 0; i < output_count_; ++ i) {
       auto shape_proto = info.node().OutputDefs().at(i)->Shape();
@@ -65,15 +70,17 @@ public:
   }
 
   Status Compute(OpKernelContext* ctx) const override {
+    uint32_t i;
     // Set reference for all inputs
-    for (uint32_t i = 3; i < input_count_; i ++) {
+    for (i = NeutronIndex::INPUTS; i < input_count_; i ++) {
       const auto* tensor = ctx->Input<Tensor>(i);
-      dcfg_.inputs[i - 3] = tensor->DataRaw();
+      dcfg_.inputs[i - NeutronIndex::INPUTS] = tensor->DataRaw();
     }
 
-    for (uint32_t i = 1; i < output_count_; ++ i) {
+    // Set reference for all outputs
+    for (i = NeutronIndex::OUTPUTS; i < output_count_; ++ i) {
       auto* output = ctx->Output(i, output_shapes_[i]);
-      dcfg_.outputs[i - 1] = output->MutableDataRaw();
+      dcfg_.outputs[i - NeutronIndex::OUTPUTS] = output->MutableDataRaw();
     }
     // Run neutron compute.
     auto ret = neutronRunBlocking(nmh_, &dcfg_);
