@@ -161,7 +161,8 @@ void OrganizeDecodeData(const T* decodeData, T* output, void* tempBuffer,
     int sa = 0;
 
     int dstStride = channelDensity * colsB / groupSize / divisions;
-    int inner_cnt = MACs * 1;
+    int inner_cnt = std::min(dstStride, (int)(8 * 1024 / sizeof(T)));
+
     int iters = dstStride / inner_cnt;
     int stride = dstStride - inner_cnt;
     int repeats = rowsB / channelDensity / numNeutrons;
@@ -630,7 +631,7 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
   memset(m_decode_input, 1, 16);
   clean_cache(m_decode_input, 16);
 
-  m_header[0] = 0;
+  m_header[0] = 1;
   m_header[1] = (uint8_t *)m_decode_bias - (uint8_t *)m_header;
   m_header[2] = a_rows;
   m_header[3] = a_cols;
@@ -649,7 +650,7 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
 #endif
 
 #ifdef USE_8BITS_KERNEL
-  m_header[0] = 0;
+  m_header[0] = 1;
   m_header[1] = 0;
   m_header[2] = a_rows;
   m_header[3] = a_cols;

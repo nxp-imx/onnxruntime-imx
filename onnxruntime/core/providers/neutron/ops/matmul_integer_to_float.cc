@@ -202,7 +202,7 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     uint32_t y_size = neutron_a_rows * neutron_b_rows * sizeof(int32_t);
     int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(y_size, m_handle);
 
-    m_header[0] = 0;
+    m_header[0] = 1;
     m_header[1] = 0;
     m_header[2] = neutron_a_rows;
     m_header[3] = neutron_a_cols;
