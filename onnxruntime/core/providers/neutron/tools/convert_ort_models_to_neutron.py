@@ -275,7 +275,7 @@ def FetchUnpOrganizeWeight(B, rowsB, colsB, channelDensity, MACs, weightBits, nu
     da = 0  # source address index
     sa = 0  # destination address index
     dstStride = int(channelDensity * colsB * weightBits / 8)
-    inner_cnt = int(MACs * MACs * weightBits / 8)
+    inner_cnt = int(MACs * MACs)
     iters = dstStride // inner_cnt
     stride = dstStride - inner_cnt
 
@@ -325,7 +325,11 @@ def FetchUnpOrganizeDecodeData(decodeParam, rowsB, colsB, channelDensity,
     sa = 0  # destination index
 
     dstStride = int(channelDensity * colsB / groupSize / divisions)
-    inner_cnt = MACs
+    if isBias:
+        inner_cnt = min(dstStride, 8 * 1024)
+    else:
+        inner_cnt = min(dstStride, 8 * 1024 // 2)
+
     iters = dstStride // inner_cnt
     stride = dstStride - inner_cnt
     repeats = rowsB // (channelDensity * numNeutrons)

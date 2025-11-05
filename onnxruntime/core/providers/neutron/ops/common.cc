@@ -213,7 +213,7 @@ void OrganizeWeightsData(const int8_t* weights, int8_t* output, int rowsB,
     int sa = 0;  // store address (write pointer in weights_packed)
 
     int dstStride = channelDensity * colsB * weightBits / 8;
-    int inner_cnt = MACs * MACs * weightBits / 8;
+    int inner_cnt = MACs * MACs;
     int iters = dstStride / inner_cnt;
     int stride = dstStride - inner_cnt;
     int repeats = rowsB / channelDensity / numNeutrons;

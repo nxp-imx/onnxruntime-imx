@@ -208,7 +208,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     uint32_t y_size = neutron_a_rows * neutron_b_rows;
     uint8_t *y_neutron = (uint8_t *) neutronAlloc->AllocReserved(y_size * sizeof(uint8_t), m_handle);
 
-    m_header[0] = 0;
+    m_header[0] = 1;
     m_header[1] = 0;
     m_header[2] = neutron_a_rows;
     m_header[3] = neutron_a_cols;
