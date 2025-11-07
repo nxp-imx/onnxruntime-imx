@@ -355,6 +355,8 @@ bool CommandLineParser::ParseArguments(PerformanceTestConfig& test_config, int a
         test_config.machine_config.provider_type_name = onnxruntime::kWebGpuExecutionProvider;
       } else if (ep == "nvtensorrtrtx") {
         test_config.machine_config.provider_type_name = onnxruntime::kNvTensorRTRTXExecutionProvider;
+      } else if (!CompareCString(optarg, ORT_TSTR("neutron"))) {
+	  test_config.machine_config.provider_type_name = onnxruntime::kNeutronExecutionProvider;
       } else {
         return false;
       }

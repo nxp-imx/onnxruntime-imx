@@ -219,6 +219,15 @@ std::unique_ptr<IExecutionProvider> DefaultArmNNExecutionProvider(bool enable_ar
 #endif
 }
 
+std::unique_ptr<IExecutionProvider> DefaultNeutronExecutionProvider(uint32_t neutron_flags) {
+#ifdef USE_NEUTRON
+  return NeutronProviderFactoryCreator::Create(neutron_flags)->CreateProvider();
+#else
+  ORT_UNUSED_PARAMETER(neutron_flags);
+  return nullptr;
+#endif
+}
+
 std::unique_ptr<IExecutionProvider> DefaultCoreMLExecutionProvider(bool use_mlprogram) {
   // To manually test CoreML model generation on a non-macOS platform, comment out the `&& defined(__APPLE__)` below.
   // The test will create a model but execution of it will obviously fail.

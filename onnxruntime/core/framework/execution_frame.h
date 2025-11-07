@@ -59,6 +59,8 @@ class IExecutionFrame {
   Status SetOutputMLValue(int index, const OrtValue& ort_value);
 #endif
 
+Status ForceMLValue(int index, const OrtValue& ort_value);
+
 #ifdef ENABLE_TRAINING
   // Referenced by PartialGraphExecutionState which is applicable when using ORTModule.
   // These wont be needed when using ORT Training APIs
