@@ -498,7 +498,16 @@ onnxruntime::Status ExecuteKernel(StreamExecutionContext& ctx,
         status = kernel_ctx.SetOutputMLValue(0, cache.get()->at(cached_arg_name));
       }
 #else
+
+#ifndef NDEBUG
+      struct timespec t1, t2;
+      clock_gettime(CLOCK_REALTIME, &t1);
+#endif
       status = p_kernel->Compute(&kernel_ctx);
+#ifndef NDEBUG
+      clock_gettime(CLOCK_REALTIME, &t2);
+      printf("%s %s:%s  %.0fus\n",  p_kernel->Info().GetExecutionProvider()->Type().c_str(), p_kernel->KernelDef().OpName().c_str(), p_kernel->Node().Name().c_str(), time_diff2(t1, t2));
+#endif
 
 #if !defined(ORT_MINIMAL_BUILD)
       auto* node_stats_recorder = ctx.GetSessionState().GetNodeStatsRecorder();
