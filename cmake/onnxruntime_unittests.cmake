@@ -814,6 +814,13 @@ if (onnxruntime_USE_OPENVINO)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_shared)
 endif()
 
+if(onnxruntime_USE_NEUTRON)
+  list(APPEND onnxruntime_test_framework_src_patterns  ${TEST_SRC_DIR}/providers/neutron/*)
+  list(APPEND onnxruntime_test_framework_libs onnxruntime_providers_neutron)
+  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_neutron)
+  list(APPEND onnxruntime_test_providers_libs onnxruntime_providers_neutron)
+endif()
+
 file(GLOB onnxruntime_test_framework_src CONFIGURE_DEPENDS
   ${onnxruntime_test_framework_src_patterns}
   )

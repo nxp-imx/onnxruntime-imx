@@ -50,6 +50,7 @@ struct OrtDevice {
     //     that the EP is registered with (i.e. the OrtDevice passed to the base IExecutionProvider constructor).
     //   - Otherwise use OrtDevice::CPU.
     static constexpr MemoryType HOST_ACCESSIBLE = 5;
+    static constexpr MemoryType NEUTRON_PINNED = 6;
   };
 
   // PCI vendor ids
