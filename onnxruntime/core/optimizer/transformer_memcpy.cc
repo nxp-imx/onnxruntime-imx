@@ -9,6 +9,7 @@
 #include "core/framework/tensorprotoutils.h"
 #include "core/framework/utils.h"
 #include "core/graph/graph_utils.h"
+#include "core/graph/constants.h"
 
 using namespace ONNX_NAMESPACE;
 namespace onnxruntime {

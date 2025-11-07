@@ -32,6 +32,10 @@
 #include "core/providers/dml/dml_session_options_config_keys.h"
 #endif
 
+#ifdef USE_NEUTRON
+#include "core/providers/neutron/neutron_provider_factory.h"
+#endif
+
 #ifdef _WIN32
 #define strdup _strdup
 #endif

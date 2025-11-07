@@ -732,6 +732,8 @@ void BaseTester::RunWithConfig(size_t* number_of_pre_packed_weights_counter,
           execution_provider = DefaultDmlExecutionProvider();
         else if (provider_type == onnxruntime::kWebGpuExecutionProvider)
           execution_provider = DefaultWebGpuExecutionProvider();
+        else if (provider_type == onnxruntime::kNeutronExecutionProvider)
+          execution_provider = DefaultNeutronExecutionProvider();
 
         // skip if execution provider is disabled
         if (execution_provider == nullptr)

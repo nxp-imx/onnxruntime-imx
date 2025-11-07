@@ -1248,6 +1248,11 @@ static std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory
                           << "https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html"
                           << " to ensure all dependencies are met.";
 #endif
+  } else if (type == kNeutronExecutionProvider) {
+#ifdef USE_NEUTRON
+    // @TODO: Leverage flags
+    return onnxruntime::NeutronProviderFactoryCreator::Create(0)->CreateProvider();
+#endif
   } else {
     // check whether it is a dynamic load EP:
     const auto it = provider_options_map.find(type);

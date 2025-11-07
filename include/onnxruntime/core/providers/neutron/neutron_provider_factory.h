@@ -7,8 +7,9 @@
 
 enum NeutronFlags {
   NEUTRON_FLAG_USE_NONE = 0x000,
+  NEUTRON_FLAG_USE_ARENA = 0x001,
 
-  NEUTRON_FLAG_LAST = NEUTRON_FLAG_USE_NONE,
+  NEUTRON_FLAG_LAST = NEUTRON_FLAG_USE_ARENA,
 };
 
 #ifdef __cplusplus
@@ -21,4 +22,3 @@ ORT_EXPORT ORT_API_STATUS(OrtSessionOptionsAppendExecutionProvider_Neutron,
 #ifdef __cplusplus
 }
 #endif
-

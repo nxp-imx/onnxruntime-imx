@@ -55,6 +55,15 @@ Status IExecutionFrame::SetOutputMLValue(int index, const OrtValue& ort_value) {
 }
 #endif
 
+Status IExecutionFrame::ForceMLValue(int index, const OrtValue& ort_value) {
+  int ort_value_idx = GetNodeIdxToMLValueIdx(index);
+  if (ort_value_idx == NodeIndexInfo::kInvalidEntry || static_cast<size_t>(ort_value_idx) >= all_values_size_) {
+    return ORT_MAKE_STATUS(ONNXRUNTIME, INVALID_ARGUMENT, "invalid index ", ort_value_idx);
+  }
+  all_values_[ort_value_idx] = ort_value;
+  return Status::OK();
+}
+
 #ifdef ENABLE_TRAINING
 void IExecutionFrame::UpdateFeeds(gsl::span<const int> feed_mlvalue_idxs, gsl::span<const OrtValue> feeds) {
   ORT_ENFORCE(feed_mlvalue_idxs.size() == feeds.size());
