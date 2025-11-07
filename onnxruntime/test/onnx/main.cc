@@ -56,7 +56,7 @@ void usage() {
       "\t-v: verbose\n"
       "\t-n [test_case_name]: Specifies a single test case to run.\n"
       "\t-e [EXECUTION_PROVIDER]: EXECUTION_PROVIDER could be 'cpu', 'cuda', 'dnnl', 'tensorrt', 'vsinpu'"
-      "'openvino', 'rocm', 'migraphx', 'acl', 'armnn', 'xnnpack', 'webgpu', 'nnapi', 'qnn', 'snpe' or 'coreml'. "
+      "'openvino', 'rocm', 'migraphx', 'acl', 'armnn', 'xnnpack', 'webgpu', 'nnapi', 'qnn', 'snpe', 'coreml' or `neutron`. "
       "Default: 'cpu'.\n"
       "\t-p: Pause after launch, can attach debugger and continue\n"
       "\t-x: Use parallel executor, default (without -x): sequential executor.\n"
@@ -232,6 +232,7 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
   bool enable_migraphx = false;
   bool enable_webgpu = false;
   bool enable_xnnpack = false;
+  bool enable_neutron = false;
   bool override_tolerance = false;
   double atol = 1e-5;
   double rtol = 1e-5;
@@ -327,7 +328,9 @@ int real_main(int argc, char* argv[], Ort::Env& env) {
             enable_webgpu = true;
           } else if (!CompareCString(optarg, ORT_TSTR("xnnpack"))) {
             enable_xnnpack = true;
-          } else {
+          } else if (!CompareCString(optarg, ORT_TSTR("neutron"))) {
+            enable_neutron = true;
+          }else {
             usage();
             return -1;
           }
@@ -745,6 +748,14 @@ select from 'TF8', 'TF16', 'UINT8', 'FLOAT', 'ITENSOR'. \n)");
       Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_ArmNN(sf, enable_cpu_mem_arena ? 1 : 0));
 #else
       fprintf(stderr, "ArmNN is not supported in this build\n");
+      return -1;
+#endif
+    }
+    if (enable_neutron) {
+#ifdef USE_NEUTRON
+      Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Neutron(sf, 0));
+#else
+      fprintf(stderr, "Neutron is not supported in this build\n");
       return -1;
 #endif
     }
