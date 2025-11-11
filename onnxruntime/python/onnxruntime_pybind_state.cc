@@ -1278,7 +1278,7 @@ static std::shared_ptr<IExecutionProviderFactory> CreateExecutionProviderFactory
       }
     }
 
-    return onnxruntime::NeutronProviderFactoryCreator::Create(neutron_options)->CreateProvider();
+    return onnxruntime::NeutronProviderFactoryCreator::Create(neutron_options);
 #endif
   } else {
     // check whether it is a dynamic load EP:
