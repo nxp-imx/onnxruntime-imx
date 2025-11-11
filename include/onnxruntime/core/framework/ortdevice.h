@@ -64,6 +64,7 @@ struct OrtDevice {
     HUAWEI = 0x19E5,     // CANN EP
     QUALCOMM = 0x5143,   // QNN DP
     INTEL = 0x8086,      // OpenVINO
+    NXP = 0x1957,      // OpenVINO
   };
 
   constexpr OrtDevice(DeviceType device_type_, MemoryType memory_type_, VendorId vendor_id_, DeviceId device_id_,
