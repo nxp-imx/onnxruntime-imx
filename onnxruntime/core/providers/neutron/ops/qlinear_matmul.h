@@ -46,7 +46,7 @@ class QLinearMatMul : public MatMulIntegerBase {
 
   // neutron parameters
   size_t    m_handle{0};
-  uint32_t* m_header{NULL};
+  uint32_t *m_header{NULL};
   int8_t   *m_b_neutron{NULL};
   int32_t  *m_b_bias{NULL};
   uint32_t *m_b_factors{NULL};
@@ -57,7 +57,7 @@ class QLinearMatMul : public MatMulIntegerBase {
   uint8_t  m_y_zp;
   uint32_t m_b_rows;
   uint32_t m_b_cols;
-  const float  *m_b_scale_data;
+  std::vector<float> m_b_scales;
   std::vector<float> m_output_scales;
 };
 

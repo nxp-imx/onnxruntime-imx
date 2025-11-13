@@ -245,5 +245,20 @@ void OrganizeWeightsData(const int8_t* weights, int8_t* output, int rowsB,
     }
 }
 
+int32_t
+GetMatmulTypeFlag(bool packed, bool signedData) {
+    int32_t type = 0;
+    if (packed && signedData) {
+        type = 2;
+    } else if (packed && !signedData) {
+        type = 1;
+    } else if (!packed && signedData) {
+        type = -2;
+    } else {
+        type = -1;
+    }
+    return type;
+}
+
 }  // namespace neutron
 }  // namespace onnxruntime
