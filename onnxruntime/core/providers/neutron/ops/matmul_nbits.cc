@@ -631,7 +631,7 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
   memset(m_decode_input, 1, 16);
   clean_cache(m_decode_input, 16);
 
-  m_header[0] = 1;
+  m_header[0] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
   m_header[1] = (uint8_t *)m_decode_bias - (uint8_t *)m_header;
   m_header[2] = a_rows;
   m_header[3] = a_cols;
@@ -650,7 +650,7 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
 #endif
 
 #ifdef USE_8BITS_KERNEL
-  m_header[0] = 1;
+  m_header[0] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
   m_header[1] = 0;
   m_header[2] = a_rows;
   m_header[3] = a_cols;

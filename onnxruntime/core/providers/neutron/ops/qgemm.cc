@@ -1,11 +1,12 @@
 // Copyright 2025 NXP
 
-#include "core/providers/neutron/ops/qlinear_matmul.h"
+#include "core/providers/neutron/ops/qgemm.h"
 #include "core/providers/neutron/ops/common.h"
 #include "core/framework/op_kernel.h"
 #include "core/providers/neutron/neutron_fwd.h"
 
 #include "core/providers/cpu/math/matmul_helper.h"
+#include "core/providers/cpu/quantization/matmul_integer_base.h"
 #include "core/util/math_cpuonly.h"
 
 #if NEUTRON_AARCH64
@@ -26,40 +27,43 @@ double time_diff(struct timespec start_time, struct timespec end_time)
 
 extern std::shared_ptr<NeutronStackAllocator> neutronAlloc;
 
-ONNX_OPERATOR_TYPED_KERNEL_EX(                                        \
-    QLinearMatMul,                                                    \
-    kOnnxDomain,                                                      \
-    10,                                                               \
-    int8_t,                                                           \
-    kNeutronExecutionProvider,                                        \
-    KernelDefBuilder()                                                \
-        .TypeConstraint("T1", DataTypeImpl::GetTensorType<int8_t>())  \
-        .TypeConstraint("T2", DataTypeImpl::GetTensorType<int8_t>())  \
-        .TypeConstraint("T3", DataTypeImpl::GetTensorType<int8_t>()), \
-    QLinearMatMul);
+ONNX_OPERATOR_TYPED_KERNEL_EX(
+    QGemm,
+    kMSDomain,
+    1,
+    uint8_t,
+    kNeutronExecutionProvider,
+    KernelDefBuilder()
+        .TypeConstraint("T", DataTypeImpl::GetTensorType<float>())
+        .TypeConstraint("TA", DataTypeImpl::GetTensorType<uint8_t>())
+        .TypeConstraint("TB", {DataTypeImpl::GetTensorType<uint8_t>(), DataTypeImpl::GetTensorType<int8_t>()})
+        .TypeConstraint("TC", DataTypeImpl::GetTensorType<int32_t>())
+        .TypeConstraint("TYZ", DataTypeImpl::GetTensorType<uint8_t>())
+        .TypeConstraint("TY", {DataTypeImpl::GetTensorType<float>(), DataTypeImpl::GetTensorType<uint8_t>()}),
+    QGemm);
 
-
-ONNX_OPERATOR_TYPED_KERNEL_EX(                                           \
-    QLinearMatMul,                                                       \
-    kOnnxDomain,                                                         \
-    10,                                                                  \
-    uint8_t,                                                             \
-    kNeutronExecutionProvider,                                           \
-    KernelDefBuilder()                                                   \
-        .TypeConstraint("T1", DataTypeImpl::GetTensorType<uint8_t>())    \
-        .TypeConstraint("T2", { DataTypeImpl::GetTensorType<uint8_t>(),  \
-                                DataTypeImpl::GetTensorType<int8_t>() }) \
-        .TypeConstraint("T3", DataTypeImpl::GetTensorType<uint8_t>()),   \
-    QLinearMatMul);
-
+ONNX_OPERATOR_TYPED_KERNEL_EX(
+    QGemm,
+    kMSDomain,
+    1,
+    int8_t,
+    kNeutronExecutionProvider,
+    KernelDefBuilder()
+        .TypeConstraint("T", DataTypeImpl::GetTensorType<float>())
+        .TypeConstraint("TA", DataTypeImpl::GetTensorType<int8_t>())
+        .TypeConstraint("TB", DataTypeImpl::GetTensorType<int8_t>())
+        .TypeConstraint("TC", DataTypeImpl::GetTensorType<int32_t>())
+        .TypeConstraint("TYZ", DataTypeImpl::GetTensorType<int8_t>())
+        .TypeConstraint("TY", {DataTypeImpl::GetTensorType<float>(), DataTypeImpl::GetTensorType<int8_t>()}),
+    QGemm);
 
 /*
     From CPU Provider
 */
 
-Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
-                              /*out*/ bool& is_packed,
-                              /*out*/ PrePackedWeights* prepacked_weights) {
+Status QGemm::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr alloc,
+                      /*out*/ bool& is_packed,
+                     /*out*/ PrePackedWeights* prepacked_weights) {
   try {
       switch (input_idx) {
       case IN_A:
@@ -72,16 +76,14 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
         break;
       case IN_B:
         {
-          m_b_rows = tensor.Shape()[1];
-          m_b_cols = tensor.Shape()[0];
+	  size_t num_dims = tensor.Shape().NumDimensions();
+	  m_b_rows = tensor.Shape()[num_dims - 1];
+	  m_b_cols = ((num_dims == 1) ? 1 : tensor.Shape()[num_dims - 2]);
 
           if ((m_b_rows % 16) || (m_b_rows * 16 >= 1024*1024))
             throw std::invalid_argument("NeutronEP:QLinearMatMul invalid argument(s)");
 
           auto [channelDensity, numNeutrons, divisions] = TilingSolver(m_b_cols, -1, 1, 8, false, false);
-
-          m_handle = neutronAlloc->getMemoryHandle();
-          m_header = (uint32_t*) neutronAlloc->Alloc(16*sizeof(uint32_t), m_handle);
 
           m_b_neutron = (int8_t*) neutronAlloc->Alloc(m_b_rows * m_b_cols, m_handle);
           const int8_t *b_data = static_cast<const int8_t*>(tensor.DataRaw());
@@ -100,26 +102,32 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
         }
         break;
       case IN_B_SCALE:
-	{
+        {
           auto data = tensor.Data<float>();
-	  if (IsScalarOr1ElementVector(&tensor)) {
+          if (IsScalarOr1ElementVector(&tensor)) {
             m_b_scales.assign(m_b_rows, *data);
-	  } else {
+          } else {
             m_b_scales.assign(data, data + m_b_rows);
-	  }
-	}
+          }
+        }
         break;
       case IN_B_ZERO_POINT:
         // we assume B has ZP equal to 0
         // todo: implement a check
         break;
+      case IN_C:
+        {
+        m_c_data = tensor.Data<int32_t>();
+        }
+	break;
       case IN_Y_SCALE:
         {
-          auto y_scale_data = *(tensor.Data<float>());
+          m_y_scale_data = *(tensor.Data<float>());
 
           const int64_t output_scale_size = m_b_rows;
-          for (int64_t i = 0; i < output_scale_size; i++)
-            m_output_scales.push_back(m_a_scale_data * m_b_scales[i] / y_scale_data);
+          for (int64_t i = 0; i < output_scale_size; i++) {
+            m_output_scales.push_back(m_a_scale_data * m_b_scales[i] / m_y_scale_data);
+	  }
 
           m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
 
@@ -132,8 +140,8 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
       case IN_Y_ZERO_POINT:
         {
           m_y_zp = *(static_cast<const uint8_t*>(tensor.DataRaw()));
-          for (uint32_t i=0; i< m_b_rows; i++){
-            m_b_bias[i] = (int32_t)(m_y_zp / m_output_scales[i] - m_b_bias[i] * m_a_zp);
+          for (uint32_t i=0; i < m_b_rows; i++){
+            m_b_bias[i] = (int32_t)(m_y_zp / m_output_scales[i] + m_c_data[i] - m_b_bias[i] * m_a_zp);
           }
           clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
         }
@@ -147,7 +155,7 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
   return Status::OK();
 }
 
-Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
+Status QGemm::Compute(OpKernelContext* ctx) const {
 #ifndef NDEBUG
   struct timespec t0, t00, t1, t2, t3, t4, t5;
   clock_gettime(CLOCK_REALTIME, &t0);
@@ -204,8 +212,8 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
       return Status::OK();
 
     uint32_t a_size = neutron_a_rows * neutron_a_cols;
-    uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size*sizeof(uint8_t), m_handle);
-    auto  a_data = static_cast<const uint8_t*>(a->DataRaw());
+    int8_t *a_neutron = (int8_t *) neutronAlloc->AllocReserved(a_size*sizeof(uint8_t), m_handle);
+    auto  a_data = static_cast<const int8_t*>(a->DataRaw());
 #ifndef NDEBUG
     clock_gettime(CLOCK_REALTIME, &t2);
 #endif
@@ -217,7 +225,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
 #endif
 
     uint32_t y_size = neutron_a_rows * neutron_b_rows;
-    uint8_t *y_neutron = (uint8_t *) neutronAlloc->AllocReserved(y_size * sizeof(uint8_t), m_handle);
+    int8_t *y_neutron = (int8_t *) neutronAlloc->AllocReserved(y_size * sizeof(uint8_t), m_handle);
 
     m_header[0] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
     m_header[1] = 0;
@@ -247,7 +255,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     clock_gettime(CLOCK_REALTIME, &t4);
 #endif
 
-    memcpy(static_cast<uint8_t*>(y->MutableDataRaw()) + helper.OutputOffsets()[batch], y_neutron, y_size);
+    memcpy(static_cast<int8_t*>(y->MutableDataRaw()) + helper.OutputOffsets()[batch], y_neutron, y_size);
 
 #ifndef NDEBUG
     clock_gettime(CLOCK_REALTIME, &t5);
@@ -263,6 +271,7 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     neutronAlloc->popMemoryState(m_handle);
   } //batch
   return Status::OK();
+
 }
 }  // namespace neutron
 }  // namespace onnxruntime

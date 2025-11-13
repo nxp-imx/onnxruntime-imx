@@ -8,6 +8,8 @@
 namespace onnxruntime {
 namespace neutron {
 
+#define ALIGN16_SIZE(size) ((size + 0xf) & (~0xf))
+
 void PrepareForQDQ(const TensorShape& input_shape,
                    const Tensor& scale,
                    const Tensor* zero_point_ptr,
@@ -40,5 +42,7 @@ void OrganizeWeightsData(const int8_t* weights,
                          int MACs = 16,
                          bool isTransposed = false);
 
+int32_t
+GetMatmulTypeFlag(bool packed, bool signedData);
 }  // namespace neutron
 }  // namespace onnxruntime
