@@ -58,6 +58,9 @@ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDoma
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kMSDomain, 1, uint8_t, MatMulIntegerToFloat);
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kMSDomain, 1, int8_t, MatMulIntegerToFloat);
 
+class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kMSDomain, 1, uint8_t, QGemm);
+class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kMSDomain, 1, int8_t, QGemm);
+
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 10, uint8_t, MatMulInteger);
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 10, int8_t, MatMulInteger);
 
@@ -95,6 +98,10 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
                           kNeutronExecutionProvider, kMSDomain, 1, uint8_t, MatMulIntegerToFloat)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kMSDomain, 1, int8_t, MatMulIntegerToFloat)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kMSDomain, 1, uint8_t, QGemm)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kMSDomain, 1, int8_t, QGemm)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kOnnxDomain, 10, uint8_t, MatMulInteger)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
@@ -155,10 +162,31 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
 	                                const GraphOptimizerRegistry&,
                                         IResourceAccountant*)const {
   InlinedVector<NodeIndex> candidates;
+  const auto& inits = graph.GetAllInitializedTensors();
 
   if (neutron_state_ == NEUTRON_STATE::FAILED) {
     return std::vector<std::unique_ptr<ComputeCapability>>();
   }
+
+  auto GetBIndex = [](std::string op_type) {
+    if ("QLinearMatMul" == op_type ||
+        "QGemm" == op_type) {
+      return 3;
+    }
+    return 1;
+  };
+  auto GetTransB = [](const onnxruntime::Node* node) {
+    const auto& attrs = node->GetAttributes();
+    auto it = attrs.find("transB");
+
+    if (it != attrs.end()) {
+      const auto& attr = it->second;
+      if (attr.has_i()) {
+        return attr.i() == 1;
+      }
+    }
+    return false;
+  };
 
   for (auto& node_index : graph.GetNodesInTopologicalOrder()) {
     const auto* p_node = graph.GetNode(node_index);
@@ -182,11 +210,15 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
         "QuantizeLinear" == node.OpType()) {
       candidates.push_back(node.Index());
     } else if ("MatMulInteger" == node.OpType() ||
+               "MatMulIntegerToFloat" == node.OpType() ||
                "QLinearMatMul" == node.OpType() ||
-               "MatMulIntegerToFloat" == node.OpType()) {
-      const auto* shape_proto = input_defs[1]->Shape(); //B shape
-      auto b_rows = shape_proto->dim(1).dim_value();
-      if (b_rows % 16 || (b_rows * 16 >= 1024*1024)) {
+               "QGemm" == node.OpType()) {
+      const auto *b_input = input_defs[GetBIndex(node.OpType())];
+      const auto *b_shape = b_input->Shape();
+      bool trans_b = GetTransB(&node);
+      auto rows_index = trans_b ? b_shape->dim_size() - 2 : b_shape->dim_size() - 1;
+      auto b_rows = b_shape->dim(rows_index).dim_value();;
+      if (b_rows % 16 || (b_rows * 16 >= 1024*1024) || inits.count(b_input->Name()) == 0) {
         LOGS_DEFAULT(INFO) << "NeutronEP: "<< node.OpType() << " ("
                            << node.Name() << ") not supported, invalid B rows.";
       } else {
