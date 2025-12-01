@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "core/common/status.h"
+#include <cstdint>
 
 namespace onnxruntime {
 
@@ -16,9 +17,9 @@ namespace onnxruntime {
 
 // Semantic Versioning version components.
 struct SemVerVersion {
-  uint32_t major{};
-  uint32_t minor{};
-  uint32_t patch{};
+  std::uint32_t major{};
+  std::uint32_t minor{};
+  std::uint32_t patch{};
   std::optional<std::string_view> prerelease{};
   std::optional<std::string_view> build_metadata{};
 };
