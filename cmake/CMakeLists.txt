@@ -44,6 +44,9 @@ if (MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zc:__cplusplus")
 endif()
 
+add_compile_options(-Wno-error=range-loop-construct)
+add_compile_options(-Wno-error=uninitialized)
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # NOTE: POSITION INDEPENDENT CODE hurts performance, and it only make sense on POSIX systems
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
