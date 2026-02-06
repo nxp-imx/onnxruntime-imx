@@ -2,48 +2,48 @@
   "SPDXID": "SPDXRef-DOCUMENT",
   "spdxVersion": "SPDX-2.3",
   "creationInfo": {
-    "created": "2025-11-12T07:06:55Z",
+    "created": "2026-01-26T02:20:10Z",
     "creators": [
       "Organization: NXP"
     ],
-    "licenseListVersion": "3.20"
+    "licenseListVersion": "3.26"
   },
-  "name": "onnxruntime-imx-LF_6.12.49_2.2.0",
+  "name": "onnxruntime-imx-LF_6.18.2_1.0.0",
   "dataLicense": "CC0-1.0",
-  "documentNamespace": "https://nxp.com/spdx/10603b3d-1808-4f2f-95ac-5536571f06b1",
+  "documentNamespace": "https://nxp.com/spdx/abbbd50a-cd11-43c6-a194-6f066d29355a",
   "packages": [
     {
-      "SPDXID": "SPDXRef-package-10603b3d-1808-4f2f-95ac-5536571f06b1",
+      "SPDXID": "SPDXRef-package-abbbd50a-cd11-43c6-a194-6f066d29355a",
       "name": "onnxruntime-imx",
-      "versionInfo": "LF_6.12.49_2.2.0",
+      "versionInfo": "LF_6.18.2_1.0.0",
       "licenseConcluded": "(MIT)",
       "licenseDeclared": "(MIT)",
-      "downloadLocation": "https://github.com/nxp-imx/onnxruntime-imx -b lf-6.12.49-2.2.0",
+      "downloadLocation": "https://github.com/nxp-imx/onnxruntime-imx -b lf-6.18.2-1.0.0",
       "originator": "Organization: NXP",
       "supplier": "NOASSERTION",
       "externalRefs": [],
       "filesAnalyzed": false
     },
     {
-      "SPDXID": "SPDXRef-package-b084bd5f-0c1d-4b0a-862e-837d11b96eed",
+      "SPDXID": "SPDXRef-package-3886195a-ebe6-44a7-a1c0-c72e23eff5f0",
       "name": "onnxruntime",
-      "versionInfo": "1.22.0",
+      "versionInfo": "1.23.2",
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
       "homepage": "https://www.onnxruntime.ai",
-      "downloadLocation": "https://github.com/microsoft/onnxruntime/releases/tag/v1.22.0",
+      "downloadLocation": "https://github.com/microsoft/onnxruntime/releases/tag/v1.23.2",
       "originator": "Organization: microsoft",
       "supplier": "NOASSERTION",
       "externalRefs": [
         {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceLocator": "pkg:github/microsoft/onnxruntime@v1.22.0",
-          "referenceType": "purl"
+          "referenceCategory": "OTHER",
+          "referenceLocator": "3c328433-d05a-4cec-bb47-e9bbfe1f22fb",
+          "referenceType": "BlackDuck-ComponentOrigin"
         },
         {
-          "referenceCategory": "OTHER",
-          "referenceLocator": "a7a2e7dd-d0eb-4e8a-8aa7-c8e49766e707",
-          "referenceType": "BlackDuck-ComponentOrigin"
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceLocator": "pkg:github/microsoft/onnxruntime@v1.23.2",
+          "referenceType": "purl"
         }
       ],
       "filesAnalyzed": false
@@ -53,12 +53,12 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-package-10603b3d-1808-4f2f-95ac-5536571f06b1"
+      "relatedSpdxElement": "SPDXRef-package-abbbd50a-cd11-43c6-a194-6f066d29355a"
     },
     {
-      "spdxElementId": "SPDXRef-package-10603b3d-1808-4f2f-95ac-5536571f06b1",
+      "spdxElementId": "SPDXRef-package-abbbd50a-cd11-43c6-a194-6f066d29355a",
       "relationshipType": "CONTAINS",
-      "relatedSpdxElement": "SPDXRef-package-b084bd5f-0c1d-4b0a-862e-837d11b96eed"
+      "relatedSpdxElement": "SPDXRef-package-3886195a-ebe6-44a7-a1c0-c72e23eff5f0"
     }
   ]
 }
