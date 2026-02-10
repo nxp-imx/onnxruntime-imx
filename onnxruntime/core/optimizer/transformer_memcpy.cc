@@ -327,12 +327,6 @@ void TransformerMemcpyImpl::ProcessDefs(onnxruntime::Node& node,
         provider_output_defs_.insert(arg);
     }
   } else {
-
-    if (node_provider_type != kNeutronExecutionProvider) {
-      // Neutron: Avoid adding copy ops even if first node is neutron (probably cpu alloc)
-      return;
-    }
-
     for (const auto* arg : node.InputDefs()) {
       if (arg->Exists())
         non_provider_input_defs_.insert(arg);
