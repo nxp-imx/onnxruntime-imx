@@ -445,6 +445,14 @@ else()
     endif()
     if(ARM64 AND MLAS_SOURCE_IS_NOT_SET )
         enable_language(ASM)
+
+        # Filter out conflicting -mcpu= flags from CMAKE_*_FLAGS to avoid conflicts with -march flags
+        foreach(flag_var CMAKE_C_FLAGS CMAKE_CXX_FLAGS CMAKE_ASM_FLAGS)
+            if(DEFINED ${flag_var})
+                string(REGEX REPLACE "-mcpu=[^ ]+" "" ${flag_var} "${${flag_var}}")
+            endif()
+        endforeach()
+
         set(mlas_platform_srcs
           ${MLAS_SRC_DIR}/aarch64/ConvSymS8KernelDot.S
           ${MLAS_SRC_DIR}/aarch64/ConvSymS8KernelDotLd64.S
