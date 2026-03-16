@@ -1435,6 +1435,16 @@ if (Git_FOUND)
   endif()
 endif()
 string(APPEND ORT_BUILD_INFO "build type=${CMAKE_BUILD_TYPE}")
+
+# If crosscompiling, filter any undesired path that might permeate into binaries as build info.
+if (CMAKE_CROSSCOMPILING)
+  include(path_utils.cmake)
+  filter_paths_from_flags(CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_FILTERED)
+  string(APPEND ORT_BUILD_INFO ", cmake cxx flags (flags with paths are skipped): ${CMAKE_CXX_FLAGS_FILTERED}")
+else()
+  string(APPEND ORT_BUILD_INFO ", cmake cxx flags: ${CMAKE_CXX_FLAGS}")
+endif()
+
 configure_file(onnxruntime_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/onnxruntime_config.h)
 get_property(onnxruntime_GENERATOR_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 
