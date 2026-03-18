@@ -673,6 +673,10 @@ if(onnxruntime_USE_ARMNN)
   list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_armnn)
 endif()
 
+if(onnxruntime_USE_NEUTRON)
+  list(APPEND onnxruntime_test_providers_dependencies onnxruntime_providers_neutron)
+endif()
+
 set(ONNXRUNTIME_TEST_STATIC_PROVIDER_LIBS
     # CUDA, TENSORRT, MIGRAPHX, DNNL, and OpenVINO are dynamically loaded at runtime.
     # QNN EP can be built as either a dynamic and static libs.
@@ -1801,6 +1805,7 @@ endif()
       onnxruntime_session
       ${onnxruntime_libs}
       # CUDA is dynamically loaded at runtime
+      ${PROVIDERS_NEUTRON}
       onnxruntime_optimizer
       onnxruntime_providers
       onnxruntime_util
