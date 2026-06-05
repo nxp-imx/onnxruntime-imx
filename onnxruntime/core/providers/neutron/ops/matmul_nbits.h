@@ -61,9 +61,12 @@ class MatMulNBits final : public OpKernel {
   const uint8_t *unpacked_b_{NULL};
   size_t b_size_;
   float *int8_scale_{NULL};
+  int32_t compress_num_{0};
+  int32_t compress_offset_{0};
 
   // neutron parameters
   size_t   m_handle{0};
+  void     *m_buffer{NULL};
   uint32_t *m_header{NULL};
   uint8_t  *m_decode_input{NULL};
   uint32_t *m_b_factors{NULL};
@@ -72,6 +75,7 @@ class MatMulNBits final : public OpKernel {
   int16_t  *m_decode_scale{NULL};
   int8_t   *m_b_neutron{NULL};
   int8_t   *m_decode_bias{NULL};
+  int32_t  *m_compress_len{NULL};
 
   float *float_b{NULL};
   const bool offline_packed_{false};
