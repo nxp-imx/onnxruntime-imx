@@ -24,11 +24,11 @@ namespace neutron {
       DequantizeLinear<T>);
 
 
-#define REGISTER_DQ_KERNEL_TYPED_19(T)                                     \
-  ONNX_OPERATOR_TWO_TYPED_KERNEL_EX(                                       \
+#define REGISTER_DQ_KERNEL_TYPED_19_20(T)                                  \
+  ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_EX(                             \
       DequantizeLinear,                                                    \
       kOnnxDomain,                                                         \
-      19,                                                                  \
+      19, 20,                                                              \
       T, float,                                                            \
       kNeutronExecutionProvider,                                           \
       (*KernelDefBuilder::Create())                                        \
@@ -39,9 +39,9 @@ namespace neutron {
 REGISTER_DQ_KERNEL_TYPED(uint8_t)
 REGISTER_DQ_KERNEL_TYPED(int8_t)
 REGISTER_DQ_KERNEL_TYPED(int32_t)
-REGISTER_DQ_KERNEL_TYPED_19(int8_t)
-REGISTER_DQ_KERNEL_TYPED_19(uint8_t)
-REGISTER_DQ_KERNEL_TYPED_19(int32_t)
+REGISTER_DQ_KERNEL_TYPED_19_20(int8_t)
+REGISTER_DQ_KERNEL_TYPED_19_20(uint8_t)
+REGISTER_DQ_KERNEL_TYPED_19_20(int32_t)
 
 
 /*

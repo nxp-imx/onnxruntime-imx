@@ -33,11 +33,11 @@ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider,
 class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 13, 18, int32_t,
                                                       DequantizeLinear);
 
-class ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, uint8_t, float,
+class ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, 20, uint8_t, float,
                                                       DequantizeLinear);
-class ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, int8_t, float,
+class ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, 20, int8_t, float,
                                                       DequantizeLinear);
-class ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, int32_t, float,
+class ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, 20, int32_t, float,
                                                       DequantizeLinear);
 
 class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 13, 18, uint8_t,
@@ -45,9 +45,9 @@ class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider,
 class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 13, 18, int8_t,
                                                       QuantizeLinear);
 
-class ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, uint8_t, float,
+class ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, 20, uint8_t, float,
                                                       QuantizeLinear);
-class ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, int8_t, float,
+class ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 19, 20, int8_t, float,
                                                       QuantizeLinear);
 
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 10, int8_t,
@@ -76,20 +76,20 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
                           kNeutronExecutionProvider, kOnnxDomain, 13, 18, int8_t, DequantizeLinear)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kOnnxDomain, 13, 18, int32_t, DequantizeLinear)>,
-    BuildKernelCreateInfo<ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(
-                          kNeutronExecutionProvider, kOnnxDomain, 19, uint8_t, float, DequantizeLinear)>,
-    BuildKernelCreateInfo<ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(
-                          kNeutronExecutionProvider, kOnnxDomain, 19, int8_t, float, DequantizeLinear)>,
-    BuildKernelCreateInfo<ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(
-                          kNeutronExecutionProvider, kOnnxDomain, 19, int32_t, float, DequantizeLinear)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kOnnxDomain, 19, 20, uint8_t, float, DequantizeLinear)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kOnnxDomain, 19, 20, int8_t, float, DequantizeLinear)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kOnnxDomain, 19, 20, int32_t, float, DequantizeLinear)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kOnnxDomain, 13, 18, uint8_t, QuantizeLinear)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kOnnxDomain, 13, 18, int8_t, QuantizeLinear)>,
-    BuildKernelCreateInfo<ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(
-                          kNeutronExecutionProvider, kOnnxDomain, 19, uint8_t, float, QuantizeLinear)>,
-    BuildKernelCreateInfo<ONNX_OPERATOR_TWO_TYPED_KERNEL_CLASS_NAME(
-                          kNeutronExecutionProvider, kOnnxDomain, 19, int8_t, float, QuantizeLinear)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kOnnxDomain, 19, 20, uint8_t, float, QuantizeLinear)>,
+    BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TWO_TYPED_KERNEL_CLASS_NAME(
+                          kNeutronExecutionProvider, kOnnxDomain, 19, 20, int8_t, float, QuantizeLinear)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kOnnxDomain, 10, int8_t, QLinearMatMul)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
@@ -208,7 +208,9 @@ NeutronExecutionProvider::GetCapability(const onnxruntime::GraphViewer& graph,
 
     if ("DequantizeLinear" == node.OpType() ||
         "QuantizeLinear" == node.OpType()) {
-      candidates.push_back(node.Index());
+      if (node.SinceVersion() <= 20) {
+        candidates.push_back(node.Index());
+      }
     } else if ("MatMulInteger" == node.OpType() ||
                "MatMulIntegerToFloat" == node.OpType() ||
                "QLinearMatMul" == node.OpType() ||
