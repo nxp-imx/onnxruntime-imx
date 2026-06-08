@@ -1,8 +1,241 @@
-// Copyright 2025 NXP
+// Copyright 2026 NXP
 
 #include "core/providers/neutron/ops/common.h"
 #include "core/framework/op_kernel.h"
 #include "core/providers/common.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+/* compress_weight_tensor_grouped function */
+int* CompressWeightTensorGrouped(
+    int8_t* data,
+    int data_size,
+    int channelDensity,
+    int numColsA,
+    int weightBits,
+    int num_decomp,
+    int word_size,
+    int buffer_size,
+    int packet_size,
+    bool compress,
+    int8_t** outCompressed,
+    size_t* outCompressedN,
+    int* outListSize) {
+
+    const int max_output_size = data_size * 2;
+    int8_t* compressed_stream = (int8_t*)malloc(max_output_size);
+    *outCompressed = compressed_stream;
+
+    int unit_size_outer = channelDensity * numColsA * weightBits / 8;
+    int unit_size = unit_size_outer;
+    int splits_per_channelC = 1;
+
+    if (compress) {
+        int splits_per_channelC_tmp = (int)ceil(unit_size_outer / (256.0 * 1024));
+        splits_per_channelC = 1;
+        while (splits_per_channelC < splits_per_channelC_tmp) {
+            splits_per_channelC *= 2;
+        }
+        unit_size = unit_size_outer / splits_per_channelC;
+    }
+
+    int cycles = unit_size_outer / unit_size;
+    bool compressed_one = false;
+    int iters = data_size / unit_size;
+    int compressed_offset = 0;
+
+    int* len_compressed_stream_list = (int*)malloc(iters * sizeof(int));
+    *outListSize = iters;
+
+    CodeTable current_code_table;
+    init_code_table(&current_code_table, 0);
+
+    for (int iter = 0; iter < iters; iter++) {
+        if (iter > 0 && iter % cycles == 0) {
+            if (!compressed_one) {
+                /* replace_last_m_with_sum */
+                if (cycles > 0 && cycles <= iter) {
+                    int sum = 0;
+                    for (int i = iter - cycles; i < iter; i++) {
+                        sum += len_compressed_stream_list[i];
+                    }
+                    len_compressed_stream_list[iter - 1] = sum;
+                }
+            }
+            compressed_one = false;
+        }
+
+        const int8_t* current_data_ptr = data + iter * unit_size;
+
+        /* Find minimum */
+        int8_t min_val = find_min_int8(current_data_ptr, unit_size);
+
+        if (min_val > -128 && compress) {
+            compressed_one = true;
+
+            uintptr_t current_data_addr = (uintptr_t)current_data_ptr;
+            CoreCompResult result = compress_weight_tensor(current_data_addr, unit_size, current_code_table,
+                                                 num_decomp, word_size, buffer_size, packet_size);
+
+            // NOTE: compress_weight_tensor takes CodeTable by value (shallow copy).
+            // When num_decomp > 1, it internally frees the code_table's pointers via
+            // free_code_table(&code_table). Since those pointers are shared with
+            // current_code_table, we must NOT call free_code_table(&current_code_table)
+            // here — that would be a double-free. Instead, reset pointers to NULL.
+            current_code_table.code = NULL;
+            current_code_table.len = NULL;
+            current_code_table.data_len = NULL;
+            current_code_table.size = 0;
+            current_code_table.capacity = 0;
+            copy_code_table(&current_code_table, &result.code_table);
+
+            int8_t* current_compressed = (int8_t*)malloc(unit_size * 2);
+            int current_compressed_offset = 0;
+
+            /* Process code words */
+            for (int i = 0; i < current_code_table.size; i++) {
+                int code = current_code_table.code[i];
+                int len = current_code_table.len[i];
+                current_compressed[current_compressed_offset++] = (int8_t)(code << (8 - len));
+            }
+
+            /* Process code lengths */
+            for (int i = 0; i < current_code_table.size; i++) {
+                int len = current_code_table.len[i];
+                current_compressed[current_compressed_offset++] = (int8_t)(((1 << len) - 1) << (8 - len));
+            }
+
+            /* Add compressed data */
+            for (size_t i = 0; i < result.length; i++) {
+                uint8_t val = result.compressed[i];
+                current_compressed[current_compressed_offset++] = val > 127 ?
+                    (int8_t)(val - 256) : (int8_t)val;
+            }
+
+            /* Add padding */
+            int padding_needed = (16 - current_compressed_offset % 16) % 16;
+            for (int i = 0; i < padding_needed; i++) {
+                current_compressed[current_compressed_offset++] = 0;
+            }
+
+            /* Copy to main stream */
+            memcpy(compressed_stream + compressed_offset, current_compressed, current_compressed_offset);
+            compressed_offset += current_compressed_offset;
+
+            len_compressed_stream_list[iter] = current_compressed_offset;
+
+            free(current_compressed);
+            free_core_comp_result(&result);
+
+        } else {
+            /* No compression - just copy data */
+            memcpy(compressed_stream + compressed_offset, current_data_ptr, unit_size);
+            compressed_offset += unit_size;
+
+            free_code_table(&current_code_table);
+            init_code_table(&current_code_table, 0);
+            len_compressed_stream_list[iter] = unit_size;
+        }
+    }
+
+    free_code_table(&current_code_table);
+    *outCompressedN = compressed_offset;
+
+    return len_compressed_stream_list;
+}
+
+// Prepack
+void PrePackWeight(const int8_t* B, int rb, int cb, PrepackCfg* pckCfg, PrepackOut* pckOut)
+{
+    int ca = cb;
+    int weightBits = pckCfg->weightBits;
+    int groupSize = pckCfg->groupSize;
+    bool useDecodeBias = pckCfg->useDecodeBias;
+    bool rearrange = pckCfg->rearrange;
+    bool miniWeights = pckCfg->miniWeights;
+    bool compress = pckCfg->compress;
+    int numMacs = pckCfg->numMacs;
+    int numNeutrons = pckCfg->numNeutrons;
+    int tcmSize = pckCfg->tcmSize;
+    int numBanks = pckCfg->numBanks;
+    TilingResult t = tiling_solver(1, ca, rb, 4, numMacs, numNeutrons, tcmSize, numBanks, weightBits, (groupSize>0), useDecodeBias, groupSize);
+    pckOut->tilingInfo = t;
+    int MACs = numMacs;
+
+    int cd = t.channelDensity, nn = t.numNeutrons, divisions = t.divisions;
+    Dyn8* B_stream = pckOut->Bpacked;
+    Dyn32* lengths_all = pckOut->lengths;
+
+    if (rearrange) {
+        // REARRANGE
+        for (int rows = 0; rows < rb; rows += cd*nn) {
+            for (int cols = 0; cols < ca; cols += ca/divisions) {
+                int rowsB = (cd*nn < rb - rows) ? cd*nn : rb - rows;
+                int colsB = (ca/divisions < ca - cols) ? ca/divisions : ca - cols;
+                // slice
+                size_t sliceN = (size_t)rowsB * colsB;
+                int8_t* slice = (int8_t*)malloc(sliceN);
+                for (int r = 0; r < rowsB; ++r)
+                    for (int c = 0; c < colsB; ++c)
+                        slice[IDX(r,c,colsB)] = B[IDX(rows+r, cols+c, ca)];
+
+                // pack -> organize -> compress
+                int8_t *packed=NULL, *organized=NULL, *compressed=NULL;
+                size_t packedN=0, organizedN=0, compressedN=0;
+
+                // [VICTOR] Converted to C
+                weight_packer(slice, rowsB, colsB, cd, MACs, weightBits, &packed, &packedN);
+
+                // [VICTOR] Converted to C
+                fetch_unp_organize(packed, packedN, rowsB, colsB, cd, MACs, weightBits, nn, &organized, &organizedN);
+                int outListSize;
+                int32_t* lenList = CompressWeightTensorGrouped(organized, organizedN, cd*nn, colsB,
+                                               weightBits,
+                                               16,8,96,32,
+                                               compress, &compressed, &compressedN, &outListSize);
+
+
+                // [VICTOR] Converted to C
+                dyn8_append(B_stream, compressed, compressedN);
+                for (int i = 0; i < outListSize; ++i) dyn32_push(lengths_all, lenList[i]);
+
+                free(slice); free(packed); free(organized); free(compressed);
+            }
+        }
+    } else {
+        // NO REARRANGE
+        if (miniWeights) {
+            fprintf(stderr, "error. Cannot have miniweights without rearrange\n");
+            return;
+        }
+        for (int rows = 0; rows < rb; rows += cd*nn) {
+                const int8_t* slice = B + rows * ca;
+                for (int div_count = 0; div_count < divisions; div_count ++) {
+                    // pack -> organize -> compress
+                    int8_t *packed=NULL, *organized=NULL, *compressed=NULL;
+                    size_t packedN=0, organizedN=0, compressedN=0;
+
+                    extract_patterned_rows(slice, rb, ca, div_count*cd/divisions,
+                        cd, cd/divisions, nn, &packed, &packedN);
+                    fetch_unp_organize(packed, packedN, cd*nn/divisions, ca, cd/divisions, MACs, weightBits, nn, &organized, &organizedN);
+                    int outListSize;
+                    int32_t* lenList = CompressWeightTensorGrouped(organized, organizedN, cd*nn/divisions, ca,
+                                weightBits,
+                            16,8,96,32,
+                                compress, &compressed, &compressedN, &outListSize);
+
+                    dyn8_append(B_stream, compressed, compressedN);
+                    for (int i = 0; i < outListSize; ++i) dyn32_push(lengths_all, lenList[i]);
+
+                    free(packed); free(organized); free(compressed);
+                }
+        }
+    }
+}
+#ifdef __cplusplus
+}
+#endif
 
 namespace onnxruntime {
 namespace neutron {
@@ -64,185 +297,6 @@ uint32_t ScaleToNeutron(float scale_data) {
   scaler = (exp<<16) | scaler;
 
   return scaler;
-}
-
-std::tuple<int, int, int>
-TilingSolver(int embeddings_in, int groupSize, int resNumBytes,
-             int weightBits, bool decodeWeights, bool useDecodeBias,
-             int MACS, int neutrons, int tcm_size, int tcm_banks) {
-  double scale = decodeWeights ? 1.0 : weightBits / 8.0;
-  int channelDensity = 2 * MACS * neutrons;
-  int lineDensity = 1;
-  int numNeutrons = neutrons;
-  bool bPingPong = true;
-
-  auto align_to_bank = [&](double value) {
-    return std::ceil(value / (tcm_size * 1.0 / tcm_banks)) * (tcm_size * 1.0 / tcm_banks);
-  };
-
-  auto calc_offsetB = [&](int cd, int nn) {
-    double base = std::ceil(cd / (double)nn * embeddings_in * scale) * nn + cd * 8;
-    double aligned = align_to_bank(base) / nn;
-
-    if (decodeWeights) {
-      double decode_size = cd * embeddings_in +
-          (2 + (useDecodeBias ? 1 : 0)) * cd * embeddings_in / groupSize +
-          16 * 1024 * nn + cd * 8;
-      aligned = std::max(aligned, align_to_bank(decode_size) / nn);
-    }
-
-    return aligned;
-  };
-
-  double offsetB = calc_offsetB(channelDensity, numNeutrons);
-  double offsetA = align_to_bank(lineDensity * embeddings_in) / numNeutrons;
-  double pingpongDist = bPingPong ? offsetB : 0;
-  double offsetOut = align_to_bank(channelDensity * lineDensity * resNumBytes) / numNeutrons;
-
-  bool solved = false;
-  int divisions = 1;
-
-  while (!solved) {
-    int i = 1;
-    while (
-      tcm_size - offsetA * numNeutrons -
-      (pingpongDist + offsetB) * numNeutrons -
-      channelDensity * lineDensity * resNumBytes < 0 && i <= 1
-    ) {
-        i++;
-        lineDensity = std::ceil(1.0 / i);
-        offsetB = calc_offsetB(channelDensity, numNeutrons);
-        offsetA = align_to_bank(lineDensity * embeddings_in) / numNeutrons;
-        pingpongDist = bPingPong ? offsetB : 0;
-    }
-
-    if (i <= 1) {
-      solved = true;
-    } else {
-      if (channelDensity == MACS * numNeutrons && !bPingPong && numNeutrons != 1) {
-        numNeutrons = 1;
-        channelDensity = 2 * MACS * numNeutrons;
-        bPingPong = true;
-      } else if (channelDensity == 2 * MACS * numNeutrons && bPingPong) {
-        channelDensity = MACS * numNeutrons;
-      } else if (channelDensity == MACS * numNeutrons && bPingPong) {
-        bPingPong = false;
-      } else if (channelDensity == MACS * numNeutrons && !bPingPong && numNeutrons == 1) {
-        break;
-      } else {
-    	throw std::invalid_argument("NeutronEP:MatMulCommon no feasible solution found");
-      }
-
-      lineDensity = 1;
-      offsetB = calc_offsetB(channelDensity, numNeutrons);
-      offsetA = align_to_bank(lineDensity * embeddings_in) / numNeutrons;
-      pingpongDist = bPingPong ? offsetB : 0;
-    }
-  }
-
-  if (decodeWeights && !bPingPong) {
-    divisions = 2;
-    lineDensity = 1;
-
-    offsetB = align_to_bank(
-        channelDensity * embeddings_in +
-        16.0 * 1024 * numNeutrons +
-        channelDensity * embeddings_in * (2 + (useDecodeBias ? 1 : 0)) / divisions / groupSize +
-        channelDensity * 8.0
-    ) / numNeutrons;
-
-    offsetA = align_to_bank(lineDensity * embeddings_in) / numNeutrons;
-    offsetOut = align_to_bank(channelDensity * lineDensity * resNumBytes) / numNeutrons;
-
-    double modPingZone = channelDensity * embeddings_in * weightBits / 8.0 / divisions +
-                         channelDensity * embeddings_in / (double)groupSize * (2 + (useDecodeBias ? 1 : 0)) / divisions;
-
-    solved = false;
-    while (!solved) {
-      int i = 1;
-      while (
-          tcm_size - offsetB * numNeutrons - offsetA * numNeutrons -
-          offsetOut * numNeutrons - modPingZone < 0 && i <= 1
-      ) {
-        i++;
-        lineDensity = std::ceil(1.0 / i);
-
-        offsetB = align_to_bank(
-            channelDensity * embeddings_in +
-            16.0 * 1024 * numNeutrons +
-            channelDensity * embeddings_in * (2 + (useDecodeBias ? 1 : 0)) / divisions / groupSize +
-            channelDensity * 8.0
-        ) / numNeutrons;
-
-        offsetA = align_to_bank(lineDensity * embeddings_in) / numNeutrons;
-        offsetOut = align_to_bank(channelDensity * lineDensity * resNumBytes) / numNeutrons;
-
-        modPingZone = channelDensity * embeddings_in * weightBits / 8.0 / divisions +
-                      channelDensity * embeddings_in / (double)groupSize * (2 + (useDecodeBias ? 1 : 0)) / divisions;
-      }
-
-      if (i <= 1) {
-        solved = true;
-      } else {
-        divisions *= 2;
-        lineDensity = 1;
-
-        offsetB = align_to_bank(
-            channelDensity * embeddings_in +
-            16.0 * 1024 * numNeutrons +
-            channelDensity * embeddings_in * (2 + (useDecodeBias ? 1 : 0)) / divisions / groupSize +
-            channelDensity * 8.0
-        ) / numNeutrons;
-
-        offsetA = align_to_bank(lineDensity * embeddings_in) / numNeutrons;
-        offsetOut = align_to_bank(channelDensity * lineDensity * resNumBytes) / numNeutrons;
-
-        modPingZone = channelDensity * embeddings_in * weightBits / 8.0 / divisions +
-                      channelDensity * embeddings_in / (double)groupSize * (2 + (useDecodeBias ? 1 : 0)) / divisions;
-      }
-    }
-  }
-
-  return std::make_tuple(channelDensity / numNeutrons, numNeutrons, divisions);
-}
-
-void OrganizeWeightsData(const int8_t* weights, int8_t* output, int rowsB,
-                         int colsB, int channelDensity, int numNeutrons,
-                         int weightBits, int MACs, bool isTransposed) {
-    int da = 0;  // data address (read pointer in B)
-    int sa = 0;  // store address (write pointer in weights_packed)
-
-    int dstStride = channelDensity * colsB * weightBits / 8;
-    int inner_cnt = MACs * MACs;
-    int iters = dstStride / inner_cnt;
-    int stride = dstStride - inner_cnt;
-    int repeats = rowsB / channelDensity / numNeutrons;
-
-    for (int repeat = 0; repeat < repeats; ++repeat) {
-        for (int iter = 0; iter < iters; ++iter) {
-            int da_save = da;
-
-            for (int idx = 0; idx < numNeutrons; ++idx) {
-                for (int jdx = 0; jdx < inner_cnt; ++jdx) {
-                    if (isTransposed) {
-                        int row = da / colsB;
-                        int col = da % colsB;
-                        output[sa++] = weights[col * rowsB + row];
-                    } else {
-                        output[sa++] = weights[da];
-                    }
-
-                    da++;
-                }
-                da += stride;  // skip to next stride
-            }
-
-            da = da_save + inner_cnt;  // restore to next base for next iter
-        }
-
-        da = da - inner_cnt * iters;
-        da += channelDensity * numNeutrons * colsB * weightBits / 8;
-    }
 }
 
 int32_t

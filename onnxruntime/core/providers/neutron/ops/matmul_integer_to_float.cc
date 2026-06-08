@@ -1,4 +1,4 @@
-// Copyright 2025 NXP
+// Copyright 2026 NXP
 
 #include "core/providers/neutron/ops/matmul_integer_to_float.h"
 #include "core/providers/neutron/ops/common.h"
@@ -61,33 +61,150 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
           if ((m_b_rows % 16) || (m_b_rows * 16 >= 1024*1024))
               throw std::invalid_argument("NeutronEP:MatMulIntegerToFloat invalid argument(s)");
 
-          auto [channelDensity, numNeutrons, divisions] = TilingSolver(m_b_cols, -1, 4, 8, false, false);
+          //unpacked_b_ data
+          auto unpacked_b = static_cast<const uint8_t*>(tensor.DataRaw());
+
+          const uint32_t MAGIC_WORD = 0x20250918;
+          uint32_t magic = *((uint32_t*)unpacked_b);
+
+          uint32_t header_len   = 16 * sizeof(uint32_t);
+          uint32_t bias_len     = m_b_rows * sizeof(int32_t);
+          uint32_t factor_len   = m_b_rows * sizeof(int32_t);
+          uint32_t idecode_len  = 16 * sizeof(uint8_t);
 
           m_handle = neutronAlloc->getMemoryHandle();
-          m_header = (uint32_t*) neutronAlloc->Alloc(16*sizeof(uint32_t), m_handle);
-          m_b_neutron = (int8_t*) neutronAlloc->Alloc(m_b_rows * m_b_cols, m_handle);
 
-          const int8_t *b_data = static_cast<const int8_t*>(tensor.DataRaw());
-          OrganizeWeightsData(b_data, m_b_neutron, m_b_rows,
-                              m_b_cols, channelDensity, numNeutrons, 8, 16, true);
-          clean_cache(m_b_neutron, m_b_rows*m_b_cols);
+          if (offline_packed_ || magic == MAGIC_WORD) {
+            // ---- Offline prepacked path ----
+            uint32_t weight_len = *((uint32_t*)unpacked_b + 1);
+            uint32_t compress_num = *((uint32_t*)unpacked_b + 2);
+            uint32_t compress_len = compress_num * sizeof(int32_t);
 
-          // Neutron expects the bias as a parameter anyway.
-          m_b_bias = (int32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(int32_t), m_handle);
-          for (uint32_t i=0; i< m_b_rows; i++){
-            int32_t row_sum = 0;
-            for (uint32_t j=0; j< m_b_cols; j++) {
-              row_sum += *(b_data + j * m_b_rows + i);
+            auto total_len = ALIGN16_SIZE(header_len) + ALIGN16_SIZE(weight_len) + ALIGN16_SIZE(bias_len)
+                           + ALIGN16_SIZE(factor_len) + ALIGN16_SIZE(compress_len) + ALIGN16_SIZE(idecode_len);
+
+            m_buffer = neutronAlloc->Alloc(total_len, m_handle);
+
+            m_header = (uint32_t*)m_buffer;
+            memset(m_header, 0, header_len);
+            clean_cache(m_header, header_len);
+
+            m_b_bias       = (int32_t*)((int8_t*)m_header       + ALIGN16_SIZE(header_len));
+            m_b_factors    = (int32_t*)((int8_t*)m_b_bias       + ALIGN16_SIZE(bias_len));
+            m_b_neutron    =  (int8_t*)((int8_t*)m_b_factors    + ALIGN16_SIZE(factor_len));
+            m_compress_len = (int32_t*)((int8_t*)m_b_neutron    + ALIGN16_SIZE(weight_len));
+            m_decode_input = (uint8_t*)((int8_t*)m_compress_len + ALIGN16_SIZE(compress_len));
+
+            // weight layout
+            // magic_word      weight_length   compress_lengths_number
+            // bias   factors compress_weight compress_lengths
+            int offset = 12;
+            memcpy(m_b_bias,       unpacked_b + offset, bias_len);
+
+            offset += bias_len;
+            memcpy(m_b_factors,    unpacked_b + offset, factor_len);
+
+            offset += factor_len;
+            memcpy(m_b_neutron,    unpacked_b + offset, weight_len);
+
+            offset += weight_len;
+            memcpy(m_compress_len, unpacked_b + offset, compress_len);
+
+            clean_cache(m_b_neutron,    weight_len);
+            clean_cache(m_b_factors,    factor_len);
+            clean_cache(m_b_bias,       bias_len);
+            clean_cache(m_compress_len, compress_len);
+          } else {
+            // ---- Inline prepack for raw ONNX models ----
+            inline_prepacked_ = true;
+            bool b_signed = tensor.IsDataType<int8_t>();
+
+            // Transpose B from [m_b_cols, m_b_rows] to [m_b_rows, m_b_cols]
+            int8_t* B_trans = (int8_t*)malloc(m_b_rows * m_b_cols);
+            for (uint32_t i = 0; i < m_b_rows; i++) {
+              for (uint32_t j = 0; j < m_b_cols; j++) {
+                B_trans[i * m_b_cols + j] = static_cast<int8_t>(unpacked_b[j * m_b_rows + i]);
+              }
             }
-            m_b_bias[i] = row_sum;
-          }
 
-          m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
-          uint32_t scaler = ScaleToNeutron(1.0);
-          for (uint32_t i=0; i< m_b_rows; i++){
-            m_b_factors[i] = scaler;
+            // Compute row sums
+            int32_t* row_sum = (int32_t*)calloc(m_b_rows, sizeof(int32_t));
+            for (uint32_t i = 0; i < m_b_rows; i++) {
+              int32_t sum = 0;
+              for (uint32_t j = 0; j < m_b_cols; j++) {
+                if (b_signed)
+                  sum += static_cast<int32_t>(static_cast<int8_t>(unpacked_b[j * m_b_rows + i]));
+                else
+                  sum += static_cast<int32_t>(unpacked_b[j * m_b_rows + i]);
+              }
+              row_sum[i] = sum;
+            }
+
+            // Call prepack
+            PrepackCfg cfg;
+            cfg.rearrange     = false;
+            cfg.miniWeights   = false;
+            cfg.weightBits    = 8;
+            cfg.groupSize     = -1;
+            cfg.useDecodeBias = false;
+            cfg.compress      = true;
+            cfg.numMacs       = 16;
+            cfg.numNeutrons   = 4;
+            cfg.tcmSize       = 1024 * 1024;
+            cfg.numBanks      = 16;
+
+            Dyn8  dyn8  = {};
+            Dyn32 dyn32 = {};
+            PrepackOut pckOut;
+            pckOut.Bpacked = &dyn8;
+            pckOut.lengths = &dyn32;
+
+            PrePackWeight(B_trans, static_cast<int>(m_b_rows), static_cast<int>(m_b_cols), &cfg, &pckOut);
+
+            size_t weight_len = pckOut.Bpacked->size;
+            int32_t compress_num = static_cast<int32_t>(pckOut.lengths->size);
+            uint32_t compress_len = compress_num * sizeof(int32_t);
+
+            // Compute factors: all ScaleToNeutron(1.0)
+            uint32_t factor_val = ScaleToNeutron(1.0f);
+            int32_t* factors = (int32_t*)malloc(factor_len);
+            for (uint32_t i = 0; i < m_b_rows; i++) {
+              factors[i] = static_cast<int32_t>(factor_val);
+            }
+
+            // Allocate Neutron memory
+            auto total_len = ALIGN16_SIZE(header_len) + ALIGN16_SIZE(weight_len) + ALIGN16_SIZE(bias_len)
+                           + ALIGN16_SIZE(factor_len) + ALIGN16_SIZE(compress_len) + ALIGN16_SIZE(idecode_len);
+
+            m_buffer = neutronAlloc->Alloc(total_len, m_handle);
+
+            m_header = (uint32_t*)m_buffer;
+            memset(m_header, 0, header_len);
+            clean_cache(m_header, header_len);
+
+            m_b_bias       = (int32_t*)((int8_t*)m_header       + ALIGN16_SIZE(header_len));
+            m_b_factors    = (int32_t*)((int8_t*)m_b_bias       + ALIGN16_SIZE(bias_len));
+            m_b_neutron    =  (int8_t*)((int8_t*)m_b_factors    + ALIGN16_SIZE(factor_len));
+            m_compress_len = (int32_t*)((int8_t*)m_b_neutron    + ALIGN16_SIZE(weight_len));
+            m_decode_input = (uint8_t*)((int8_t*)m_compress_len + ALIGN16_SIZE(compress_len));
+
+            // Store raw row_sum; bias will be computed dynamically in Compute
+            memcpy(m_b_bias,    row_sum, bias_len);
+            memcpy(m_b_factors, factors, factor_len);
+            memcpy(m_b_neutron, pckOut.Bpacked->data, weight_len);
+            memcpy(m_compress_len, pckOut.lengths->data, compress_len);
+
+            clean_cache(m_b_neutron,    weight_len);
+            clean_cache(m_b_factors,    factor_len);
+            clean_cache(m_b_bias,       bias_len);
+            clean_cache(m_compress_len, compress_len);
+
+            free(row_sum);
+            free(factors);
+            free(B_trans);
+            dyn8_free(pckOut.Bpacked);
+            dyn32_free(pckOut.lengths);
           }
-          clean_cache(m_b_factors,m_b_rows*sizeof(uint32_t));
         }
         break;
       case IN_A_SCALE:
@@ -112,11 +229,13 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
       case IN_A_ZERO_POINT:
         {
           m_dynamic_bias = false;
-          m_a_zp = *(static_cast<const uint8_t*>(tensor.DataRaw()));
-          for (uint32_t i=0; i< m_b_rows; i++){
-            m_b_bias[i] = (int32_t)( - m_b_bias[i] * m_a_zp );
-          }
-          clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
+          if (inline_prepacked_) {
+            m_a_zp = *(static_cast<const uint8_t*>(tensor.DataRaw()));
+            for (uint32_t i=0; i< m_b_rows; i++){
+              m_b_bias[i] = (int32_t)( - m_b_bias[i] * m_a_zp );
+            }
+            clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
+	  }
         }
         break;
       case IN_B_ZERO_POINT:
@@ -154,11 +273,24 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
 
     neutronAlloc->pushMemoryState(m_handle);
 
+    const int64_t a_dims = a->Shape().GetDims().size();
+    uint32_t neutron_a_rows;
+    uint32_t neutron_a_cols;
+
+    if (a_dims == 3) {
+      neutron_a_rows = a->Shape()[1];
+      neutron_a_cols = a->Shape()[2];
+    } else if (a_dims == 2) {
+      neutron_a_rows = a->Shape()[0];
+      neutron_a_cols = a->Shape()[1];
+    } else {
+      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits input dims number unsupported.");
+    }
+
     // non-transposed b
-    uint32_t neutron_a_rows = a->Shape()[1];
-    uint32_t neutron_a_cols = a->Shape()[2];
     uint32_t neutron_b_rows = b ? b->Shape()[1] : m_b_rows;
     uint32_t neutron_b_cols = b ? b->Shape()[0] : m_b_cols;
+
     if (neutron_a_cols != neutron_b_cols) {
       LOGS_DEFAULT(WARNING) << "Neutron dimenssions do not match!";
     }
@@ -202,22 +334,25 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     uint32_t y_size = neutron_a_rows * neutron_b_rows * sizeof(int32_t);
     int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(y_size, m_handle);
 
-    m_header[0] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
+    memset(m_decode_input, 1, 16);
+    clean_cache(m_decode_input, 16);
+
+    m_header[0] = (uint8_t *)m_compress_len  - (uint8_t *)m_header;
     m_header[1] = 0;
     m_header[2] = neutron_a_rows;
     m_header[3] = neutron_a_cols;
-    m_header[4] = neutron_b_rows;
+    m_header[4] = neutron_b_rows | (1 << 18);
     m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
     m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
     m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
     m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
     m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
-    m_header[10] = 0; // m_y_zp;
+    m_header[10] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>()); // packed
     m_header[11] = 4; // result num bytes
     m_header[12] = 8; // Weight Bits
     m_header[13] = -1; // Group Size equal to negative means no group size
     m_header[14] = 0;
-    m_header[15] = 0;
+    m_header[15] = (uint8_t *)m_decode_input - (uint8_t *)m_header;
 
     clock_gettime(CLOCK_REALTIME, &t3);
 

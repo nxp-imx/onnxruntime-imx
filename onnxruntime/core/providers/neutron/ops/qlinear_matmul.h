@@ -43,13 +43,18 @@ class QLinearMatMul : public MatMulIntegerBase {
 
   int GetAIdx() const override { return IN_A; }
   int GetBIdx() const override { return IN_B; }
+  const bool offline_packed_{false};
+  bool      inline_prepacked_{false};
 
   // neutron parameters
   size_t    m_handle{0};
+  void     *m_buffer{NULL};
   uint32_t *m_header{NULL};
   int8_t   *m_b_neutron{NULL};
   int32_t  *m_b_bias{NULL};
-  uint32_t *m_b_factors{NULL};
+  int32_t  *m_b_factors{NULL};
+  uint8_t  *m_decode_input{NULL};
+  int32_t  *m_compress_len{NULL};
 
   //pre-packing
   float    m_a_scale_data;

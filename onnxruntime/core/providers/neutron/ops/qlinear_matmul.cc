@@ -78,36 +78,169 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
           if ((m_b_rows % 16) || (m_b_rows * 16 >= 1024*1024))
             throw std::invalid_argument("NeutronEP:QLinearMatMul invalid argument(s)");
 
-          auto [channelDensity, numNeutrons, divisions] = TilingSolver(m_b_cols, -1, 1, 8, false, false);
+	  //unpacked_b_ data
+          auto unpacked_b = static_cast<const uint8_t*>(tensor.DataRaw());
+
+          const uint32_t MAGIC_WORD = 0x20250918;
+          uint32_t magic = *((uint32_t*)unpacked_b);
+
+          uint32_t header_len   = 16 * sizeof(uint32_t);
+          uint32_t bias_len     = m_b_rows * sizeof(int32_t);
+          uint32_t factor_len   = m_b_rows * sizeof(int32_t);
+          uint32_t idecode_len  = 16 * sizeof(uint8_t);
 
           m_handle = neutronAlloc->getMemoryHandle();
-          m_header = (uint32_t*) neutronAlloc->Alloc(16*sizeof(uint32_t), m_handle);
 
-          m_b_neutron = (int8_t*) neutronAlloc->Alloc(m_b_rows * m_b_cols, m_handle);
-          const int8_t *b_data = static_cast<const int8_t*>(tensor.DataRaw());
-          OrganizeWeightsData(b_data, m_b_neutron, m_b_rows,
-                              m_b_cols, channelDensity, numNeutrons, 8, 16, true);
-          clean_cache(m_b_neutron, m_b_rows*m_b_cols);
+          if (offline_packed_ || magic == MAGIC_WORD) {
+            // ---- Offline prepacked path ----
+            uint32_t weight_len = *((uint32_t*)unpacked_b + 1);
+            uint32_t compress_num = *((uint32_t*)unpacked_b + 2);
+            uint32_t compress_len = compress_num * sizeof(int32_t);
 
-          m_b_bias = (int32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(int32_t), m_handle);
-          for (uint32_t i=0; i< m_b_rows; i++){
-            int32_t row_sum = 0;
-            for (uint32_t j=0; j< m_b_cols; j++) {
-              row_sum += *(b_data + j * m_b_rows + i);
+            auto total_len = ALIGN16_SIZE(header_len) + ALIGN16_SIZE(weight_len) + ALIGN16_SIZE(bias_len)
+                           + ALIGN16_SIZE(factor_len) + ALIGN16_SIZE(compress_len) + ALIGN16_SIZE(idecode_len);
+
+            m_buffer = neutronAlloc->Alloc(total_len, m_handle);
+
+            m_header = (uint32_t*)m_buffer;
+            memset(m_header, 0, header_len);
+            clean_cache(m_header, header_len);
+
+            m_b_bias       = (int32_t*)((int8_t*)m_header       + ALIGN16_SIZE(header_len));
+            m_b_factors    = (int32_t*)((int8_t*)m_b_bias       + ALIGN16_SIZE(bias_len));
+            m_b_neutron    =  (int8_t*)((int8_t*)m_b_factors    + ALIGN16_SIZE(factor_len));
+            m_compress_len = (int32_t*)((int8_t*)m_b_neutron    + ALIGN16_SIZE(weight_len));
+            m_decode_input = (uint8_t*)((int8_t*)m_compress_len + ALIGN16_SIZE(compress_len));
+
+            // weight layout
+            // magic_word      weight_length   compress_lengths_number
+            // bias   factors compress_weight compress_lengths
+            int offset = 12;
+            memcpy(m_b_bias,       unpacked_b + offset, bias_len);
+
+            offset += bias_len;
+            memcpy(m_b_factors,    unpacked_b + offset, factor_len);
+
+            offset += factor_len;
+            memcpy(m_b_neutron,    unpacked_b + offset, weight_len);
+
+            offset += weight_len;
+            memcpy(m_compress_len, unpacked_b + offset, compress_len);
+
+            clean_cache(m_b_neutron,    weight_len);
+            clean_cache(m_b_factors,    factor_len);
+            clean_cache(m_b_bias,       bias_len);
+            clean_cache(m_compress_len, compress_len);
+          } else {
+            // ---- Inline prepack for raw ONNX models ----
+            inline_prepacked_ = true;
+            bool b_signed = tensor.IsDataType<int8_t>();
+
+            // Transpose B from [m_b_cols, m_b_rows] to [m_b_rows, m_b_cols]
+            int8_t* B_trans = (int8_t*)malloc(m_b_rows * m_b_cols);
+            for (uint32_t i = 0; i < m_b_rows; i++) {
+              for (uint32_t j = 0; j < m_b_cols; j++) {
+                B_trans[i * m_b_cols + j] = static_cast<int8_t>(unpacked_b[j * m_b_rows + i]);
+              }
             }
-            m_b_bias[i] = row_sum;
+
+            // Compute row sums
+            int32_t* row_sum = (int32_t*)calloc(m_b_rows, sizeof(int32_t));
+            for (uint32_t i = 0; i < m_b_rows; i++) {
+              int32_t sum = 0;
+              for (uint32_t j = 0; j < m_b_cols; j++) {
+                if (b_signed)
+                  sum += static_cast<int32_t>(static_cast<int8_t>(unpacked_b[j * m_b_rows + i]));
+                else
+                  sum += static_cast<int32_t>(unpacked_b[j * m_b_rows + i]);
+              }
+              row_sum[i] = sum;
+            }
+
+            // Compute bias = -m_a_zp * row_sum (m_a_zp available: IN_A_ZERO_POINT at index 2 before IN_B at index 3)
+            int32_t* bias = (int32_t*)malloc(bias_len);
+            for (uint32_t i = 0; i < m_b_rows; i++) {
+              bias[i] = -(int32_t)m_a_zp * row_sum[i];
+            }
+
+            // Call prepack
+            PrepackCfg cfg;
+            cfg.rearrange     = false;
+            cfg.miniWeights   = false;
+            cfg.weightBits    = 8;
+            cfg.groupSize     = -1;
+            cfg.useDecodeBias = false;
+            cfg.compress      = true;
+            cfg.numMacs       = 16;
+            cfg.numNeutrons   = 4;
+            cfg.tcmSize       = 1024 * 1024;
+            cfg.numBanks      = 16;
+
+            Dyn8  dyn8  = {};
+            Dyn32 dyn32 = {};
+            PrepackOut pckOut;
+            pckOut.Bpacked = &dyn8;
+            pckOut.lengths = &dyn32;
+
+            PrePackWeight(B_trans, static_cast<int>(m_b_rows), static_cast<int>(m_b_cols), &cfg, &pckOut);
+
+            size_t weight_len = pckOut.Bpacked->size;
+            int32_t compress_num = static_cast<int32_t>(pckOut.lengths->size);
+            uint32_t compress_len = compress_num * sizeof(int32_t);
+
+            // Compute factors: all ScaleToNeutron(1.0)
+            uint32_t factor_val = ScaleToNeutron(1.0f);
+            int32_t* factors = (int32_t*)malloc(factor_len);
+            for (uint32_t i = 0; i < m_b_rows; i++) {
+              factors[i] = static_cast<int32_t>(factor_val);
+            }
+
+            // Allocate Neutron memory
+            auto total_len = ALIGN16_SIZE(header_len) + ALIGN16_SIZE(weight_len) + ALIGN16_SIZE(bias_len)
+                           + ALIGN16_SIZE(factor_len) + ALIGN16_SIZE(compress_len) + ALIGN16_SIZE(idecode_len);
+
+            m_buffer = neutronAlloc->Alloc(total_len, m_handle);
+
+            m_header = (uint32_t*)m_buffer;
+            memset(m_header, 0, header_len);
+            clean_cache(m_header, header_len);
+
+            m_b_bias       = (int32_t*)((int8_t*)m_header       + ALIGN16_SIZE(header_len));
+            m_b_factors    = (int32_t*)((int8_t*)m_b_bias       + ALIGN16_SIZE(bias_len));
+            m_b_neutron    =  (int8_t*)((int8_t*)m_b_factors    + ALIGN16_SIZE(factor_len));
+            m_compress_len = (int32_t*)((int8_t*)m_b_neutron    + ALIGN16_SIZE(weight_len));
+            m_decode_input = (uint8_t*)((int8_t*)m_compress_len + ALIGN16_SIZE(compress_len));
+
+            memcpy(m_b_bias,    bias, bias_len);
+            memcpy(m_b_factors, factors, factor_len);
+            memcpy(m_b_neutron, pckOut.Bpacked->data, weight_len);
+            memcpy(m_compress_len, pckOut.lengths->data, compress_len);
+
+            clean_cache(m_b_neutron,    weight_len);
+            clean_cache(m_b_factors,    factor_len);
+            clean_cache(m_b_bias,       bias_len);
+            clean_cache(m_compress_len, compress_len);
+
+            free(row_sum);
+            free(bias);
+            free(factors);
+            free(B_trans);
+            dyn8_free(pckOut.Bpacked);
+            dyn32_free(pckOut.lengths);
           }
         }
         break;
       case IN_B_SCALE:
-	{
-          auto data = tensor.Data<float>();
-	  if (IsScalarOr1ElementVector(&tensor)) {
-            m_b_scales.assign(m_b_rows, *data);
-	  } else {
-            m_b_scales.assign(data, data + m_b_rows);
-	  }
-	}
+        {
+          if (inline_prepacked_) {
+            auto data = tensor.Data<float>();
+            if (IsScalarOr1ElementVector(&tensor)) {
+              m_b_scales.assign(m_b_rows, *data);
+            } else {
+              m_b_scales.assign(data, data + m_b_rows);
+            }
+          }
+        }
         break;
       case IN_B_ZERO_POINT:
         // we assume B has ZP equal to 0
@@ -115,27 +248,29 @@ Status QLinearMatMul::PrePack(const Tensor& tensor, int input_idx, AllocatorPtr 
         break;
       case IN_Y_SCALE:
         {
-          auto y_scale_data = *(tensor.Data<float>());
+          if (inline_prepacked_) {
+            auto y_scale_data = *(tensor.Data<float>());
 
-          const int64_t output_scale_size = m_b_rows;
-          for (int64_t i = 0; i < output_scale_size; i++)
-            m_output_scales.push_back(m_a_scale_data * m_b_scales[i] / y_scale_data);
+            const int64_t output_scale_size = m_b_rows;
+            for (int64_t i = 0; i < output_scale_size; i++)
+              m_output_scales.push_back(m_a_scale_data * m_b_scales[i] / y_scale_data);
 
-          m_b_factors = (uint32_t *)neutronAlloc->Alloc(m_b_rows*sizeof(uint32_t), m_handle);
-
-          for (uint32_t i=0; i< m_b_rows; i++){
-            m_b_factors[i] = ScaleToNeutron(m_output_scales[i]);
+            for (uint32_t i=0; i< m_b_rows; i++){
+              m_b_factors[i] = static_cast<int32_t>(ScaleToNeutron(m_output_scales[i]));
+            }
+            clean_cache(m_b_factors, m_b_rows*sizeof(int32_t));
           }
-          clean_cache(m_b_factors, m_b_rows*sizeof(uint32_t));
         }
         break;
       case IN_Y_ZERO_POINT:
         {
-          m_y_zp = *(static_cast<const uint8_t*>(tensor.DataRaw()));
-          for (uint32_t i=0; i< m_b_rows; i++){
-            m_b_bias[i] = (int32_t)(m_y_zp / m_output_scales[i] - m_b_bias[i] * m_a_zp);
+          if (inline_prepacked_) {
+            m_y_zp = *(static_cast<const uint8_t*>(tensor.DataRaw()));
+            for (uint32_t i=0; i< m_b_rows; i++){
+              m_b_bias[i] = (int32_t)(m_y_zp / m_output_scales[i] + m_b_bias[i]);
+            }
+            clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
           }
-          clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
         }
         break;
       }
@@ -185,7 +320,6 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
   uint32_t neutron_a_cols = static_cast<uint32_t>(helper.K());
   uint32_t neutron_b_rows = static_cast<uint32_t>(helper.N());
   auto num_matmuls = helper.OutputOffsets().size();
-
 #ifndef NDEBUG
   uint32_t neutron_b_cols = static_cast<uint32_t>(helper.K());
   clock_gettime(CLOCK_REALTIME, &t00);
@@ -219,17 +353,17 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
     uint32_t y_size = neutron_a_rows * neutron_b_rows;
     uint8_t *y_neutron = (uint8_t *) neutronAlloc->AllocReserved(y_size * sizeof(uint8_t), m_handle);
 
-    m_header[0] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
+    m_header[0] = (uint8_t *)m_compress_len  - (uint8_t *)m_header;
     m_header[1] = 0;
     m_header[2] = neutron_a_rows;
     m_header[3] = neutron_a_cols;
-    m_header[4] = neutron_b_rows;
+    m_header[4] = neutron_b_rows | (1 << 18);
     m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
     m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
     m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
     m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
     m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
-    m_header[10] = m_y_zp;
+    m_header[10] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
     m_header[11] = 1; // result num bytes
     m_header[12] = 8; // Weight Bits
     m_header[13] = -1; // Group Size equal to negative means no group size

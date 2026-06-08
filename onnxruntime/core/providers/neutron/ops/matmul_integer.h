@@ -31,15 +31,20 @@ class MatMulInteger final : public MatMulIntegerBase {
 
  protected:
   int GetBIdx() const override { return IN_B; }
+  const bool offline_packed_{false};
+  bool     inline_prepacked_{false};
 
   // neutron parameters
   size_t   m_handle{0};
+  void     *m_buffer{NULL};
   uint32_t *m_header{NULL};
   int8_t   *m_b_neutron{NULL};
   bool     m_dynamic_bias{true};
   int32_t  *m_b_bias{NULL};
   int32_t  *m_b_row_sum{NULL};
-  uint32_t *m_b_factors{NULL};
+  int32_t  *m_b_factors{NULL};
+  uint8_t  *m_decode_input{NULL};
+  int32_t  *m_compress_len{NULL};
 
   //pre-packing
   uint8_t  m_a_zp;
