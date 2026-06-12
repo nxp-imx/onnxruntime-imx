@@ -325,77 +325,54 @@ Status QLinearMatMul::Compute(OpKernelContext* ctx) const {
   clock_gettime(CLOCK_REALTIME, &t00);
 #endif
 
-  for (size_t batch = 0; batch < num_matmuls; batch++) {
-    neutronAlloc->pushMemoryState(m_handle);
+  Tensor* y = ctx->Output(OUT_Y, helper.OutputShape());
+  if (y->Shape().Size() == 0)
+    return Status::OK();
 
-#ifndef NDEBUG
-    clock_gettime(CLOCK_REALTIME, &t1);
-#endif
+  neutronAlloc->pushMemoryState(m_handle);
 
-    Tensor* y = ctx->Output(OUT_Y, helper.OutputShape());
-    // Bail out early if the output is going to be empty
-    if (y->Shape().Size() == 0)
-      return Status::OK();
+  uint32_t a_size = neutron_a_rows * neutron_a_cols * num_matmuls;
+  uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size*sizeof(uint8_t), m_handle);
+  auto  a_data = static_cast<const uint8_t*>(a->DataRaw());
+  memcpy(a_neutron, a_data, a_size);
+  clean_cache(a_neutron, a_size);
 
-    uint32_t a_size = neutron_a_rows * neutron_a_cols;
-    uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size*sizeof(uint8_t), m_handle);
-    auto  a_data = static_cast<const uint8_t*>(a->DataRaw());
-#ifndef NDEBUG
-    clock_gettime(CLOCK_REALTIME, &t2);
-#endif
-    memcpy(a_neutron, a_data + helper.LeftOffsets()[batch], a_size);
-    clean_cache(a_neutron, a_size);
+  uint32_t y_size = neutron_a_rows * neutron_b_rows * num_matmuls;
+  uint8_t *y_neutron = (uint8_t *) neutronAlloc->AllocReserved(y_size * sizeof(uint8_t), m_handle);
 
-#ifndef NDEBUG
-    clock_gettime(CLOCK_REALTIME, &t3);
-#endif
+  m_header[0] = (uint8_t *)m_compress_len  - (uint8_t *)m_header;
+  m_header[1] = 0;
+  m_header[2] = neutron_a_rows;
+  m_header[3] = neutron_a_cols;
+  m_header[4] = neutron_b_rows | (static_cast<uint32_t>(num_matmuls) << 18);
+  m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
+  m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
+  m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
+  m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
+  m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
+  m_header[10] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
+  m_header[11] = 1;
+  m_header[12] = 8;
+  m_header[13] = -1;
+  m_header[14] = 0;
+  m_header[15] = 0;
 
-    uint32_t y_size = neutron_a_rows * neutron_b_rows;
-    uint8_t *y_neutron = (uint8_t *) neutronAlloc->AllocReserved(y_size * sizeof(uint8_t), m_handle);
-
-    m_header[0] = (uint8_t *)m_compress_len  - (uint8_t *)m_header;
-    m_header[1] = 0;
-    m_header[2] = neutron_a_rows;
-    m_header[3] = neutron_a_cols;
-    m_header[4] = neutron_b_rows | (1 << 18);
-    m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
-    m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
-    m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
-    m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
-    m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
-    m_header[10] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
-    m_header[11] = 1; // result num bytes
-    m_header[12] = 8; // Weight Bits
-    m_header[13] = -1; // Group Size equal to negative means no group size
-    m_header[14] = 0;
-    m_header[15] = 0;
-
-    NeutronError ret = ENONE;
-    ret = matmul((const void *)m_header, 16*sizeof(uint32_t), (const void*)a_neutron,
+  NeutronError ret = ENONE;
+  ret = matmul((const void *)m_header, 16*sizeof(uint32_t), (const void*)a_neutron,
 		 a_size, (const void*)y_neutron, y_size, m_handle);
-    if (ret != ENONE){
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
-    }
+  if (ret != ENONE){
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "matmul() error");
+  }
+
+  memcpy(y->MutableDataRaw(), y_neutron, y_size);
+
+  neutronAlloc->popMemoryState(m_handle);
 
 #ifndef NDEBUG
-    clock_gettime(CLOCK_REALTIME, &t4);
+  printf("NeutronEP: QlinearMatmul [%d,%d]*[%d,%d] batches=%zu\n",
+          neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, num_matmuls);
 #endif
 
-    memcpy(static_cast<uint8_t*>(y->MutableDataRaw()) + helper.OutputOffsets()[batch], y_neutron, y_size);
-
-#ifndef NDEBUG
-    clock_gettime(CLOCK_REALTIME, &t5);
-
-    printf("NeutronEP: QlinearMatmul [%d,%d]*[%d,%d]: Prepare %f us, B_pack %f us, in_copy %f us, matmul %f us, out_copy %f us\n",
-            neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t0,t00), time_diff(t1,t2), time_diff(t2,t3),
-            time_diff(t3,t4), time_diff(t4,t5));
-#endif
-
-#ifndef NDEBUG
-    printf("Neutron: Computed QLinearMatmul of size %ld * %ld * %ld in %f us\n", helper.M(),helper.N(),helper.K(),time_diff(t1,t5));
-#endif
-    neutronAlloc->popMemoryState(m_handle);
-  } //batch
   return Status::OK();
 }
 }  // namespace neutron

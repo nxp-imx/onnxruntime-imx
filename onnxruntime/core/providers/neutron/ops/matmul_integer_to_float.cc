@@ -4,6 +4,7 @@
 #include "core/providers/neutron/ops/common.h"
 #include "core/framework/op_kernel.h"
 #include "core/providers/neutron/neutron_fwd.h"
+#include "core/providers/cpu/math/matmul_helper.h"
 #include "core/util/math_cpuonly.h"
 #include <algorithm>
 
@@ -271,29 +272,13 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
   } else {
     clock_gettime(CLOCK_REALTIME, &t1);
 
-    neutronAlloc->pushMemoryState(m_handle);
+    MatMulComputeHelper helper;
+    ORT_RETURN_IF_ERROR(helper.Compute(a->Shape(), b ? b->Shape() : TensorShape({m_b_cols, m_b_rows})));
 
-    const int64_t a_dims = a->Shape().GetDims().size();
-    uint32_t neutron_a_rows;
-    uint32_t neutron_a_cols;
-
-    if (a_dims == 3) {
-      neutron_a_rows = a->Shape()[1];
-      neutron_a_cols = a->Shape()[2];
-    } else if (a_dims == 2) {
-      neutron_a_rows = a->Shape()[0];
-      neutron_a_cols = a->Shape()[1];
-    } else {
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits input dims number unsupported.");
-    }
-
-    // non-transposed b
-    uint32_t neutron_b_rows = b ? b->Shape()[1] : m_b_rows;
-    uint32_t neutron_b_cols = b ? b->Shape()[0] : m_b_cols;
-
-    if (neutron_a_cols != neutron_b_cols) {
-      LOGS_DEFAULT(WARNING) << "Neutron dimenssions do not match!";
-    }
+    uint32_t neutron_a_rows = static_cast<uint32_t>(helper.M());
+    uint32_t neutron_a_cols = static_cast<uint32_t>(helper.K());
+    uint32_t neutron_b_rows = static_cast<uint32_t>(helper.N());
+    auto num_matmuls = helper.OutputOffsets().size();
 
     const float *out_scale_data = NULL;
     bool scale_per_tensor = false;
@@ -324,14 +309,20 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
         clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
     }
 
+    Tensor* y = ctx->Output(OUT_Y, helper.OutputShape());
+    if (y->Shape().Size() == 0)
+      return Status::OK();
+
+    neutronAlloc->pushMemoryState(m_handle);
+
     clock_gettime(CLOCK_REALTIME, &t2);
 
-    uint32_t a_size = neutron_a_rows * neutron_a_cols * sizeof(uint8_t);
+    uint32_t a_size = neutron_a_rows * neutron_a_cols * num_matmuls * sizeof(uint8_t);
     uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size, m_handle);
     auto  a_data = static_cast<const uint8_t*>(a->DataRaw());
     memcpy(a_neutron, a_data, a_size);
 
-    uint32_t y_size = neutron_a_rows * neutron_b_rows * sizeof(int32_t);
+    uint32_t y_size = neutron_a_rows * neutron_b_rows * num_matmuls * sizeof(int32_t);
     int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(y_size, m_handle);
 
     memset(m_decode_input, 1, 16);
@@ -341,7 +332,7 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     m_header[1] = 0;
     m_header[2] = neutron_a_rows;
     m_header[3] = neutron_a_cols;
-    m_header[4] = neutron_b_rows | (1 << 18);
+    m_header[4] = neutron_b_rows | (static_cast<uint32_t>(num_matmuls) << 18);
     m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
     m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
     m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
@@ -364,18 +355,18 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
 
     clock_gettime(CLOCK_REALTIME, &t4);
 
-    Tensor* y = ctx->Output(OUT_Y, {1, neutron_a_rows, neutron_b_rows});
+    // Dequantize int32 result to float for all batches
     float* y_data = static_cast<float*>(y->MutableDataRaw());
-
     int32_t* input = y_neutron;
-    auto* output = y_data;
-    for (uint32_t i=0; i<static_cast<uint32_t>(neutron_a_rows); i++) {
-      for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
-        uint32_t scale_idx = scale_per_tensor ? 0 : j;
-        if (m_output_bias) {
-          *output++ = static_cast<float>(m_output_bias[j]) + static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(out_scale_data[scale_idx]);
-        } else {
-          *output++ = static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(out_scale_data[scale_idx]);
+    for (size_t b = 0; b < num_matmuls; b++) {
+      for (uint32_t i=0; i<static_cast<uint32_t>(neutron_a_rows); i++) {
+        for (uint32_t j=0; j<static_cast<uint32_t>(neutron_b_rows); j++) {
+          uint32_t scale_idx = scale_per_tensor ? 0 : j;
+          if (m_output_bias) {
+            *y_data++ = static_cast<float>(m_output_bias[j]) + static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(out_scale_data[scale_idx]);
+          } else {
+            *y_data++ = static_cast<float>(static_cast<int32_t>(*input++)) * static_cast<float>(out_scale_data[scale_idx]);
+          }
         }
       }
     }
@@ -384,22 +375,8 @@ Status MatMulIntegerToFloat::Compute(OpKernelContext* ctx) const {
     clock_gettime(CLOCK_REALTIME, &t5);
 
 #ifndef NDEBUG
-    printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d]: in_copy %f us, matmul %f us, dequant %f\n",
-           neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
-#endif
-
-#ifndef NDEBUG
-    printf("\nA shape=%ld %ld %ld\n\n",a->Shape()[0],a->Shape()[1],a->Shape()[2]);
-    printf("\n");
-    for (uint32_t i=0; i<neutron_a_rows; i++) {
-      for (uint32_t j=0; j<neutron_b_rows; j++) {
-        printf("C[%d][%d]=%f ",i,j,y_data[i * neutron_b_rows + j] * 1.0);
-      }
-      printf("\n");
-    }
-    printf("Neutron: Prepared matmul in %f us\n", time_diff(t1,t3));
-    printf("Neutron: Computed matmul in %f us\n", time_diff(t3,t4));
-    printf("Neutron: Dequant of MatMulIntegerToFloat in %f us\n", time_diff(t4,t5));
+    printf("Neutron MatMulIntegerToFloat [%d,%d]*[%d,%d] batches=%zu: in_copy %f us, matmul %f us, dequant %f\n",
+           neutron_a_rows, neutron_a_cols, neutron_b_cols, neutron_b_rows, num_matmuls, time_diff(t1,t3), time_diff(t3,t4), time_diff(t4,t5));
 #endif
   }
   return Status::OK();

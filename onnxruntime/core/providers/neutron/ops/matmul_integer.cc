@@ -265,26 +265,29 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
           clean_cache(m_b_bias, m_b_rows*sizeof(int32_t));
     }
 
-    neutronAlloc->pushMemoryState(m_handle);
+    MatMulComputeHelper helper;
+    ORT_RETURN_IF_ERROR(helper.Compute(a->Shape(), b ? b->Shape() : TensorShape({m_b_cols, m_b_rows})));
 
-    // non-transposed b
-    uint32_t neutron_a_rows = a->Shape()[1];
-    uint32_t neutron_a_cols = a->Shape()[2];
-    uint32_t neutron_b_rows = b ? b->Shape()[1] : m_b_rows;
-    uint32_t neutron_b_cols = b ? b->Shape()[0] : m_b_cols;
-    if (neutron_a_cols != neutron_b_cols) {
-      LOGS_DEFAULT(WARNING) << "Neutron dimenssions do not match!";
-    }
+    uint32_t neutron_a_rows = static_cast<uint32_t>(helper.M());
+    uint32_t neutron_a_cols = static_cast<uint32_t>(helper.K());
+    uint32_t neutron_b_rows = static_cast<uint32_t>(helper.N());
+    auto num_matmuls = helper.OutputOffsets().size();
+
+    Tensor* y = ctx->Output(OUT_Y, helper.OutputShape());
+    if (y->Shape().Size() == 0)
+      return Status::OK();
+
+    neutronAlloc->pushMemoryState(m_handle);
 
     clock_gettime(CLOCK_REALTIME, &t2);
 
-    uint32_t a_size = neutron_a_rows * neutron_a_cols * sizeof(uint8_t);
+    uint32_t a_size = neutron_a_rows * neutron_a_cols * num_matmuls * sizeof(uint8_t);
     uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size, m_handle);
     auto  a_data = static_cast<const uint8_t*>(a->DataRaw());
     memcpy(a_neutron, a_data, a_size);
     clean_cache(a_neutron, a_size);
 
-    uint32_t y_size = neutron_a_rows * neutron_b_rows * sizeof(int32_t);
+    uint32_t y_size = neutron_a_rows * neutron_b_rows * num_matmuls * sizeof(int32_t);
     int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(y_size, m_handle);
 
     memset(m_decode_input, 1, 16);
@@ -294,7 +297,7 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
     m_header[1] = 0;
     m_header[2] = neutron_a_rows;
     m_header[3] = neutron_a_cols;
-    m_header[4] = neutron_b_rows | (1 << 18);
+    m_header[4] = neutron_b_rows | (static_cast<uint32_t>(num_matmuls) << 18);
     m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
     m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
     m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
@@ -317,9 +320,7 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
 
     clock_gettime(CLOCK_REALTIME, &t4);
 
-    Tensor* y = ctx->Output(OUT_Y, {1, neutron_a_rows, neutron_b_rows});
-    int32_t* y_data = static_cast<int32_t*>(y->MutableDataRaw());
-    memcpy(y_data, y_neutron, sizeof(int32_t) * neutron_a_rows * m_b_rows);
+    memcpy(y->MutableDataRaw(), y_neutron, sizeof(int32_t) * neutron_a_rows * m_b_rows * num_matmuls);
 
     neutronAlloc->popMemoryState(m_handle);
     clock_gettime(CLOCK_REALTIME, &t5);
@@ -334,7 +335,7 @@ Status MatMulInteger::Compute(OpKernelContext* ctx) const {
     printf("\n");
     for (uint32_t i=0; i<neutron_a_rows; i++) {
       for (uint32_t j=0; j<neutron_b_rows; j++) {
-        printf("C[%d][%d]=%f ",i,j,y_data[i * neutron_b_rows + j] * 1.0);
+        printf("C[%d][%d]=%f ",i,j,static_cast<const int32_t*>(y->DataRaw())[i * neutron_b_rows + j] * 1.0);
       }
       printf("\n");
     }

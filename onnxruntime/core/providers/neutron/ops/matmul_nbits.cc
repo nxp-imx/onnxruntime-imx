@@ -723,79 +723,89 @@ Status MatMulNBits::Compute(OpKernelContext* ctx) const {
   auto  a_data = static_cast<const float*>(a->DataRaw());
   float* y_data = static_cast<float*>(y->MutableDataRaw());
 
-  for (size_t batch = 0; batch < num_matmuls; batch++) {
-    neutronAlloc->pushMemoryState(m_handle);
+  neutronAlloc->pushMemoryState(m_handle);
 
 #if defined(USE_NBITS_KERNEL) || defined(USE_8BITS_KERNEL)
-    uint32_t a_size = a_rows * a_cols * sizeof(uint8_t);
-    uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size, m_handle);
-    uint32_t y_size = a_rows * b_rows * sizeof(int32_t);
-    int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(y_size, m_handle);
-    float *input_scales = (float *) neutronAlloc->AllocReserved(a_rows * sizeof(float), m_handle);
+  uint32_t a_size = a_rows * a_cols * num_matmuls * sizeof(uint8_t);
+  uint8_t *a_neutron = (uint8_t *) neutronAlloc->AllocReserved(a_size, m_handle);
+  uint32_t y_size = a_rows * b_rows * num_matmuls * sizeof(int32_t);
+  int32_t *y_neutron = (int32_t *) neutronAlloc->AllocReserved(y_size, m_handle);
+  float *input_scales = (float *) neutronAlloc->AllocReserved(a_rows * num_matmuls * sizeof(float), m_handle);
 
-    QuantizeInput(a_data + helper.LeftOffsets()[batch], a_neutron, input_scales, a_rows, a_cols);
-    clean_cache(a_neutron, a_size);
+  // Quantize all batches into contiguous buffer
+  for (size_t batch = 0; batch < num_matmuls; batch++) {
+    QuantizeInput(a_data + helper.LeftOffsets()[batch],
+                  a_neutron + batch * a_rows * a_cols,
+                  input_scales + batch * a_rows,
+                  a_rows, a_cols);
+  }
+  clean_cache(a_neutron, a_size);
 #endif
 
 #ifdef USE_NBITS_KERNEL
-    //TODO: verify if need to set to 1 every invoke
-    memset(m_decode_input, 1, 16);
-    clean_cache(m_decode_input, 16);
+  memset(m_decode_input, 1, 16);
+  clean_cache(m_decode_input, 16);
 
-    m_header[0] = (uint8_t *)m_compress_len  - (uint8_t *)m_header;
-    m_header[1] = (uint8_t *)m_decode_bias - (uint8_t *)m_header;
-    m_header[2] = a_rows;
-    m_header[3] = a_cols;
-    m_header[4] = b_rows | (1 << 18);
-    m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
-    m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
-    m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
-    m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
-    m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
-    m_header[10] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>()); // packed
-    m_header[11] = 4; // result num bytes
-    m_header[12] = nbits_; // Weight Bits
-    m_header[13] = block_size_; // Group Size
-    m_header[14] = (uint8_t *)m_decode_scale - (uint8_t *)m_header;
-    m_header[15] = (uint8_t *)m_decode_input - (uint8_t *)m_header;
+  m_header[0] = (uint8_t *)m_compress_len  - (uint8_t *)m_header;
+  m_header[1] = (uint8_t *)m_decode_bias - (uint8_t *)m_header;
+  m_header[2] = a_rows;
+  m_header[3] = a_cols;
+  m_header[4] = b_rows | (static_cast<uint32_t>(num_matmuls) << 18);
+  m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
+  m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
+  m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
+  m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
+  m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
+  m_header[10] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
+  m_header[11] = 4;
+  m_header[12] = nbits_;
+  m_header[13] = block_size_;
+  m_header[14] = (uint8_t *)m_decode_scale - (uint8_t *)m_header;
+  m_header[15] = (uint8_t *)m_decode_input - (uint8_t *)m_header;
 #endif
 
 #ifdef USE_8BITS_KERNEL
-    m_header[0] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
-    m_header[1] = 0;
-    m_header[2] = a_rows;
-    m_header[3] = a_cols;
-    m_header[4] = b_rows;
-    m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
-    m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
-    m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
-    m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
-    m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
-    m_header[10] = 0; // m_y_zp;
-    m_header[11] = 4; // result num bytes
-    m_header[12] = 8; // Weight Bits
-    m_header[13] = -1; // Group Size
-    m_header[14] = 0;
-    m_header[15] = 0;
+  m_header[0] = GetMatmulTypeFlag(true, a->IsDataType<int8_t>());
+  m_header[1] = 0;
+  m_header[2] = a_rows;
+  m_header[3] = a_cols;
+  m_header[4] = b_rows | (static_cast<uint32_t>(num_matmuls) << 18);
+  m_header[5] = (uint8_t *)a_neutron - (uint8_t *)m_header;
+  m_header[6] = (uint8_t *)m_b_neutron - (uint8_t *)m_header;
+  m_header[7] = (uint8_t *)m_b_bias - (uint8_t *)m_header;
+  m_header[8] = (uint8_t *)m_b_factors - (uint8_t *)m_header;
+  m_header[9] = (uint8_t *)y_neutron - (uint8_t *)m_header;
+  m_header[10] = 0;
+  m_header[11] = 4;
+  m_header[12] = 8;
+  m_header[13] = -1;
+  m_header[14] = 0;
+  m_header[15] = 0;
 #endif
 
 #if defined(USE_NBITS_KERNEL) || defined(USE_8BITS_KERNEL)
-    NeutronError ret = ENONE;
-    ret = matmul((const void *)m_header, 16 * sizeof(uint32_t), (const void *)a_neutron, a_size, 
+  NeutronError ret = ENONE;
+  ret = matmul((const void *)m_header, 16 * sizeof(uint32_t), (const void *)a_neutron, a_size,
 		 (const void *)y_neutron, y_size, m_handle);
-    if (ret != ENONE) {
-      return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits falied to call kernel");
-    }
-    clean_cache(y_neutron, y_size);
-    DequantizeOutput(y_neutron, y_data + helper.OutputOffsets()[batch], input_scales,
-         num_matmuls, a_rows, b_rows);
+  if (ret != ENONE) {
+    return ORT_MAKE_STATUS(ONNXRUNTIME, FAIL, "NeutronEP:MatMulNBits falied to call kernel");
+  }
+  clean_cache(y_neutron, y_size);
+  // Dequantize all batches from contiguous buffer
+  for (size_t batch = 0; batch < num_matmuls; batch++) {
+    DequantizeOutput(y_neutron + batch * a_rows * b_rows,
+                     y_data + helper.OutputOffsets()[batch],
+                     input_scales + batch * a_rows,
+                     1, a_rows, b_rows);
+  }
 #endif
 #ifdef USE_PURE_C
+  for (size_t batch = 0; batch < num_matmuls; batch++) {
     CMatMul(a_data, float_b, y_data + helper.OutputOffsets()[batch], a_rows, K_, N_);
+  }
 #endif
 
-    neutronAlloc->popMemoryState(m_handle);
-  } //batch
+  neutronAlloc->popMemoryState(m_handle);
 
   return Status::OK();
 }
