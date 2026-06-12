@@ -567,7 +567,7 @@ Status MatMulNBits::PrePack(const Tensor& tensor, int input_idx, /*out*/ Allocat
           pckOut.Bpacked = &dyn8;
           pckOut.lengths = &dyn32;
 
-          PrePackWeight(B_int8, static_cast<int>(N_), static_cast<int>(K_), &cfg, &pckOut);
+          prepack(B_int8, static_cast<int>(N_), static_cast<int>(K_), &cfg, &pckOut);
 
           // Extract tiling info and packed sizes
           int channelDensity = pckOut.tilingInfo.channelDensity;

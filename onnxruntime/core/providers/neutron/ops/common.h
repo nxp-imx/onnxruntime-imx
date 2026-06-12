@@ -4,6 +4,7 @@
 
 #include "core/framework/op_kernel.h"
 #include "core/providers/common.h"
+#include "neutron/NeutronDriverBmm.h"
 
 typedef struct {
     int* len;
@@ -20,82 +21,16 @@ typedef struct {
     size_t length;
 } CoreCompResult;
 
-typedef struct {
-    int channelDensity;
-    int lineDensity;
-    int numNeutrons;
-    bool bPingPong;
-    int divisions;
-} TilingResult;
-
-typedef struct {
-    int8_t* data;
-    size_t  size;
-    size_t  cap;
-} Dyn8;
-typedef struct {
-    int32_t* data;
-    size_t   size;
-    size_t   cap;
-} Dyn32;
-
-typedef struct {
-    Dyn8* Bpacked;
-    Dyn32* lengths;
-    TilingResult tilingInfo;
-} PrepackOut;
-
-typedef struct {
-    bool rearrange;
-    bool miniWeights;
-    int weightBits;
-    int groupSize;
-    bool useDecodeBias;
-    bool compress;
-    int numMacs;
-    int numNeutrons;
-    int tcmSize;
-    int numBanks;
-} PrepackCfg;
-
-#define IDX(i,j,cols) ( ((size_t)(i) * (size_t)(cols)) + (size_t)(j) )
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-void dyn8_append(Dyn8* b, const int8_t* src, size_t n);
-void dyn8_free(Dyn8* b);
-void dyn32_push(Dyn32* b, int32_t v);
-void dyn32_free(Dyn32* b);
 
 void init_code_table(CodeTable* ct, int capacity);
 void free_code_table(CodeTable* ct);
 void copy_code_table(CodeTable* dest, const CodeTable* src);
 int8_t find_min_int8(const int8_t* arr, int size);
 void free_core_comp_result(CoreCompResult* result);
-void extract_patterned_rows(const int8_t* matrix,
-                        size_t rows,
-                        size_t cols,
-                        size_t start,
-                        size_t step,
-                        size_t length,
-                        size_t count,
-                        int8_t **out_ptr,
-                        size_t *out_len);
-void fetch_unp_organize(const int8_t* packed, size_t packedN, int rowsB, int colsB,
-                        int channelDensity, int MACs, int weightBits, int numNeutrons,
-                        int8_t** outOrganized, size_t* outOrganizedN);
-void weight_packer(const int8_t* B, int rowsB, int colsB,
-                   int channelDensity, int MACs, int weightBits,
-                   int8_t** outPacked, size_t* outPackedN);
-void fetch_unp_organize(const int8_t* packed, size_t packedN, int rowsB, int colsB,
-                        int channelDensity, int MACs, int weightBits, int numNeutrons,
-                        int8_t** outOrganized, size_t* outOrganizedN);
-TilingResult tiling_solver(int numTokens, int embeddings_in, int embeddings_out,
-              int resNumBytes, int MACS, int neutrons,
-              int tcm_size, int tcm_banks, int weightBits,
-              bool decodeWeights, bool useDecodeBias, int groupSize);
+
 CoreCompResult compress_weight_tensor(
     uintptr_t data_ptr,
     int data_size,
@@ -104,22 +39,6 @@ CoreCompResult compress_weight_tensor(
     int word_size,
     int buffer_size,
     int packet_size);
-int* CompressWeightTensorGrouped(
-    int8_t* data,
-    int data_size,
-    int channelDensity,
-    int numColsA,
-    int weightBits,
-    int num_decomp,
-    int word_size,
-    int buffer_size,
-    int packet_size,
-    bool compress,
-    int8_t** outCompressed,
-    size_t* outCompressedN,
-    int* outListSize);
-
-void PrePackWeight(const int8_t* B, int rb, int cb, PrepackCfg* pckCfg, PrepackOut* pckOut);
 
 #ifdef __cplusplus
 }

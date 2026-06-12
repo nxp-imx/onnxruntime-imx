@@ -159,7 +159,7 @@ Status MatMulIntegerToFloat::PrePack(const Tensor& tensor, int input_idx, Alloca
             pckOut.Bpacked = &dyn8;
             pckOut.lengths = &dyn32;
 
-            PrePackWeight(B_trans, static_cast<int>(m_b_rows), static_cast<int>(m_b_cols), &cfg, &pckOut);
+            prepack(B_trans, static_cast<int>(m_b_rows), static_cast<int>(m_b_cols), &cfg, &pckOut);
 
             size_t weight_len = pckOut.Bpacked->size;
             int32_t compress_num = static_cast<int32_t>(pckOut.lengths->size);
