@@ -11,6 +11,10 @@
 #include "core/providers/neutron/neutron_fwd.h"
 #include "core/framework/compute_capability.h"
 
+#ifndef NEUTRON_HAS_DRIVER_BMM
+#define NEUTRON_HAS_DRIVER_BMM 1
+#endif
+
 using namespace onnxruntime::common;
 
 namespace {
@@ -26,6 +30,7 @@ namespace neutron {
 
 std::shared_ptr<NeutronStackAllocator> neutronAlloc(new NeutronStackAllocator());
 
+#if NEUTRON_HAS_DRIVER_BMM
 class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 13, 18, uint8_t,
                                                       DequantizeLinear);
 class ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 13, 18, int8_t,
@@ -65,11 +70,13 @@ class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDoma
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kOnnxDomain, 10, int8_t, MatMulInteger);
 
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kMSDomain, 1, float, MatMulNBits);
+#endif
 
 class ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(kNeutronExecutionProvider, kNeutronDomain, 1, int8_t, NeutronGraph);
 
 static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
   static const BuildKernelCreateInfoFn function_table[] = {
+#if NEUTRON_HAS_DRIVER_BMM
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kOnnxDomain, 13, 18, uint8_t,DequantizeLinear)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_VERSIONED_TYPED_KERNEL_CLASS_NAME(
@@ -108,6 +115,7 @@ static Status RegisterNeutronKernels(KernelRegistry& kernel_registry) {
                           kNeutronExecutionProvider, kOnnxDomain, 10, int8_t, MatMulInteger)>,
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kMSDomain, 1, float, MatMulNBits)>,
+#endif
     BuildKernelCreateInfo<ONNX_OPERATOR_TYPED_KERNEL_CLASS_NAME(
                           kNeutronExecutionProvider, kNeutronDomain, 1, int8_t, NeutronGraph)>,
   };

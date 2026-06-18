@@ -4,7 +4,13 @@
 
 #include "core/framework/op_kernel.h"
 #include "core/providers/common.h"
+
+#ifndef NEUTRON_HAS_DRIVER_BMM
+#define NEUTRON_HAS_DRIVER_BMM 1
+#endif
+#if NEUTRON_HAS_DRIVER_BMM
 #include "neutron/NeutronDriverBmm.h"
+#endif
 
 typedef struct {
     int* len;

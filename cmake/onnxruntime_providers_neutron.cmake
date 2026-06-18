@@ -1,10 +1,37 @@
 # Copyright (c) NXP. All rights reserved.
 
+# NeutronDriverBmm.h (prepack/compress_weight_tensor_grouped APIs) is only
+# shipped by the imx95 neutron SDK. imx943 lacks this header, so the
+# ops that call prepack() (qgemm, matmul_*, qlinear_matmul) must be excluded.
+option(NEUTRON_HAS_DRIVER_BMM "Whether the neutron SDK ships NeutronDriverBmm.h" ON)
+
 add_definitions(-DUSE_NEUTRON=1)
-file(GLOB_RECURSE onnxruntime_providers_neutron_srcs
-  "${ONNXRUNTIME_ROOT}/core/providers/neutron/*.h"
-  "${ONNXRUNTIME_ROOT}/core/providers/neutron/*.cc"
-)
+if(NEUTRON_HAS_DRIVER_BMM)
+  add_definitions(-DNEUTRON_HAS_DRIVER_BMM=1)
+else()
+  add_definitions(-DNEUTRON_HAS_DRIVER_BMM=0)
+endif()
+
+if(NEUTRON_HAS_DRIVER_BMM)
+  file(GLOB_RECURSE onnxruntime_providers_neutron_srcs
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/*.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/*.cc"
+  )
+else()
+  set(onnxruntime_providers_neutron_srcs
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/neutron_allocator.cc"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/neutron_execution_provider.cc"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/neutron_provider_factory.cc"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/neutron_allocator.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/neutron_execution_provider.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/neutron_provider_factory_creator.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/neutron_fwd.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/neutron_kernel.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/ops/common.cc"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/ops/common.h"
+    "${ONNXRUNTIME_ROOT}/core/providers/neutron/ops/neutron_graph.cc"
+  )
+endif()
 
 source_group(TREE ${ONNXRUNTIME_ROOT}/core FILES ${onnxruntime_providers_neutron_srcs})
 onnxruntime_add_static_library(onnxruntime_providers_neutron ${onnxruntime_providers_neutron_srcs})
