@@ -38,7 +38,7 @@ jobs:
       ONNXRUNTIME_TEST_GPU_DEVICE_ID: "0"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: none
@@ -164,7 +164,7 @@ jobs:
     timeout-minutes: 300
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: none
@@ -221,7 +221,7 @@ jobs:
       ONNXRUNTIME_TEST_GPU_DEVICE_ID: "0"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: none

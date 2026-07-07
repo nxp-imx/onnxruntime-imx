@@ -25,7 +25,7 @@ jobs:
         "JobId=windows-cuda-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
         ]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: 'none'
@@ -160,7 +160,7 @@ jobs:
       "JobId=windows-cuda-test-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
     ]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: 'none'
