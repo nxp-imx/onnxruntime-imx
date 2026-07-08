@@ -71,7 +71,7 @@ jobs:
           PROCESSOR_ARCHITECTURE: x64
 
       - name: Use Nuget 6.x
-        uses: nuget/setup-nuget@v2
+        uses: nuget/setup-nuget@v4
         with:
           nuget-version: '6.x'
 
