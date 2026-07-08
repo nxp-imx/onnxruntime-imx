@@ -89,7 +89,7 @@ jobs:
           dotnet-version: "8.x"
 
       - name: Use Nuget 6.x
-        uses: nuget/setup-nuget@v2
+        uses: nuget/setup-nuget@v4
         with:
           nuget-version: "6.x"
 
@@ -272,7 +272,7 @@ jobs:
           dotnet-version: "8.x"
 
       - name: Use Nuget 6.x
-        uses: nuget/setup-nuget@v2
+        uses: nuget/setup-nuget@v4
         with:
           nuget-version: "6.x"
 
