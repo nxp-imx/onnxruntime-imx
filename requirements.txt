@@ -1,5 +1,5 @@
 flatbuffers
-numpy >= 1.21.6
+numpy >= 2.2.6
 packaging
 protobuf
 sympy
