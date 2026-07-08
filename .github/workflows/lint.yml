@@ -17,7 +17,7 @@ jobs:
     name: Optional Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: misspell # Check spellings as well
         uses: reviewdog/action-misspell@v1
         with:
@@ -46,7 +46,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
@@ -91,7 +91,7 @@ jobs:
     name: Optional Lint C++
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Update PATH
         run: |
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"

@@ -27,7 +27,7 @@ jobs:
         "JobId=apidocs-java-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}"
         ]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up JDK 11
         uses: actions/setup-java@v5
         with:
