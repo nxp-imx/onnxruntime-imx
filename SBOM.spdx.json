@@ -1,0 +1,53 @@
+{
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "spdxVersion": "SPDX-2.3",
+  "creationInfo": {
+    "created": "2026-08-25T03:47:35Z",
+    "creators": [
+      "Organization: NXP"
+    ],
+    "licenseListVersion": "3.28"
+  },
+  "name": "onnxruntime-imx-lf-6.18.37-2.1.0",
+  "dataLicense": "CC0-1.0",
+  "documentNamespace": "https://nxp.com/spdx/0eb316d2-e14a-43ed-9a51-1b6fe25c6cc8",
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-package-0eb316d2-e14a-43ed-9a51-1b6fe25c6cc8",
+      "name": "onnxruntime-imx",
+      "versionInfo": "lf-6.18.37-2.1.0",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "downloadLocation": "https://github.com/nxp-imx/onnxruntime-imx -b lf-6.18.37-2.1.0",
+      "originator": "Organization: NXP",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    },
+    {
+      "SPDXID": "SPDXRef-package-0eb316d2-e14a-43ed-9a51-1b6fe25c6cc8---98f28394-5357-486c-99b3-b6754dc68a09",
+      "name": "onnxruntime",
+      "versionInfo": "1.24.3",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "homepage": "https://www.onnxruntime.ai",
+      "downloadLocation": "NOASSERTION",
+      "originator": "Organization: unknown",
+      "supplier": "NOASSERTION",
+      "externalRefs": [],
+      "filesAnalyzed": false
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-package-0eb316d2-e14a-43ed-9a51-1b6fe25c6cc8"
+    },
+    {
+      "spdxElementId": "SPDXRef-package-0eb316d2-e14a-43ed-9a51-1b6fe25c6cc8",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-package-0eb316d2-e14a-43ed-9a51-1b6fe25c6cc8---98f28394-5357-486c-99b3-b6754dc68a09"
+    }
+  ]
+}
